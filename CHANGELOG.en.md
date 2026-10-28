@@ -6,6 +6,12 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 > Since 1.6.1 the app and the island speak English (Features → General → Language). Earlier versions were in Russian only, so older entries give the Russian label in brackets.
 
+## [1.6.6] — 2026-10-28
+
+- 💬 **Consecutive messages**: follow-up messages in the same conversation (WhatsApp and others) now show in the island, not only the first one.
+- 💳 **Payment**: after the tap-to-pay screen, a bank “Transfer …” notification (SBP, QR) counts as the payment; “Payment successful” on screen without an amount shows as “Paid”; Belarusian banks.
+- 🔎 “Payment diagnostics” now also records what appeared on screen after the tap-to-pay screen — if “Paid” did not show, send that text.
+
 ## [1.6.5] — 2026-10-28
 
 - 🎬 **Liquid expansion** — new in Appearance → Animations: the content grows together with the island and emerges from a blur; duration and bounce follow your settings.

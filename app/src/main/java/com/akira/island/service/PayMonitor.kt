@@ -72,7 +72,7 @@ object PayMonitor {
     private val bankish = Regex(
         "bank|banking|sber|tinkoff|tbank|vtb|alfa|raiff|sovcom|halva|gazprom|psbank|otkritie|pochta|rshb|uralsib|" +
             "rosbank|akbars|mkb|yoomoney|qiwi|wallet|\\.pay|pay\\.|mirpay|spay|fintech|" +
-            "kaspi|halyk|revolut|paypal|gopay|paytm|phonepe|gcash",
+            "kaspi|halyk|revolut|paypal|gopay|paytm|phonepe|gcash|belkart|priorbank|mtbank|belinvest|belarus",
         RegexOption.IGNORE_CASE,
     )
 
@@ -173,11 +173,17 @@ object PayMonitor {
      * («К оплате», «Не забудьте оплатить», «будет списано», «Payment due»).
      */
     private val skip = Regex(
-        "пополн|зачисл|поступил|перевод|кэшбэк|кешбэк|cashback|возврат|refund|отклон|отказ|declined|не удал|ошибк|" +
+        "пополн|зачисл|поступил|кэшбэк|кешбэк|cashback|возврат|refund|отклон|отказ|declined|не удал|ошибк|" +
             "не прошл|не выполн|недостаточно|не хватает|не оплач|к оплате|на оплату|оплатит|заплатит|" +
             "напомина|будет списан|спишем|спишется|предстоящ|due|remind|failed|unsuccessful|insufficient|request|received",
         RegexOption.IGNORE_CASE,
     )
+
+    /**
+     * «Перевод» — не оплата, если до него не было экрана оплаты телефоном. Но сразу после экрана оплаты так
+     * иногда подписывают саму оплату (СБП, QR), поэтому тогда это слово не мешает.
+     */
+    private val transfer = Regex("перевод|transfer|transferred", RegexOption.IGNORE_CASE)
 
     /** Цифры суммы — чтобы одна оплата с экрана и из уведомления не показалась дважды. */
     private fun key(sum: String) = sum.filter { it.isDigit() }.trimEnd('0')
@@ -193,7 +199,7 @@ object PayMonitor {
         IslandBus.post(
             Notice(
                 title = tr("Оплачено", "Paid"),
-                state = sum,
+                state = sum.ifBlank { null },
                 icon = Ios.load(context, R.drawable.ios_checkmark_circle),
                 tint = Tints.Green,
                 caption = caption,
@@ -243,7 +249,8 @@ object PayMonitor {
         // сумма сразу после экрана оплаты телефоном — от того же приложения, платёжного или СМС банка — та самая оплата
         val recent = readyShownAt != 0L && SystemClock.elapsedRealtime() - readyShownAt < PAY_WINDOW_MS &&
             (pkg == readyShownPkg || sms || isPayApp(context, pkg))
-        val paid = !skip.containsMatchIn(all) && (success.containsMatchIn(all) || pkg in wallets || recent)
+        val paid = !skip.containsMatchIn(all) && (!transfer.containsMatchIn(all) || recent) &&
+            (success.containsMatchIn(all) || pkg in wallets || recent)
         PayDebug.add(if (paid) tr("Оплачено $sum", "Paid $sum") else tr("Не похоже на оплату", "Doesn't look like a payment"), pkg, all)
         if (!paid) return false
         if (alreadyShown(sum)) return true

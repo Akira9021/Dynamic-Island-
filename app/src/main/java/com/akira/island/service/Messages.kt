@@ -103,10 +103,9 @@ object Messages {
         if (title.isEmpty() && text.isEmpty()) return
 
         val signature = "$title\n$text"
-        val previous = shown[sbn.key]
-        if (previous == signature) return
-        // Обновление того же уведомления, которое просит не звенеть повторно
-        if (previous != null && n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0) return
+        // Тот же текст — не повторяем. Новое сообщение в той же переписке показываем, даже если мессенджер
+        // обновляет уведомление с флагом «не звенеть повторно» (WhatsApp ставит его на каждое следующее)
+        if (shown[sbn.key] == signature) return
         shown[sbn.key] = signature
 
         val avatar = runCatching {

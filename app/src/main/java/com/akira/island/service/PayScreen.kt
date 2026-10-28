@@ -175,6 +175,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
     private fun markReady(pkg: String, texts: Set<String>? = null) {
         if (readyAt == 0L) {
             readyAt = SystemClock.elapsedRealtime()
+            screenLogs = 0
             baseline = texts?.toMutableSet() ?: HashSet()
         }
         PayMonitor.onPayScreen(service, pkg)
@@ -221,6 +222,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
             // Экран не изменился с прошлого раза — разбирать нечего (пока ждём оплату, он меняется часто)
             if (fresh == lastFresh) return
             lastFresh = fresh
+            logAfterReady(pkg, fresh, now)
             if (fresh.any { PayScreenParser.failure(it) }) return
             val freshCharges = fresh.flatMap { PayScreenParser.charges(it) }.distinct()
             // У кошелька сумма на экране — это и есть оплата. У банка в нём бывает и история операций,
@@ -234,12 +236,29 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
             if (fresh.any { PayScreenParser.paid(it) }) {
                 val sums = fresh.mapNotNull { PayScreenParser.amount(it) }.distinct()
                 if (sums.size == 1) return paid(pkg, sums[0])
+                // Экран говорит «оплата прошла», но суммы на нём нет — показываем «Оплачено» без суммы
+                if (sums.isEmpty()) return paid(pkg, "")
                 PayDebug.add(tr("«Оплачено» на экране, но сумм: ${sums.size}", "“Paid” on screen, but amounts: ${sums.size}"), pkg, fresh.joinToString(" | "))
             }
         } else if (now - since < 4_000 && all.size == 1 && texts.any { PayScreenParser.paid(it) } && texts.none { PayScreenParser.failure(it) }) {
             // Приложение открылось само уже с результатом: заплатили, не открывая его
             paid(pkg, all[0])
         }
+    }
+
+    private var screenLogs = 0
+    private var screenLoggedAt = 0L
+
+    /**
+     * Для «Диагностики оплаты»: что появилось на экране после экрана оплаты. Не чаще раза в две секунды и не
+     * больше шести записей за оплату; длинные цифры (номера карт) скрыты, хранится только в памяти.
+     */
+    private fun logAfterReady(pkg: String, fresh: List<String>, now: Long) {
+        if (fresh.isEmpty() || screenLogs >= 6 || now - screenLoggedAt < 2_000) return
+        screenLogs++
+        screenLoggedAt = now
+        val line = fresh.take(14).joinToString(" | ") { it.replace(Regex("\\d{9,}"), "…") }
+        PayDebug.add(tr("Экран после оплаты", "Screen after the payment screen"), pkg, line)
     }
 
     private fun paid(pkg: String, sum: String) {
