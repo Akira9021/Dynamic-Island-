@@ -111,10 +111,10 @@ fun SizeScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Group {
-                GroupStepSlider(Pos.First, Icons.Rounded.Straighten, tr("Ширина", "Width"), s.width, 70..170, color = Tile.Purple) { v ->
+                GroupStepSlider(Pos.First, Icons.Rounded.Straighten, tr("Ширина", "Width"), s.width, 50..400, color = Tile.Purple) { v ->
                     set { copy(width = v) }
                 }
-                GroupStepSlider(Pos.Last, Icons.Rounded.Height, tr("Высота", "Height"), s.height, 22..46, color = Tile.Pink) { v ->
+                GroupStepSlider(Pos.Last, Icons.Rounded.Height, tr("Высота", "Height"), s.height, 18..90, color = Tile.Pink) { v ->
                     set { copy(height = v) }
                 }
             }

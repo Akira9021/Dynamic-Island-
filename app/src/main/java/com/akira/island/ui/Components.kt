@@ -273,6 +273,33 @@ fun GroupItem(
     }
 }
 
+/** Строка списка со своим значком слева (например, значком приложения) вместо векторного. */
+@Composable
+fun GroupRow(
+    pos: Pos,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+    leading: @Composable () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(pos.shape())
+            .background(Ui.Card)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leading()
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Ui.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 21.sp)
+            if (subtitle != null) Text(subtitle, color = Ui.Sub, fontSize = 15.sp, lineHeight = 19.sp)
+        }
+    }
+}
+
 @Composable
 fun GroupToggle(
     pos: Pos,

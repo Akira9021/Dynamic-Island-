@@ -12,6 +12,7 @@ import com.akira.island.core.Notice
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Ios
 import com.akira.island.island.releaseHighlights
@@ -106,7 +107,7 @@ object UpdateChecker {
             announced = available.version
             IslandBus.post(
                 Notice(
-                    title = tr("Доступна версия ${available.version}", "Version ${available.version} is available"),
+                    title = trf("Доступна версия {0}", "Version {0} is available", available.version),
                     icon = Ios.load(context, R.drawable.ios_download),
                     tint = Tints.Lavender,
                     caption = releaseHighlights(available.notes) ?: tr("Скачается и установится в одно нажатие", "Downloads and installs in one tap"),
@@ -125,7 +126,7 @@ object UpdateChecker {
 
     /** Карточка «Обновлено до …» в острове — после установки и в примере. */
     fun updatedNotice(context: Context, version: String) = Notice(
-        title = tr("Обновлено до $version", "Updated to $version"),
+        title = trf("Обновлено до {0}", "Updated to {0}", version),
         icon = Ios.load(context, R.drawable.ios_check),
         tint = Tints.Green,
         caption = tr("Всё готово, настройки сохранены", "All set, your settings are kept"),
@@ -225,7 +226,7 @@ object UpdateChecker {
                         }
                     }
                     // Связь оборвалась посреди файла — недокачанный APK установка не примет
-                    if (total > 0 && done < total) error(tr("Скачано $done из $total байт", "Downloaded $done of $total bytes"))
+                    if (total > 0 && done < total) error(trf("Скачано {0} из {1} байт", "Downloaded {0} of {1} bytes", done, total))
                 } finally {
                     conn.disconnect()
                 }

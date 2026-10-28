@@ -1,6 +1,7 @@
 package com.akira.island.island
 
 import com.akira.island.core.AlarmInfo
+import com.akira.island.core.InboxItem
 import com.akira.island.core.BatteryInfo
 import com.akira.island.core.CallInfo
 import com.akira.island.core.ChronoInfo
@@ -45,4 +46,6 @@ sealed class Act(val id: String, val transient: Boolean = false) {
     data class AlarmA(val a: AlarmInfo) : Act("alarm") {
         override val pkg: String? get() = a.pkg
     }
+    /** «История уведомлений»: прочитать позже — значки приложений в капсуле, список при раскрытии */
+    data class InboxA(val items: List<InboxItem>) : Act("inbox")
 }

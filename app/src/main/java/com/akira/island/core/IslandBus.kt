@@ -3,12 +3,14 @@ package com.akira.island.core
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,6 +49,8 @@ object IslandBus {
     val timer = MutableStateFlow<TimerState?>(null)
     val stopwatch = MutableStateFlow<StopwatchState?>(null)
     val notice = MutableStateFlow<Notice?>(null)
+    /** «История уведомлений»: показанные сообщения, которые ещё ждут в острове */
+    val inbox = MutableStateFlow<List<InboxItem>>(emptyList())
     /** Идёт ввод ответа на уведомление: окну острова нужен фокус, чтобы показать клавиатуру */
     val reply = MutableStateFlow<ReplyState?>(null)
     /** Наклон телефона от -1 до 1: по нему сдвигаются блики Liquid Glass */
@@ -56,8 +60,15 @@ object IslandBus {
     /** Человек читает или отвечает — уведомление не убирается по таймеру */
     val noticeHold = MutableStateFlow(false)
     val battery = MutableStateFlow(BatteryInfo())
+    /** Режим звука (AudioManager.RINGER_MODE_*) и «Не беспокоить» — для кнопок раскрытого острова */
+    val ringer = MutableStateFlow(2)
+    val dnd = MutableStateFlow(false)
     val foregroundPackage = MutableStateFlow<String?>(null)
     val landscape = MutableStateFlow(false)
+    /** Поворот экрана для острова «У камеры»: −90 — камера слева, 90 — справа, 0 — портрет */
+    val displayRotation = MutableStateFlow(0)
+    /** На сколько градусов повёрнут остров в своём окне сейчас (0 — как обычно, сверху) */
+    val contentRotation = MutableStateFlow(0)
     /** Вне часов «По расписанию» остров не показывается */
     val offSchedule = MutableStateFlow(false)
     /** Экран включён. Пока он погашен, датчик наклона и чтение экрана навигатора не работают — бережём батарею */
@@ -81,10 +92,19 @@ object IslandBus {
     init {
         scope.launch {
             for (n in queue) {
+                val s = SettingsRepo.current
+                // «Задержка появления»; подтверждения того, что вы только что сделали (отправлено, оплачено), — сразу
+                if (s.noticeDelayMs > 0 && n.style != NoticeStyle.SENT && n.style != NoticeStyle.PAY_DONE) delay(s.noticeDelayMs.toLong())
                 notice.value = n
-                val duration = SettingsRepo.current.noticeDurationMs + n.extraMs
+                val message = n.style == NoticeStyle.MESSAGE
+                val duration = if (message && s.messageSeconds > 0) s.messageSeconds * 1000L else s.noticeDurationMs + n.extraMs
                 // Уведомление уходит по времени или раньше, если его смахнули кликом
                 withTimeoutOrNull(duration) { notice.first { it?.id != n.id } }
+                // «Пока не смахнёте»: плашка ждёт, пока её не уберут; пришло следующее событие — уступает ему
+                if (message && s.messageSeconds < 0 && notice.value?.id == n.id && waitingIsEmpty()) {
+                    val seen = posted.value
+                    combine(notice, posted) { cur, p -> cur?.id != n.id || p != seen }.first { it }
+                }
                 // Пока отвечают или листают переписку, карточка остаётся; потом ещё чуть-чуть
                 if (notice.value?.id == n.id && noticeHold.value) {
                     while (notice.value?.id == n.id && noticeHold.value) delay(200)
@@ -97,9 +117,16 @@ object IslandBus {
         }
     }
 
+    /** Сколько событий отправлено в очередь — по нему плашка «пока не смахнёте» узнаёт, что пришло следующее */
+    private val posted = MutableStateFlow(0)
+
     fun post(n: Notice) {
         queue.trySend(n)
+        posted.value++
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun waitingIsEmpty(): Boolean = queue.isEmpty
 }
 
 /** Команды службе: скриншот без острова, блокировка экрана, выключение острова (для банков). */

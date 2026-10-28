@@ -66,6 +66,8 @@ enum class QuickAction(private val ru: String, private val en: String, private v
     SCREENSHOT("Скриншот без острова", "Screenshot without the island", "Скриншот", "Screenshot"),
     CAMERA("Камера", "Camera", "Камера", "Camera"),
     LOCK("Заблокировать экран", "Lock the screen", "Блокировка", "Lock"),
+    RINGER("Режим звука", "Sound mode", "Звук", "Sound"),
+    DND("Не беспокоить", "Do Not Disturb", "Не беспокоить", "Do Not Disturb"),
     ;
 
     val title: String get() = tr(ru, en)
@@ -85,16 +87,82 @@ enum class AccentMode(private val ru: String, private val en: String, private va
     val hint: String get() = tr(hintRu, hintEn)
 }
 
-/** Язык приложения и острова. «Как в системе» — русский, если телефон на русском, иначе английский. */
+/** С какой стороны от капсулы кружок второй активности. */
 @Serializable
-enum class AppLanguage {
-    SYSTEM, RU, EN;
+enum class BubbleSide(private val ru: String, private val en: String) {
+    RIGHT("Справа", "On the right"),
+    LEFT("Слева", "On the left"),
+    ;
+
+    val title: String get() = tr(ru, en)
+}
+
+/** Как выглядит уведомление приложения: большая карточка или маленькая пилюля у камеры. */
+@Serializable
+enum class MessageStyle(private val ru: String, private val en: String, private val hintRu: String, private val hintEn: String) {
+    CARD("Карточка", "Card", "Остров раскрывается сверху: аватар, текст и кнопки", "The island opens from the top: avatar, text and buttons"),
+    PILL("Пилюля", "Pill", "Небольшая капсула у камеры: имя и одна строка текста", "A small capsule at the camera: the name and one line of text"),
+    ;
+
+    val title: String get() = tr(ru, en)
+    val hint: String get() = tr(hintRu, hintEn)
+}
+
+/** Шрифт текста в острове. */
+@Serializable
+enum class IslandFont(private val ru: String, private val en: String) {
+    INTER("Inter — как на iPhone", "Inter — like on iPhone"),
+    SYSTEM("Как в системе", "System font"),
+    CUSTOM("Свой файл шрифта", "Your own font file"),
+    ;
+
+    val title: String get() = tr(ru, en)
+}
+
+/** Остров на экране блокировки. */
+@Serializable
+enum class LockScreenMode(private val ru: String, private val en: String) {
+    SHOW("Показывать", "Show"),
+    HIDE("Скрывать до разблокировки", "Hide until unlocked"),
+    ;
+
+    val title: String get() = tr(ru, en)
+}
+
+/** Остров в альбомной ориентации (игры, видео). */
+@Serializable
+enum class LandscapeMode(private val ru: String, private val en: String, private val hintRu: String, private val hintEn: String) {
+    HIDE("Скрывать", "Hide", "Не мешает играм и видео", "Stays out of games and videos"),
+    CAMERA("У камеры", "At the camera",
+        "Остров остаётся над камерой, как на iPhone: повёрнут вместе с телефоном и не уезжает",
+        "The island stays over the camera like on iPhone: it turns with the phone and doesn't move"),
+    TOP("Сверху по центру", "Top center", "Посередине верхнего края экрана", "In the middle of the top edge of the screen"),
+    ;
+
+    val title: String get() = tr(ru, en)
+    val hint: String get() = tr(hintRu, hintEn)
+}
+
+/** Правило для уведомлений одного приложения. */
+@Serializable
+enum class AppRule { ALWAYS, NEVER }
+
+/**
+ * Язык приложения и острова. «Как в системе» — язык телефона, если он есть в приложении, иначе английский.
+ * Названия языков — на самих языках, чтобы свой язык нашёлся, даже если сейчас выбран непонятный.
+ */
+@Serializable
+enum class AppLanguage(val code: String) {
+    SYSTEM(""), RU("ru"), EN("en"), ID("id"), PT("pt"), KK("kk");
 
     val title: String
         get() = when (this) {
             SYSTEM -> tr("Как в системе", "System default")
             RU -> "Русский"
             EN -> "English"
+            ID -> "Bahasa Indonesia"
+            PT -> "Português (Brasil)"
+            KK -> "Қазақ тілі"
         }
 }
 
@@ -267,6 +335,47 @@ data class IslandSettings(
     val msgChannels: Map<String, String> = emptyMap(),
     /** Подсказку «Уведомления приходят дважды?» на главной убрали */
     val bannerHintHidden: Boolean = false,
+
+    // 1.7 — по просьбам из комментариев
+    /** Непрозрачность заливки острова, %: 100 — сплошной цвет, меньше — сквозь остров видно, что под ним */
+    val islandOpacity: Int = 100,
+    /** Ширина раскрытого острова, плашек и уведомлений, % от обычной (почти во всю ширину экрана) */
+    val expandedWidthPercent: Int = 100,
+    /** Размер текста и значков в раскрытом острове и в уведомлениях, % */
+    val contentScale: Int = 100,
+    /** С какой стороны от капсулы кружок второй активности */
+    val bubbleSide: BubbleSide = BubbleSide.RIGHT,
+    /** Вид уведомлений приложений */
+    val messageStyle: MessageStyle = MessageStyle.CARD,
+    /** Шрифт острова; у [IslandFont.CUSTOM] — файл, выбранный в «Шрифте» */
+    val islandFont: IslandFont = IslandFont.INTER,
+    /** Название своего шрифта — чтобы показать его в настройках */
+    val customFontName: String = "",
+    /** Файл своего шрифта в личной папке приложения: у каждого выбора своё имя, чтобы новый шрифт не путался со старым */
+    val customFontFile: String = "",
+    /** Толщина текста острова: -1 тоньше, 0 как задумано, 1 и 2 — жирнее */
+    val fontWeightShift: Int = 0,
+    /** Задержка перед появлением события в острове, мс */
+    val noticeDelayMs: Int = 0,
+    /** Сколько видно уведомление приложения: 0 — как события (с запасом на чтение), -1 — пока не смахнут, иначе секунды */
+    val messageSeconds: Int = 0,
+    /** Повторы — то же самое сообщение того же приложения ещё раз — не показываются */
+    val msgDedupe: Boolean = true,
+    /**
+     * «История уведомлений»: после плашки уведомление ждёт в острове столько минут — значки приложений в капсуле,
+     * список при раскрытии. 0 — выключено, -1 — пока не прочитаете или не очистите
+     */
+    val historyMinutes: Int = 0,
+    /** Показывать и тихие уведомления — те, что система не показывает всплывающими (как у Snapchat и многих приложений) */
+    val msgQuiet: Boolean = false,
+    /** Свои правила приложений: всегда показывать или никогда */
+    val msgAppRules: Map<String, AppRule> = emptyMap(),
+    /** Остров на экране блокировки */
+    val lockScreen: LockScreenMode = LockScreenMode.SHOW,
+    /** Остров в альбомной ориентации; заменяет «Скрывать в альбомной ориентации» */
+    val landscape: LandscapeMode = LandscapeMode.HIDE,
+    /** Зарядка — только плашка при подключении, без капсулы с процентами всё время зарядки */
+    val chargingBrief: Boolean = false,
 ) {
     /** С «Экономией заряда» в энергосбережении Android — как с «Уменьшить эффекты» */
     fun forPowerSave(on: Boolean): IslandSettings = if (on && batterySaver && !reduceEffects) copy(reduceEffects = true) else this
@@ -339,6 +448,16 @@ object SettingsRepo {
                 )
             }
         }
+        migrateTo5()
+    }
+
+    /**
+     * 1.7: вместо «Скрывать в альбомной ориентации» — выбор из трёх. Выключенное скрытие было островом
+     * сверху по центру — так и остаётся.
+     */
+    private fun migrateTo5() {
+        if (current.layoutVersion >= 5) return
+        update { copy(landscape = if (hideInLandscape) LandscapeMode.HIDE else LandscapeMode.TOP, layoutVersion = 5) }
     }
 
     fun update(block: IslandSettings.() -> IslandSettings) {
@@ -359,6 +478,7 @@ object SettingsRepo {
             elasticity = d.elasticity,
             reduceEffects = d.reduceEffects,
             noticeDurationMs = d.noticeDurationMs,
+            noticeDelayMs = d.noticeDelayMs,
         )
     }
 

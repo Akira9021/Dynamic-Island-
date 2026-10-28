@@ -55,6 +55,7 @@ import com.akira.island.core.Notice
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.tr
 import com.akira.island.data.IslandSettings
+import com.akira.island.data.LandscapeMode
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -143,7 +144,7 @@ object Egg {
         var announced: String? = null
         scope.launch {
             combine(IslandBus.media, SettingsRepo.state, IslandBus.landscape) { m, s, land ->
-                m?.takeIf { s.enabled && s.easterEggs && !(s.hideInLandscape && land) && matches(it) }
+                m?.takeIf { s.enabled && s.easterEggs && !(s.landscape == LandscapeMode.HIDE && land) && matches(it) }
             }.collect { m ->
                 IslandBus.egg.value = m != null
                 if (m == null) {
@@ -480,7 +481,7 @@ fun EggBanner(n: Notice, s: IslandSettings) {
             typed++
         }
     }
-    Column(Modifier.width(messageWidth()).padding(bottom = 14.dp)) {
+    Column(Modifier.width(messageWidth(s)).padding(bottom = 14.dp)) {
         Row(
             Modifier.fillMaxWidth().height(s.height.dp).padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,

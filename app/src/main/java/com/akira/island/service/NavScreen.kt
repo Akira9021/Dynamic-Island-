@@ -13,6 +13,7 @@ import com.akira.island.core.LiveInfo
 import com.akira.island.core.LiveKind
 import com.akira.island.core.Turn
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -171,7 +172,7 @@ object NavScreenParser {
         val time = all.firstOrNull { clock.matches(it.text) }?.text
         val left = (all.firstOrNull { hours.matches(it.text) } ?: all.firstOrNull { minutes.matches(it.text) })
             ?.text?.replace(Regex("""\s+"""), " ")
-        val eta = listOfNotNull(time?.let { tr("Прибытие в $it", "Arrive $it") }, left?.let(LiveParser::units),
+        val eta = listOfNotNull(time?.let { trf("Прибытие в {0}", "Arrive {0}", it) }, left?.let(LiveParser::units),
             total?.text?.replace(Regex("""\s+"""), " ")?.let(LiveParser::units))
             .takeIf { it.isNotEmpty() }?.joinToString(" · ")
         // Направление — только из подсказки: в подписях кнопок («← шаг влево») тоже бывают «влево» и «вправо»

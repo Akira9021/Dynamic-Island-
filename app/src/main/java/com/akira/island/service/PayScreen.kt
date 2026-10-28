@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -238,7 +239,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
                 if (sums.size == 1) return paid(pkg, sums[0])
                 // Экран говорит «оплата прошла», но суммы на нём нет — показываем «Оплачено» без суммы
                 if (sums.isEmpty()) return paid(pkg, "")
-                PayDebug.add(tr("«Оплачено» на экране, но сумм: ${sums.size}", "“Paid” on screen, but amounts: ${sums.size}"), pkg, fresh.joinToString(" | "))
+                PayDebug.add(trf("«Оплачено» на экране, но сумм: {0}", "“Paid” on screen, but amounts: {0}", sums.size), pkg, fresh.joinToString(" | "))
             }
         } else if (now - since < 4_000 && all.size == 1 && texts.any { PayScreenParser.paid(it) } && texts.none { PayScreenParser.failure(it) }) {
             // Приложение открылось само уже с результатом: заплатили, не открывая его

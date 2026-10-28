@@ -74,7 +74,13 @@ object NotificationParser {
             }
         }
 
-        val call = if (n.category == Notification.CATEGORY_CALL && !isMedia) parseCall(context, sbn, title) else null
+        val call = when {
+            isMedia -> null
+            n.category == Notification.CATEGORY_CALL -> parseCall(context, sbn, title)
+            // Discord, Zoom, Teams и др. звонят без «звонковой» категории — узнаём их по кнопкам
+            VoipApps.isVoip(sbn.packageName) -> parseVoip(context, sbn, title)
+            else -> null
+        }
         // Какой канал присылает всплывающую плашку звонка или будильника — для экрана «Системные плашки»
         SystemBanners.onPosted(sbn, incomingCall = call?.incoming == true)
         // Звонящий будильник или таймер «Часов» — у него полноэкранный сигнал; остров включит экран сам,
@@ -98,20 +104,45 @@ object NotificationParser {
         } else {
             null
         }
+        // Идущий таймер или секундомер «Часов», у которого время только в тексте (каждую секунду новое), а не
+        // системным отсчётом: так у части оболочек (Xiaomi, vivo и др.) — остров ведёт отсчёт сам от этого времени
+        val texts = listOf(Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT, Notification.EXTRA_BIG_TEXT)
+        val runningMs = if (clock && !ticking && pausedMs == null && call == null && !isMedia && ClockAction.PAUSE in buttons) {
+            texts.firstNotNullOfOrNull { ClockScreenParser.find(ex.getCharSequence(it)) }
+        } else {
+            null
+        }
+        // Диктофон и запись экрана без системного отсчёта: идущая запись с кнопкой «Стоп»
+        val recorder = !ticking && pausedMs == null && runningMs == null && call == null && !isMedia && ongoing &&
+            RecorderApps.isRecording(sbn.packageName, title, n.actions)
         // Неактивный (на паузе) таймер, который остров уже убрал, снова не показываем
-        val chrono = call == null && !isMedia && (ticking || pausedMs != null) && !ClockControl.wasDismissed(sbn.key, pausedMs)
+        val chrono = call == null && !isMedia && (ticking || pausedMs != null || runningMs != null || recorder) &&
+            !ClockControl.wasDismissed(sbn.key, pausedMs)
         if (clock && chrono) ClockControl.reader?.onNotificationChrono(sbn.packageName)
         if (pausedMs != null && chrono) ClockControl.dropPausedLater(sbn.key)
         IslandBus.chrono.value = IslandBus.chrono.value.toMutableMap().apply {
             if (chrono) {
-                val down = if (pausedMs != null) looksLikeTimer(n, title) else ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false)
+                val down = when {
+                    recorder -> false
+                    pausedMs != null || runningMs != null -> looksLikeTimer(n, title)
+                    else -> ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false)
+                }
                 val stop = n.actions?.firstOrNull { a ->
                     val t = a.title?.toString()?.lowercase().orEmpty()
-                    listOf("стоп", "останов", "заверш", "stop", "finish").any { it in t }
+                    StopWords.any { it in t }
                 }?.actionIntent
-                put(sbn.key, ChronoInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), n.`when`, down, sbn.postTime, stop,
+                val now = System.currentTimeMillis()
+                // Отсчёт: системный — от Notification.when; из текста — от прочитанного времени; у записи без
+                // отсчёта — от времени в тексте или с момента, как появилось уведомление
+                val base = when {
+                    runningMs != null -> if (down) now + runningMs else now - runningMs
+                    recorder -> texts.firstNotNullOfOrNull { ClockScreenParser.find(ex.getCharSequence(it)) }?.let { now - it }
+                        ?: n.`when`.takeIf { it in 1..now } ?: sbn.postTime
+                    else -> n.`when`
+                }
+                put(sbn.key, ChronoInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), base, down, sbn.postTime, stop,
                     pausedMs = pausedMs, pause = buttons[ClockAction.PAUSE], resume = buttons[ClockAction.START],
-                    reset = buttons[ClockAction.RESET]))
+                    reset = buttons[ClockAction.RESET], recording = recorder))
             } else {
                 remove(sbn.key)
             }
@@ -143,19 +174,22 @@ object NotificationParser {
     private fun parseCall(context: Context, sbn: StatusBarNotification, title: String): CallInfo? {
         val n = sbn.notification
         val ex = n.extras
-        val ongoing = ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false) && n.`when` > 0
-        // CallStyle (Android 12+) кладёт кнопки в extras, у остальных звонилок ищем по подписи на языке телефона
+        val ticking = ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false) && n.`when` > 0
+        // CallStyle (Android 12+) кладёт кнопки в extras, у остальных звонилок ищем по подписи на языке телефона;
+        // «Присоединиться» и «Отключиться» — у звонков в Discord и похожих приложениях
         var answer = pending(ex, "android.answerIntent")
         var decline = pending(ex, "android.declineIntent")
         var hangUp = pending(ex, "android.hangUpIntent")
         n.actions?.forEach { a ->
             val t = a.title?.toString()?.lowercase().orEmpty()
             when {
-                answer == null && AnswerWords.any { it in t } -> answer = a.actionIntent
+                answer == null && (AnswerWords.any { it in t } || JoinWords.any { it in t }) -> answer = a.actionIntent
                 decline == null && DeclineWords.any { it in t } -> decline = a.actionIntent
-                hangUp == null && HangUpWords.any { it in t } -> hangUp = a.actionIntent
+                hangUp == null && (HangUpWords.any { it in t } || LeaveWords.any { it in t }) -> hangUp = a.actionIntent
             }
         }
+        // Идёт разговор: системный отсчёт или постоянное уведомление с кнопкой «Завершить» и без «Ответить»
+        val ongoing = ticking || (n.flags and Notification.FLAG_ONGOING_EVENT != 0 && hangUp != null && answer == null)
         val incoming = !ongoing && answer != null
         if (!incoming && !ongoing) return null
 
@@ -176,7 +210,47 @@ object NotificationParser {
             name = name,
             avatar = avatar,
             incoming = incoming,
-            base = n.`when`,
+            // Без системного отсчёта время разговора идёт с момента, как появилось уведомление
+            base = if (ticking) n.`when` else n.`when`.takeIf { it in 1..System.currentTimeMillis() } ?: sbn.postTime,
+            postTime = sbn.postTime,
+            answer = answer,
+            decline = decline ?: hangUp,
+            hangUp = hangUp ?: decline,
+            open = n.contentIntent,
+        )
+    }
+
+    /**
+     * Звонок в Discord, Zoom, Teams и др.: у них нет категории звонка, поэтому узнаём по кнопкам. Входящий —
+     * есть «Принять» («Присоединиться») и «Отклонить»; идёт разговор — постоянное уведомление с «Отключиться»
+     * («Выйти», «Завершить»).
+     */
+    private fun parseVoip(context: Context, sbn: StatusBarNotification, title: String): CallInfo? {
+        val n = sbn.notification
+        var answer: PendingIntent? = null
+        var decline: PendingIntent? = null
+        var hangUp: PendingIntent? = null
+        n.actions?.forEach { a ->
+            val t = a.title?.toString()?.lowercase().orEmpty()
+            when {
+                answer == null && (AnswerWords.any { it in t } || JoinWords.any { it in t }) -> answer = a.actionIntent
+                decline == null && DeclineWords.any { it in t } -> decline = a.actionIntent
+                hangUp == null && (HangUpWords.any { it in t } || LeaveWords.any { it in t }) -> hangUp = a.actionIntent
+            }
+        }
+        val ongoingFlag = n.flags and Notification.FLAG_ONGOING_EVENT != 0
+        val incoming = answer != null && (decline != null || hangUp != null)
+        val talking = !incoming && hangUp != null && ongoingFlag
+        if (!incoming && !talking) return null
+        val avatar = runCatching { n.getLargeIcon()?.loadDrawable(context)?.toBitmap(128, 128)?.asImageBitmap() }.getOrNull()
+        val now = System.currentTimeMillis()
+        return CallInfo(
+            key = sbn.key,
+            pkg = sbn.packageName,
+            name = title.ifBlank { appLabel(context, sbn.packageName) },
+            avatar = avatar,
+            incoming = incoming,
+            base = n.`when`.takeIf { it in 1..now } ?: sbn.postTime,
             postTime = sbn.postTime,
             answer = answer,
             decline = decline ?: hangUp,
@@ -200,6 +274,9 @@ object NotificationParser {
 
     fun onRemoved(key: String) {
         Messages.forget(key)
+        // Прочитали в самом приложении — из «Истории уведомлений» уходит, а плашка, которую держат дольше, — тоже
+        Inbox.remove(key)
+        Messages.onRemoved(key)
         LiveParser.forget(key)
         ClockControl.forget(key)
         LiveDebug.forget(key)
@@ -219,6 +296,67 @@ object NotificationParser {
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
     }.getOrDefault(pkg)
 }
+
+/** Приложения звонков без «звонковой» категории уведомлений: звонок узнаётся по кнопкам. */
+object VoipApps {
+    private val known = setOf(
+        "com.discord",
+        "us.zoom.videomeetings",
+        "com.microsoft.teams",
+        "com.skype.raider",
+        "com.google.android.apps.meetings",
+        "com.google.android.apps.tachyon",
+        "jp.naver.line.android",
+        "com.viber.voip",
+    )
+
+    fun isVoip(pkg: String) = pkg in known
+}
+
+/**
+ * Диктофоны и запись экрана, у которых в уведомлении нет системного отсчёта: идущая запись — постоянное
+ * уведомление с кнопкой «Стоп» у известного приложения записи или со словом «запись» в заголовке.
+ */
+object RecorderApps {
+    private val known = setOf(
+        "com.miui.screenrecorder",
+        "com.coloros.screenrecorder",
+        "com.oplus.screenrecorder",
+        "com.samsung.android.app.screenrecorder",
+        "com.huawei.screenrecorder",
+        "com.hihonor.screenrecorder",
+        "com.android.soundrecorder",
+        "com.miui.soundrecorder",
+        "com.coloros.soundrecorder",
+        "com.oplus.soundrecorder",
+        "com.sec.android.app.voicenote",
+        "com.google.android.apps.recorder",
+        "com.huawei.soundrecorder",
+        "com.hihonor.soundrecorder",
+        "com.android.bbksoundrecorder",
+        "com.asus.soundrecorder",
+        "com.transsion.soundrecorder",
+    )
+
+    /** Слова «запись» на разных языках — в заголовке уведомления идущей записи */
+    private val words = listOf(
+        "record", "запис", "grava", "grab", "rekam", "aufnahme", "enregistr", "registraz", "nagryw", "kayıt", "đang ghi",
+        "录", "錄", "録", "녹음", "녹화", "жазба", "жазып",
+    )
+
+    fun isRecording(pkg: String, title: String, actions: Array<Notification.Action>?): Boolean {
+        val stop = actions?.any { a -> a.title?.toString()?.lowercase().orEmpty().let { t -> StopWords.any { it in t } } } == true
+        if (!stop) return false
+        val t = title.lowercase()
+        return pkg in known || words.any { it in t }
+    }
+}
+
+/** Подписи кнопки «Стоп» у записи, таймеров и секундомеров на разных языках. */
+private val StopWords = listOf(
+    "стоп", "останов", "заверш", "stop", "finish", "berhenti", "hentikan", "parar", "detener", "тоқтату", "аяқтау", "beenden", "arrêter",
+    "停止", "結束", "終了", "중지",
+)
 
 /** Приложения, чьи постоянные уведомления остров показывает как «живые активности». */
 object LiveApps {
@@ -270,16 +408,25 @@ object LiveApps {
  * Латинской Америке и не только — без них ответить и сбросить из острова там не получалось.
  */
 private val AnswerWords = listOf(
-    "ответ", "принять", "answer", "accept", "trả lời", "nghe", "jawab", "terima", "angkat", "contestar", "responder",
+    "ответ", "принять", "жауап", "қабылдау", "answer", "accept", "trả lời", "nghe", "jawab", "terima", "angkat", "contestar", "responder",
     "atender", "aceptar", "aceitar", "รับสาย", "cevapla", "yanıtla", "kabul", "annehmen", "répondre", "rispondi", "accetta",
     "odbierz", "відповісти", "прийняти", "sagutin", "接听", "接聽", "応答", "응답", "받기",
 )
 private val DeclineWords = listOf(
-    "отклон", "сброс", "decline", "reject", "dismiss", "từ chối", "tolak", "rechazar", "recusar", "rejeitar", "ปฏิเสธ",
+    "отклон", "сброс", "қабылдамау", "бас тарту", "decline", "reject", "dismiss", "từ chối", "tolak", "rechazar", "recusar", "rejeitar", "ปฏิเสธ",
     "reddet", "ablehnen", "refuser", "rifiuta", "odrzuć", "відхилити", "tanggihan", "拒接", "拒絕", "拒否", "거절",
 )
 private val HangUpWords = listOf(
     "заверш", "положить", "hang", "end call", "kết thúc", "gác máy", "akhiri", "colgar", "finalizar", "desligar",
     "encerrar", "วางสาย", "kapat", "auflegen", "beenden", "raccrocher", "riaggancia", "zakończ", "завершити", "ibaba",
-    "挂断", "掛斷", "終了", "종료",
+    "挂断", "掛斷", "終了", "종료", "аяқтау",
+)
+
+/** «Присоединиться» к звонку (Discord и др.) — как «Принять» */
+private val JoinWords = listOf("join", "присоедин", "gabung", "entrar", "participar", "қосылу", "beitreten", "rejoindre", "unirse")
+
+/** «Отключиться», «Выйти» из звонка (Discord, Zoom и др.) — как «Завершить» */
+private val LeaveWords = listOf(
+    "disconnect", "leave", "отключ", "выйти", "покинуть", "putus", "keluar", "tinggalkan", "desconectar", "sair", "ажырату", "шығу",
+    "trennen", "verlassen", "quitter", "salir",
 )

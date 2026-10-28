@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dynamic Island</string>
+    <string name="a11y_label">Dynamic Island</string>
+    <string name="tile_label">Ilha</string>
+    <string name="a11y_desc">Mostra uma cápsula no estilo Dynamic Island sobre a câmera: música, timers, progresso de downloads, lanterna e eventos do sistema. O serviço vê qual app está aberto para esconder o player e mostrar pagamentos. A tela só é lida em apps de navegação (2GIS, Yandex Navigator, Maps e outros), no Relógio e em apps de pagamento enquanto estão abertos: nos de navegação — a distância até a próxima curva, a rua, a hora de chegada e a direção da seta; no Relógio — o tempo do timer e do cronômetro; nos de pagamento (Mir Pay, T-Pay, Google Wallet e outros) — a tela de pagar com o celular e o valor, para mostrar “Aproxime da maquininha” e depois “Pago”. O que é lido fica no celular; só o nome da música e o artista vão para a internet, para buscar a letra.</string>
+</resources>

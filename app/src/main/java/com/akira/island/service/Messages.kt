@@ -28,7 +28,10 @@ import com.akira.island.core.Notice
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.R
+import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.AccentMode
+import com.akira.island.data.AppRule
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Ios
 
@@ -44,6 +47,11 @@ object Messages {
 
     /** Куда только что ответили из острова: обновление этого уведомления с нашим же ответом не показываем */
     private val repliedAt = HashMap<String, Long>()
+
+    /** Когда показывали сообщение (по приложению и тексту и по одному тексту) — для «Убирать повторы» */
+    private val recent = object : LinkedHashMap<String, Long>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 200
+    }
 
     private val skipCategories = setOf(
         Notification.CATEGORY_TRANSPORT,
@@ -61,38 +69,54 @@ object Messages {
         val s = SettingsRepo.current
         if (!s.cardMessages || !s.enabled) return
         val n = sbn.notification ?: return
+        val pkg = sbn.packageName
+        // Постоянные, служебные и сводки групп — не сообщения: их не показываем и в диагностику не пишем
         if (sbn.isOngoing) return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0) return
-        if (n.category in skipCategories) return
+        NotifApps.seen(service, pkg, appName)
+        if (n.category in skipCategories) return NotifDebug.add(pkg, trf("Служебное: {0}", "Service notification: {0}", n.category))
+        val rule = s.msgAppRules[pkg]
+        if (rule == AppRule.NEVER) return NotifDebug.add(pkg, tr("Выключено для приложения", "Turned off for this app"))
         // Пока открыто само приложение, оно и так показывает сообщение — если не попросили показывать и тогда
-        if (!s.msgInApp && IslandBus.foregroundPackage.value == sbn.packageName) return
+        if (!s.msgInApp && IslandBus.foregroundPackage.value == pkg) return NotifDebug.add(pkg, tr("Приложение открыто", "The app is open"))
 
-        // Тихие, свёрнутые и заглушённые «Не беспокоить» не показываем — как и система
+        // Тихие и свёрнутые не показываем — как и система, если не попросили («Тихие уведомления» или
+        // «Всегда» для приложения). Заглушённые «Не беспокоить» не показываем никогда
         val ranking = NotificationListenerService.Ranking()
         val ranked = runCatching { service.currentRanking?.getRanking(sbn.key, ranking) == true }.getOrDefault(false)
         if (ranked) {
-            if (ranking.importance < NotificationManager.IMPORTANCE_DEFAULT) return
-            if (!ranking.matchesInterruptionFilter()) return
+            val least = when {
+                rule == AppRule.ALWAYS -> NotificationManager.IMPORTANCE_MIN
+                s.msgQuiet -> NotificationManager.IMPORTANCE_LOW
+                else -> NotificationManager.IMPORTANCE_DEFAULT
+            }
+            if (ranking.importance < least) {
+                return NotifDebug.add(pkg, tr("Тихое уведомление — включите «Тихие уведомления» или «Всегда» для приложения",
+                    "Silent notification — turn on Silent notifications or Always for this app"))
+            }
+            if (!ranking.matchesInterruptionFilter()) return NotifDebug.add(pkg, tr("«Не беспокоить»", "Do Not Disturb"))
         }
 
         // Экран блокировки: как в шторке — уведомления там скрыты, «секретные» не показываются,
         // у остальных без разрешения показывать содержимое видно только название приложения
         val locked = IslandBus.locked.value
-        if (locked && !Lockscreen.showsNotifications(service)) return
+        if (locked && !Lockscreen.showsNotifications(service)) {
+            return NotifDebug.add(pkg, tr("На экране блокировки уведомления выключены", "Notifications are off on the lock screen"))
+        }
         val visibility = if (ranked && ranking.lockscreenVisibilityOverride != NotificationListenerService.Ranking.VISIBILITY_NO_OVERRIDE) {
             ranking.lockscreenVisibilityOverride
         } else {
             n.visibility
         }
         val secret = visibility == Notification.VISIBILITY_SECRET
-        if (locked && secret) return
+        if (locked && secret) return NotifDebug.add(pkg, tr("Скрыто на экране блокировки", "Hidden on the lock screen"))
         val sensitive = Lockscreen.isSecure(service) &&
             (secret || visibility == Notification.VISIBILITY_PRIVATE && !Lockscreen.showsPrivate(service))
 
         val ex = n.extras ?: return
         // Мессенджер дописал в уведомление ваш же ответ — это не новое сообщение
-        if (ownLastMessage(ex)) return
+        if (ownLastMessage(ex)) return NotifDebug.add(pkg, tr("Ваше же сообщение", "Your own message"))
         val replied = repliedAt[sbn.key]
         if (replied != null && SystemClock.elapsedRealtime() - replied < 5_000) return
         val title = (ex.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)
@@ -100,13 +124,25 @@ object Messages {
         val text = lastMessage(ex)
             ?: (ex.getCharSequence(Notification.EXTRA_TEXT) ?: ex.getCharSequence(Notification.EXTRA_BIG_TEXT))?.toString()?.trim()
             ?: ""
-        if (title.isEmpty() && text.isEmpty()) return
+        if (title.isEmpty() && text.isEmpty()) return NotifDebug.add(pkg, tr("Без текста", "No text"))
 
         val signature = "$title\n$text"
         // Тот же текст — не повторяем. Новое сообщение в той же переписке показываем, даже если мессенджер
         // обновляет уведомление с флагом «не звенеть повторно» (WhatsApp ставит его на каждое следующее)
         if (shown[sbn.key] == signature) return
         shown[sbn.key] = signature
+        // «Убирать повторы»: то же сообщение того же приложения ещё раз (другим уведомлением, пересланное,
+        // из двух аккаунтов) за последние две минуты, и одинаковый текст из разных приложений за 10 секунд
+        if (s.msgDedupe) {
+            val now = SystemClock.elapsedRealtime()
+            val same = recent["$pkg\n$signature"]
+            val anyApp = recent[signature]
+            recent["$pkg\n$signature"] = now
+            recent[signature] = now
+            if (same != null && now - same < 120_000 || anyApp != null && now - anyApp < 10_000) {
+                return NotifDebug.add(pkg, tr("Повтор", "Repeat"))
+            }
+        }
 
         val avatar = runCatching {
             n.getLargeIcon()?.loadDrawable(service)?.toBitmap(128, 128)?.asImageBitmap()
@@ -137,6 +173,9 @@ object Messages {
                 extraMs = if (actions.isEmpty()) 2_000 else 4_500,
             ),
         )
+        NotifDebug.add(pkg, tr("Показано", "Shown"))
+        // «История уведомлений»: после плашки сообщение ждёт в острове
+        if (s.historyMinutes != 0) Inbox.add(message, title.ifEmpty { appName })
         // Для «Системных плашек»: какой мессенджер и всплывает ли у него ещё своя плашка поверх острова
         SystemBanners.onMessage(sbn.packageName, n.channelId, popsUp = !ranked || ranking.importance >= NotificationManager.IMPORTANCE_HIGH)
     }
@@ -231,6 +270,15 @@ object Messages {
     fun forget(key: String) {
         shown.remove(key)
         repliedAt.remove(key)
+    }
+
+    /**
+     * Уведомление убрали (прочитали в приложении или смахнули в шторке). Если его плашку держат дольше обычного
+     * («Показ уведомлений» больше авто или «пока не смахнёте») — она уходит тоже.
+     */
+    fun onRemoved(key: String) {
+        val n = IslandBus.notice.value ?: return
+        if (n.message?.key == key && SettingsRepo.current.messageSeconds != 0) IslandBus.notice.value = null
     }
 }
 

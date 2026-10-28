@@ -129,6 +129,8 @@ class SystemEvents(private val context: Context) {
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
 
         dnd = isDnd()
+        IslandBus.dnd.value = dnd == true
+        IslandBus.ringer.value = context.getSystemService(AudioManager::class.java)?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
         val power = context.getSystemService(PowerManager::class.java)
         IslandBus.screenOn.value = power?.isInteractive ?: true
         IslandBus.powerSave.value = power?.isPowerSaveMode == true
@@ -202,6 +204,7 @@ class SystemEvents(private val context: Context) {
                 val on = isDnd()
                 if (on == dnd) return
                 dnd = on
+                IslandBus.dnd.value = on
                 // Как фокус «Не беспокоить» на iPhone: луна и состояние
                 notice(
                     s.evDnd,
@@ -217,7 +220,9 @@ class SystemEvents(private val context: Context) {
             }
 
             AudioManager.RINGER_MODE_CHANGED_ACTION -> {
-                val n = when (intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, -1)) {
+                val mode = intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, -1)
+                if (mode >= 0) IslandBus.ringer.value = mode
+                val n = when (mode) {
                     // Как переключатель «Звонок/Бесшумно» на iPhone: короткая пилюля, колокольчик качается
                     AudioManager.RINGER_MODE_NORMAL -> Notice("", tr("Звонок", "Ring"), ic(R.drawable.ios_notifications), Color.White, style = NoticeStyle.PILL)
                     AudioManager.RINGER_MODE_VIBRATE -> Notice("", tr("Вибрация", "Vibrate"), ic(R.drawable.ios_phone_portrait),

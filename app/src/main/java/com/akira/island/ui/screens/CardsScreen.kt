@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.OfflineBolt
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -73,6 +74,13 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
             GroupToggle(Pos.Middle, Icons.Rounded.OfflineBolt, tr("Индикатор зарядки", "Charging indicator"),
                 tr("Когда устройство заряжается", "When the device is charging"),
                 s.cardCharging, color = Tile.Green) { set { copy(cardCharging = it) } }
+            if (s.cardCharging) {
+                // Зарядка часами занимает остров — можно оставить только плашку при подключении
+                GroupToggle(Pos.Middle, Icons.Rounded.BatteryChargingFull, tr("Только при подключении", "Only when plugged in"),
+                    tr("Плашка «Зарядка» на пару секунд, без капсулы с процентами всё время зарядки",
+                        "A Charging banner for a couple of seconds, without the percentage capsule the whole time"),
+                    s.chargingBrief, color = Tile.Green) { set { copy(chargingBrief = it) } }
+            }
             GroupToggle(Pos.Last, Icons.Rounded.Downloading, tr("Индикатор прогресса", "Progress indicator"),
                 tr("Загрузки и отправка в Google Play, Telegram и других приложениях", "Downloads and uploads in Google Play, Telegram and other apps"),
                 s.cardProgress, color = Tile.Teal) { set { copy(cardProgress = it) } }

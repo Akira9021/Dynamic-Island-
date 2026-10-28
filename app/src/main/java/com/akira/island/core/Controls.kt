@@ -1,9 +1,11 @@
 package com.akira.island.core
 
 import android.app.ActivityOptions
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Build
 import android.provider.Settings
 import android.telecom.TelecomManager
@@ -199,6 +201,46 @@ object Controls {
     /** Выключить службу острова, например на время банковского приложения. Включить её снова можно только в настройках */
     fun turnOffIsland() {
         IslandBus.commands.tryEmit(ServiceCommand.TURN_OFF)
+    }
+
+    /**
+     * Кнопка «Режим звука»: звонок → вибрация → без звука → звонок. «Без звука» Android разрешает только
+     * с доступом к «Не беспокоить» — без него кнопка переключает звонок и вибрацию и открывает этот доступ.
+     */
+    fun cycleRinger(context: Context) {
+        val audio = context.getSystemService(AudioManager::class.java) ?: return
+        val next = when (audio.ringerMode) {
+            AudioManager.RINGER_MODE_NORMAL -> AudioManager.RINGER_MODE_VIBRATE
+            AudioManager.RINGER_MODE_VIBRATE -> AudioManager.RINGER_MODE_SILENT
+            else -> AudioManager.RINGER_MODE_NORMAL
+        }
+        val ok = runCatching { audio.ringerMode = next }.isSuccess
+        if (!ok) {
+            runCatching { audio.ringerMode = AudioManager.RINGER_MODE_NORMAL }
+            openPolicyAccess(context)
+        }
+        IslandBus.ringer.value = audio.ringerMode
+    }
+
+    /** Кнопка «Не беспокоить»: включить или выключить. Без доступа открывает экран, где его дают. */
+    fun toggleDnd(context: Context) {
+        val nm = context.getSystemService(NotificationManager::class.java) ?: return
+        if (!nm.isNotificationPolicyAccessGranted) {
+            openPolicyAccess(context)
+            return
+        }
+        val on = nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+        runCatching {
+            nm.setInterruptionFilter(if (on) NotificationManager.INTERRUPTION_FILTER_ALL else NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+        }
+        IslandBus.dnd.value = nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+    }
+
+    private fun openPolicyAccess(context: Context) {
+        collapse()
+        runCatching {
+            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
     }
 
     fun openCamera(context: Context) {

@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,9 +77,13 @@ import com.akira.island.core.NoticeStyle
 import com.akira.island.core.PayReady
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Act
 import com.akira.island.island.CompactContent
+import com.akira.island.island.IslandTheme
+import com.akira.island.island.IslandType
+import com.akira.island.island.islandFill
 import com.akira.island.island.Ios
 import com.akira.island.island.activeHeight
 import com.akira.island.island.glassSurface
@@ -273,11 +278,9 @@ private fun DoubleBannerCard(app: String, onFix: () -> Unit, onHide: () -> Unit)
         Text(tr("Сообщения приходят дважды?", "Messages show up twice?"), color = Ui.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
-            tr(
-                "Сообщение показывает и остров, и сам $app своей плашкой. Выключите у него «Всплывающие уведомления» — " +
-                    "останется только остров, а в шторке уведомление сохранится.",
-                "Both the island and $app itself show the message. Turn off its “Pop on screen” — only the island will " +
-                    "remain, and the notification stays in the shade.",
+            trf(
+                "Сообщение показывает и остров, и сам {0} своей плашкой. Выключите у него «Всплывающие уведомления» — останется только остров, а в шторке уведомление сохранится.",
+                "Both the island and {0} itself show the message. Turn off its “Pop on screen” — only the island will remain, and the notification stays in the shade.", app,
             ),
             color = Ui.Sub, fontSize = 14.sp, lineHeight = 20.sp,
         )
@@ -486,6 +489,9 @@ fun Arrow() {
 @Composable
 fun IslandPreview(expanded: Boolean = false) {
     val s by SettingsRepo.state.collectAsState()
+    // Шрифт острова — тот же, что в самом острове
+    val context = LocalContext.current
+    LaunchedEffect(s) { IslandType.apply(context, s) }
     val demo = remember {
         MediaInfo(
             key = "demo", pkg = "", title = tr("Демо", "Demo"), artist = "", album = null, art = null,
@@ -513,12 +519,12 @@ fun IslandPreview(expanded: Boolean = false) {
                 .clip(shape)
                 .then(
                     if (s.liquidGlass) Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f)
-                    else Modifier.background(Color(s.color)),
+                    else Modifier.background(islandFill(s)),
                 )
                 .then(if (s.outline) Modifier.border(s.outlineWidth.dp, if (s.outlineFromArt) Tints.Lavender else Color(s.outlineColor), shape) else Modifier)
                 .animateContentSize(),
         ) {
-            CompactContent(act, s, 400.dp)
+            IslandTheme { CompactContent(act, s, 400.dp) }
         }
     }
 }

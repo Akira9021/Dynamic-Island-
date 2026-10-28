@@ -12,6 +12,7 @@ import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -656,14 +657,14 @@ class ClockScreenReader(private val service: AccessibilityService, private val s
         val w = stopwatch?.takeUnless { fromNotification }
         if (t != null) {
             val old = map[TIMER_KEY]
-            map[TIMER_KEY] = ChronoInfo(TIMER_KEY, pkg, tr("Таймер · $label", "Timer · $label"), icon, t.base, true,
+            map[TIMER_KEY] = ChronoInfo(TIMER_KEY, pkg, trf("Таймер · {0}", "Timer · {0}", label), icon, t.base, true,
                 old?.postTime ?: System.currentTimeMillis(), pausedMs = t.pausedMs)
         } else {
             map.remove(TIMER_KEY)
         }
         if (w != null) {
             val old = map[STOPWATCH_KEY]
-            map[STOPWATCH_KEY] = ChronoInfo(STOPWATCH_KEY, pkg, tr("Секундомер · $label", "Stopwatch · $label"), icon, w.base, false,
+            map[STOPWATCH_KEY] = ChronoInfo(STOPWATCH_KEY, pkg, trf("Секундомер · {0}", "Stopwatch · {0}", label), icon, w.base, false,
                 old?.postTime ?: System.currentTimeMillis(), pausedMs = w.pausedMs)
         } else {
             map.remove(STOPWATCH_KEY)

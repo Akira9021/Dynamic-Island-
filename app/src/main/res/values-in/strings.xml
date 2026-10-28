@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dynamic Island</string>
+    <string name="a11y_label">Dynamic Island</string>
+    <string name="tile_label">Pulau</string>
+    <string name="a11y_desc">Menampilkan kapsul bergaya Dynamic Island di atas kamera: musik, timer, progres unduhan, senter dan peristiwa sistem. Layanan ini melihat aplikasi mana yang terbuka untuk menyembunyikan pemutar dan menampilkan pembayaran. Layar hanya dibaca di aplikasi navigasi (2GIS, Yandex Navigator, Maps dan lainnya), aplikasi Jam dan aplikasi pembayaran selama terbuka: di aplikasi navigasi — jarak ke belokan berikutnya, nama jalan, waktu tiba dan arah panah; di Jam — waktu timer dan stopwatch; di aplikasi pembayaran (Mir Pay, T-Pay, Google Wallet dan lainnya) — layar bayar dengan ponsel dan jumlahnya, untuk menampilkan “Dekatkan ke terminal” lalu “Dibayar”. Yang dibaca tetap di ponsel; hanya judul lagu dan artis yang dikirim ke internet untuk mencari lirik.</string>
+</resources>

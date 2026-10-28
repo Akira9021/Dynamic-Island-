@@ -57,6 +57,7 @@ import com.akira.island.core.Lang
 import com.akira.island.core.Notice
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.IslandSettings
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -104,9 +105,9 @@ fun durationWords(ms: Long): String {
     val h = minutes / 60
     val m = minutes % 60
     return when {
-        h == 0L -> tr("$m мин", "$m min")
-        m == 0L -> tr("$h ч", "$h h")
-        else -> tr("$h ч $m мин", "$h h $m min")
+        h == 0L -> trf("{0} мин", "{0} min", m)
+        m == 0L -> trf("{0} ч", "{0} h", h)
+        else -> trf("{0} ч {1} мин", "{0} h {1} min", h, m)
     }
 }
 
@@ -116,8 +117,11 @@ fun alarmDay(triggerAt: Long, now: Long): String {
     return when (days) {
         0L -> tr("сегодня", "today")
         1L -> tr("завтра", "tomorrow")
-        // По-русски день недели строчными («завтра», «пятница»), по-английски — с большой («Friday»)
-        else -> SimpleDateFormat("EEEE", Lang.locale).format(Date(triggerAt)).let { if (Lang.en) it else it.lowercase(Lang.locale) }
+        // По-русски, по-казахски и по-португальски день недели строчными («пятница», «sexta-feira»),
+        // по-английски и по-индонезийски — с большой («Friday», «Jumat»)
+        else -> SimpleDateFormat("EEEE", Lang.locale).format(Date(triggerAt)).let {
+            if (Lang.code in setOf("ru", "kk", "pt")) it.lowercase(Lang.locale) else it
+        }
     }
 }
 
@@ -273,13 +277,13 @@ fun AlarmExpanded(a: AlarmInfo, s: IslandSettings) {
             Text("${if (wake) tr("Подъём", "Wake up") else tr("Будильник", "Alarm")} · ${alarmDay(a.triggerAt, now)}",
                 color = Dim, fontSize = 14.sp, maxLines = 1)
             Text(clockText(wakeTime(context, a.triggerAt), 44.sp), color = Color.White, fontSize = 44.sp,
-                style = Digits.copy(fontWeight = FontWeight.Normal), maxLines = 1)
+                style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(if (wake) Ios.moon else Ios.alarm, null, tint = if (wake) NightTint else AlarmTint, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (wake) tr("Сон — ${durationWords(left)}", "Sleep — ${durationWords(left)}")
-                    else tr("Через ${durationWords(left)}", "In ${durationWords(left)}"),
-                    color = AlarmTint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (wake) trf("Сон — {0}", "Sleep — {0}", durationWords(left))
+                    else trf("Через {0}", "In {0}", durationWords(left)),
+                    color = AlarmTint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -313,7 +317,7 @@ fun AlarmBanner(n: Notice, a: AlarmInfo, s: IslandSettings, wideWidth: Dp) {
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
             Text(if (wake) tr("сон", "sleep") else tr("через", "in"), color = Dim, fontSize = 12.sp, maxLines = 1)
             Text(durationWords((a.triggerAt - now).coerceAtLeast(0)), color = AlarmTint, fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                fontWeight = FontWeight.SemiBold.island, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

@@ -89,6 +89,8 @@ data class ChronoInfo(
     val pause: PendingIntent? = null,
     val resume: PendingIntent? = null,
     val reset: PendingIntent? = null,
+    /** Идёт запись (диктофон, запись экрана) — узнали по приложению и кнопке «Стоп» */
+    val recording: Boolean = false,
 ) {
     fun elapsed(nowWall: Long): Long = pausedMs ?: if (countDown) (base - nowWall).coerceAtLeast(0) else nowWall - base
 
@@ -106,7 +108,7 @@ data class ChronoInfo(
 
     /** Запись экрана или звука — показывается красным. */
     val isRecording: Boolean
-        get() = title.lowercase().let { t -> "record" in t || "запис" in t }
+        get() = recording || title.lowercase().let { t -> "record" in t || "запис" in t || "grava" in t || "rekam" in t }
 }
 
 /** Звонок из уведомления звонилки: входящий или идущий разговор. */
@@ -241,6 +243,21 @@ data class AppMessage(
     val history: List<String> = emptyList(),
     /** На заблокированном экране вместо имени и текста — только название приложения, как в шторке */
     val sensitive: Boolean = false,
+)
+
+/** Уведомление в «Истории уведомлений»: ждёт в острове, пока его не прочитают, не очистят или не выйдет время. */
+data class InboxItem(
+    val key: String,
+    val pkg: String,
+    val appName: String,
+    val title: String,
+    val text: String,
+    val avatar: ImageBitmap?,
+    val appIcon: ImageBitmap?,
+    val intent: PendingIntent?,
+    /** Когда пришло, System.currentTimeMillis */
+    val time: Long,
+    val sensitive: Boolean,
 )
 
 /**

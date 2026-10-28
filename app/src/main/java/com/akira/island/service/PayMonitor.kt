@@ -14,6 +14,7 @@ import com.akira.island.core.PayReady
 import com.akira.island.core.Tints
 import com.akira.island.R
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Ios
 import java.text.SimpleDateFormat
@@ -213,7 +214,7 @@ object PayMonitor {
     /** Приложение оплаты показало у себя галочку и сумму. */
     fun onScreenPaid(context: Context, pkg: String, sum: String) {
         val s = SettingsRepo.current
-        PayDebug.add(tr("С экрана: оплачено $sum", "From the screen: paid $sum"), pkg)
+        PayDebug.add(trf("С экрана: оплачено {0}", "From the screen: paid {0}", sum), pkg)
         if (!s.enabled || !s.evPaySuccess || alreadyShown(sum)) return
         val app = appFor(pkg)
         showPaid(context, sum, NotificationParser.appLabel(context, app), app)
@@ -251,7 +252,7 @@ object PayMonitor {
             (pkg == readyShownPkg || sms || isPayApp(context, pkg))
         val paid = !skip.containsMatchIn(all) && (!transfer.containsMatchIn(all) || recent) &&
             (success.containsMatchIn(all) || pkg in wallets || recent)
-        PayDebug.add(if (paid) tr("Оплачено $sum", "Paid $sum") else tr("Не похоже на оплату", "Doesn't look like a payment"), pkg, all)
+        PayDebug.add(if (paid) trf("Оплачено {0}", "Paid {0}", sum) else tr("Не похоже на оплату", "Doesn't look like a payment"), pkg, all)
         if (!paid) return false
         if (alreadyShown(sum)) return true
         showPaid(context, sum, if (sms) title else NotificationParser.appLabel(context, pkg), pkg)

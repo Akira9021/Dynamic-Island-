@@ -359,7 +359,8 @@ fun PillButton(
     ) {
         Icon(icon, null, tint = fg, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(6.dp))
-        Text(text, color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        // Длинная подпись («Не беспокоить», «Без звука») чуть уменьшается, а не обрезается
+        FitText(text, fg, 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false))
     }
 }
 
@@ -546,7 +547,7 @@ fun FitText(
             }
             sz.sp
         }
-        // Тот же стиль, по которому мерили: шрифт темы (Inter) и его межбуквенный интервал
+        // Тот же стиль, по которому мерили: шрифт темы и его межбуквенный интервал
         Text(text, color = color, fontSize = size, fontWeight = weight, maxLines = 1, softWrap = false,
             overflow = TextOverflow.Ellipsis, style = base)
     }

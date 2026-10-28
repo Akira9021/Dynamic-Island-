@@ -29,6 +29,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- Кнопки «Режим звука» и «Не беспокоить» в раскрытом острове -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
     <!-- Обновление из приложения: скачанный APK открывает системная установка -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

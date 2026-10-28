@@ -56,7 +56,21 @@ import androidx.compose.ui.unit.sp
 import com.akira.island.core.Lang
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.AccentMode
+import androidx.compose.material.icons.rounded.AlignHorizontalLeft
+import androidx.compose.material.icons.rounded.AlignHorizontalRight
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.ManageSearch
+import androidx.compose.material.icons.rounded.NotificationImportant
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.ScreenLockPortrait
+import androidx.compose.material.icons.rounded.Timelapse
+import androidx.compose.material.icons.rounded.ViewAgenda
+import com.akira.island.data.BubbleSide
+import com.akira.island.data.LandscapeMode
+import com.akira.island.data.LockScreenMode
+import com.akira.island.data.MessageStyle
 import com.akira.island.data.AppLanguage
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
@@ -81,6 +95,8 @@ import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.DoNotDisturbOn
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.akira.island.data.QuickAction
 
@@ -126,7 +142,7 @@ fun FeaturesScreen(open: (Screen) -> Unit) {
         SectionHeader(tr("Общие", "General"))
         Group {
             // Значок глобуса и «Language» рядом — язык найдётся, даже если сейчас он непонятен
-            GroupItem(Pos.First, Icons.Rounded.Language, if (Lang.en) "Language" else "Язык · Language", s.language.title,
+            GroupItem(Pos.First, Icons.Rounded.Language, languageTitle(), s.language.title,
                 color = Tile.Blue, onClick = { languageDialog = true }) { Arrow() }
             GroupItem(Pos.Last, Icons.Rounded.Restore, tr("Сбросить все настройки", "Reset all settings"),
                 tr("Вернуть всё как было после установки", "Back to how it was after installing"),
@@ -135,7 +151,7 @@ fun FeaturesScreen(open: (Screen) -> Unit) {
     }
 
     if (languageDialog) {
-        ChoiceDialog(if (Lang.en) "Language" else "Язык · Language", AppLanguage.entries, s.language, { it.title },
+        ChoiceDialog(languageTitle(), AppLanguage.entries, s.language, { it.title },
             { v -> SettingsRepo.update { copy(language = v) } }) { languageDialog = false }
     }
 
@@ -164,6 +180,9 @@ fun FeaturesScreen(open: (Screen) -> Unit) {
 fun BehaviorScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
     var collapseDialog by remember { mutableStateOf(false) }
+    var landscapeDialog by remember { mutableStateOf(false) }
+    var lockDialog by remember { mutableStateOf(false) }
+    var sideDialog by remember { mutableStateOf(false) }
 
     Page(tr("Поведение", "Behavior"), onBack) {
         SectionHeader(tr("Когда показывать", "When to show"))
@@ -171,9 +190,11 @@ fun BehaviorScreen(onBack: () -> Unit) {
             GroupToggle(Pos.First, Icons.Rounded.VisibilityOff, tr("Скрывать пустую капсулу", "Hide the empty capsule"),
                 tr("Показывать капсулу, только когда в ней что-то есть", "Show the capsule only when it has something in it"),
                 s.hideIdle, color = Tile.Gray) { v -> SettingsRepo.update { copy(hideIdle = v) } }
-            GroupToggle(Pos.Middle, Icons.Rounded.ScreenRotation, tr("Скрывать в альбомной ориентации", "Hide in landscape"),
-                tr("Не мешает играм и видео", "Stays out of games and videos"),
-                s.hideInLandscape, color = Tile.Gray) { v -> SettingsRepo.update { copy(hideInLandscape = v) } }
+            // В играх и видео: спрятать, оставить над камерой (как на iPhone) или посередине сверху
+            GroupItem(Pos.Middle, Icons.Rounded.ScreenRotation, tr("В альбомной ориентации", "In landscape"),
+                "${s.landscape.title} — ${s.landscape.hint}", color = Tile.Gray, onClick = { landscapeDialog = true })
+            GroupItem(Pos.Middle, Icons.Rounded.ScreenLockPortrait, tr("На экране блокировки", "On the lock screen"),
+                s.lockScreen.title, color = Tile.Indigo, onClick = { lockDialog = true })
             GroupToggle(Pos.Last, Icons.Rounded.Apps, tr("Прятать плеер в его приложении", "Hide the player in its own app"),
                 tr("Карточка музыки не показывается, пока открыт сам плеер", "The music card hides while the player itself is open"),
                 s.hideWhenPlayerOpen, color = Tile.Blue) { v -> SettingsRepo.update { copy(hideWhenPlayerOpen = v) } }
@@ -183,8 +204,10 @@ fun BehaviorScreen(onBack: () -> Unit) {
         SectionHeader(tr("Расписание", "Schedule"))
         Group {
             GroupToggle(if (s.scheduleOn) Pos.First else Pos.Single, Icons.Rounded.Schedule, tr("По расписанию", "On a schedule"),
-                tr("Остров виден только с ${hourLabel(s.scheduleFrom)} до ${hourLabel(s.scheduleTo)}",
-                    "The island shows only from ${hourLabel(s.scheduleFrom)} to ${hourLabel(s.scheduleTo)}"),
+                trf(
+                    "Остров виден только с {0} до {1}",
+                    "The island shows only from {0} to {1}", hourLabel(s.scheduleFrom), hourLabel(s.scheduleTo),
+                ),
                 s.scheduleOn, color = Tile.Indigo) { v -> SettingsRepo.update { copy(scheduleOn = v) } }
             if (s.scheduleOn) {
                 GroupSlider(Pos.Middle, Icons.Rounded.WbSunny, tr("С", "From"), s.scheduleFrom.toFloat(), 0f..23f,
@@ -198,11 +221,15 @@ fun BehaviorScreen(onBack: () -> Unit) {
         Group {
             GroupItem(Pos.First, Icons.Rounded.UnfoldLess, tr("Сворачивать раскрытый остров", "Collapse the expanded island"), collapseLabel(s.autoCollapseSec),
                 color = Tile.Indigo, onClick = { collapseDialog = true })
-            GroupToggle(Pos.Last, Icons.Rounded.Circle, tr("Вторая активность рядом", "Second activity alongside"),
+            GroupToggle(if (s.bubble) Pos.Middle else Pos.Last, Icons.Rounded.Circle, tr("Вторая активность рядом", "Second activity alongside"),
                 tr("Когда активностей две, вторая — кружком рядом с капсулой, как на iPhone",
                     "With two activities, the second one is a small circle next to the capsule, like on iPhone"),
                 s.bubble, color = Tile.Purple) { v ->
                 SettingsRepo.update { copy(bubble = v) }
+            }
+            if (s.bubble) {
+                GroupItem(Pos.Last, if (s.bubbleSide == BubbleSide.LEFT) Icons.Rounded.AlignHorizontalLeft else Icons.Rounded.AlignHorizontalRight,
+                    tr("Сторона кружка", "Circle side"), s.bubbleSide.title, color = Tile.Purple, onClick = { sideDialog = true })
             }
         }
 
@@ -240,6 +267,28 @@ fun BehaviorScreen(onBack: () -> Unit) {
         ChoiceDialog(tr("Сворачивать раскрытый остров", "Collapse the expanded island"), listOf(0, 5, 10, 20, 30), s.autoCollapseSec, ::collapseLabel,
             { v -> SettingsRepo.update { copy(autoCollapseSec = v) } }) { collapseDialog = false }
     }
+    if (landscapeDialog) {
+        ChoiceDialog(tr("В альбомной ориентации", "In landscape"), LandscapeMode.entries, s.landscape, { "${it.title} — ${it.hint}" },
+            { v -> SettingsRepo.update { copy(landscape = v) } }) { landscapeDialog = false }
+    }
+    if (lockDialog) {
+        ChoiceDialog(tr("На экране блокировки", "On the lock screen"), LockScreenMode.entries, s.lockScreen, { it.title },
+            { v -> SettingsRepo.update { copy(lockScreen = v) } }) { lockDialog = false }
+    }
+    if (sideDialog) {
+        ChoiceDialog(tr("Сторона кружка", "Circle side"), BubbleSide.entries, s.bubbleSide, { it.title },
+            { v -> SettingsRepo.update { copy(bubbleSide = v) } }) { sideDialog = false }
+    }
+}
+
+/** «Язык» на текущем языке и рядом по-английски — язык найдётся, даже если сейчас он непонятен. */
+private fun languageTitle(): String = when (Lang.code) {
+    "en" -> "Language"
+    "ru" -> "Язык · Language"
+    "id" -> "Bahasa · Language"
+    "pt" -> "Idioma · Language"
+    "kk" -> "Тіл · Language"
+    else -> "Language"
 }
 
 /** Час расписания: «10:00». */
@@ -247,7 +296,7 @@ private fun hourLabel(h: Int) = "%d:00".format(h)
 
 /** Подпись для «Сворачивать раскрытый остров». */
 private fun collapseLabel(sec: Int) = if (sec <= 0) tr("Только касанием мимо или свайпом вверх", "Only by tapping outside or swiping up")
-    else tr("Через $sec секунд без касаний", "After $sec seconds without a touch")
+    else trf("Через {0} секунд без касаний", "After {0} seconds without a touch", sec)
 
 private val accentColors = listOf(
     0xFF0A84FF, 0xFFC6C3F7, 0xFF64D2FF, 0xFF34C759, 0xFFFFD60A, 0xFFFF9F0A,
@@ -256,9 +305,12 @@ private val accentColors = listOf(
 
 /** «Уведомления»: сообщения приложений в острове — что показывать, сколько текста и каким цветом кнопки. */
 @Composable
-fun NotificationsScreen(onBack: () -> Unit) {
+fun NotificationsScreen(onBack: () -> Unit, open: (Screen) -> Unit) {
     val s by SettingsRepo.state.collectAsState()
     var accentDialog by remember { mutableStateOf(false) }
+    var styleDialog by remember { mutableStateOf(false) }
+    var timeDialog by remember { mutableStateOf(false) }
+    var historyDialog by remember { mutableStateOf(false) }
 
     Page(tr("Уведомления", "Notifications"), onBack) {
         Group {
@@ -280,6 +332,34 @@ fun NotificationsScreen(onBack: () -> Unit) {
             ) { v -> SettingsRepo.update { copy(msgLines = Math.round(v)) } }
         }
 
+        SectionHeader(tr("Как показывать", "How to show"))
+        Group {
+            GroupItem(Pos.First, Icons.Rounded.ViewAgenda, tr("Вид уведомлений", "Notification style"),
+                "${s.messageStyle.title} — ${s.messageStyle.hint}", color = Tile.Blue, onClick = { styleDialog = true })
+            GroupItem(Pos.Middle, Icons.Rounded.Timelapse, tr("Сколько показывать", "How long to show"),
+                messageTimeLabel(s.messageSeconds), color = Tile.Orange, onClick = { timeDialog = true })
+            GroupItem(Pos.Middle, Icons.Rounded.History, tr("История уведомлений", "Notification history"),
+                historyLabel(s.historyMinutes), color = Tile.Indigo, onClick = { historyDialog = true })
+            GroupToggle(Pos.Last, Icons.Rounded.Repeat, tr("Убирать повторы", "Skip repeats"),
+                tr("То же сообщение ещё раз — от второго аккаунта, пересланное, из двух приложений — не показывается",
+                    "The same message again — from a second account, forwarded, or from two apps — isn't shown"),
+                s.msgDedupe, color = Tile.Teal) { v -> SettingsRepo.update { copy(msgDedupe = v) } }
+        }
+
+        SectionHeader(tr("Какие приложения", "Which apps"))
+        Group {
+            GroupToggle(Pos.First, Icons.Rounded.NotificationImportant, tr("Тихие уведомления", "Silent notifications"),
+                tr("Показывать и те, что Android не показывает всплывающими, — так бывает у Snapchat, Instagram и многих приложений",
+                    "Also show ones Android doesn't pop up — this happens with Snapchat, Instagram and many apps"),
+                s.msgQuiet, color = Tile.Purple) { v -> SettingsRepo.update { copy(msgQuiet = v) } }
+            GroupItem(Pos.Middle, Icons.Rounded.Apps, tr("Приложения", "Apps"),
+                tr("Всегда или никогда — для каждого приложения", "Always or never — for each app"),
+                color = Tile.Blue, onClick = { open(Screen.NOTIF_APPS) }) { Arrow() }
+            GroupItem(Pos.Last, Icons.Rounded.ManageSearch, tr("Почему не показано", "Why it didn't show"),
+                tr("Что остров решил о последних уведомлениях", "What the island decided about recent notifications"),
+                color = Tile.Gray, onClick = { open(Screen.NOTIF_DIAG) }) { Arrow() }
+        }
+
         SectionHeader(tr("Цвет кнопок", "Button color"))
         AccentPreview(s)
         GroupItem(Pos.Single, Icons.Rounded.Palette, tr("Цвет кнопок", "Button color"), "${s.accentMode.title} — ${s.accentMode.hint}",
@@ -293,6 +373,33 @@ fun NotificationsScreen(onBack: () -> Unit) {
         ChoiceDialog(tr("Цвет кнопок", "Button color"), AccentMode.entries, s.accentMode, { "${it.title} — ${it.hint}" },
             { v -> SettingsRepo.update { copy(accentMode = v) } }) { accentDialog = false }
     }
+    if (styleDialog) {
+        ChoiceDialog(tr("Вид уведомлений", "Notification style"), MessageStyle.entries, s.messageStyle, { "${it.title} — ${it.hint}" },
+            { v -> SettingsRepo.update { copy(messageStyle = v) } }) { styleDialog = false }
+    }
+    if (timeDialog) {
+        ChoiceDialog(tr("Сколько показывать", "How long to show"), listOf(0, 5, 8, 10, 15, 30, -1), s.messageSeconds, ::messageTimeLabel,
+            { v -> SettingsRepo.update { copy(messageSeconds = v) } }) { timeDialog = false }
+    }
+    if (historyDialog) {
+        ChoiceDialog(tr("История уведомлений", "Notification history"), listOf(0, 5, 15, 60, -1), s.historyMinutes, ::historyLabel,
+            { v -> SettingsRepo.update { copy(historyMinutes = v) } }) { historyDialog = false }
+    }
+}
+
+/** «Сколько показывать» уведомление: как события, секунды или пока не смахнёте. */
+private fun messageTimeLabel(sec: Int) = when {
+    sec == 0 -> tr("Как события, с запасом на чтение", "Like events, with extra time to read")
+    sec < 0 -> tr("Пока не смахнёте", "Until you swipe it away")
+    else -> trf("{0} секунд", "{0} seconds", sec)
+}
+
+/** «История уведомлений»: выключена, минуты или пока не прочитаете. */
+private fun historyLabel(min: Int) = when {
+    min == 0 -> tr("Выключена — уведомление уходит вместе с плашкой", "Off — a notification leaves with its banner")
+    min < 0 -> tr("Ждут в острове, пока не прочитаете", "They wait in the island until you read them")
+    min >= 60 -> trf("Ждут в острове {0} ч", "They wait in the island for {0} h", min / 60)
+    else -> trf("Ждут в острове {0} минут", "They wait in the island for {0} minutes", min)
 }
 
 /** Как выглядят «Ответить», «Пометить прочитанным» и кнопка отправки с выбранным цветом. */
@@ -332,6 +439,8 @@ private val QuickAction.settingsIcon: ImageVector
         QuickAction.SCREENSHOT -> Icons.Rounded.Screenshot
         QuickAction.CAMERA -> Icons.Rounded.PhotoCamera
         QuickAction.LOCK -> Icons.Rounded.Lock
+        QuickAction.RINGER -> Icons.AutoMirrored.Rounded.VolumeUp
+        QuickAction.DND -> Icons.Rounded.DoNotDisturbOn
     }
 
 /** Подпись к кнопке — только там, где непонятно по названию */
@@ -340,5 +449,9 @@ private val QuickAction.hint: String?
         QuickAction.SCREENSHOT -> tr("Остров на миг прячется — на снимке его нет (Android 9+)",
             "The island hides for a moment, so it's not in the shot (Android 9+)")
         QuickAction.LOCK -> tr("Гасит экран, как кнопка питания (Android 9+)", "Turns the screen off like the power button (Android 9+)")
+        QuickAction.RINGER -> tr("Звонок → вибрация → без звука. Для «Без звука» Android попросит доступ к «Не беспокоить»",
+            "Ring → vibrate → silent. For Silent, Android asks for Do Not Disturb access")
+        QuickAction.DND -> tr("Включает и выключает «Не беспокоить». В первый раз Android попросит доступ",
+            "Turns Do Not Disturb on and off. The first time, Android asks for access")
         else -> null
     }

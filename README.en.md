@@ -108,8 +108,12 @@ Short notices in the capsule, each can be turned on separately:
 | **"There was a problem parsing the package"** | The file didn't download fully or was opened by the wrong app. Download `DynamicIsland.apk` from the release page in **Chrome** and open it from Chrome's downloads or **Files by Google**, not from TikTok, Telegram or video downloaders |
 | **"App not installed"** over an old version | From 1.6.0 or older — uninstall the old version once: 1.6.1+ has a new signing key |
 | **"Restricted setting"** / "App was denied access" when turning on the service | See step 2: **App info → ⋮ → Allow restricted settings** |
+| **Installed, but there's no island** (Xiaomi, MIUI, HyperOS) | Turn the service on in Accessibility (step 2). Then **App info → Autostart** — on; **Battery saver** ("Activity control") → **No restrictions**; **Other permissions → "Display pop-up windows while running in the background"** — allow. And lock the island in recent apps: pull its card down |
 
 New versions install over old ones; your settings are kept (from 1.6.0 or older — reinstall once, see above).
+
+> [!TIP]
+> You can update right in the island, or with [Obtainium](https://github.com/ImranR98/Obtainium): add `https://github.com/Akira9021/Dynamic-Island-` — the APK in releases is always called `DynamicIsland.apk`.
 
 ## 👆 Gestures
 

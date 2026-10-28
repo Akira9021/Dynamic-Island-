@@ -45,4 +45,7 @@ object Ios {
     val stop @Composable get() = ImageVector.vectorResource(R.drawable.ios_stop)
     val stopwatch @Composable get() = ImageVector.vectorResource(R.drawable.ios_stopwatch)
     val timer @Composable get() = ImageVector.vectorResource(R.drawable.ios_hourglass)
+    val chatbubble @Composable get() = ImageVector.vectorResource(R.drawable.ios_chatbubble_ellipses)
+    val bellOff @Composable get() = ImageVector.vectorResource(R.drawable.ios_notifications_off)
+    val vibrate @Composable get() = ImageVector.vectorResource(R.drawable.ios_phone_portrait)
 }

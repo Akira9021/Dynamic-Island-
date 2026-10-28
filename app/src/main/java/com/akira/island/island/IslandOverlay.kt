@@ -99,13 +99,16 @@ import com.akira.island.core.Lyrics
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.data.BubbleSide
 import com.akira.island.data.Elasticity
+import com.akira.island.data.MessageStyle
 import com.akira.island.data.ExpandStyle
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
 import com.akira.island.data.TapAction
 import com.akira.island.service.CallMonitor
 import com.akira.island.service.NavScreen
+import com.akira.island.service.Inbox
 import com.akira.island.service.PayMonitor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -130,7 +133,6 @@ private data class Frame(val act: Act, val expanded: Boolean) {
 
 @Composable
 fun IslandOverlay(
-    onTransition: () -> Unit = {},
     onBodyBounds: (Rect) -> Unit = {},
     onBubbleBounds: (Rect) -> Unit = {},
 ) {
@@ -156,6 +158,7 @@ fun IslandOverlay(
     val nextAlarm by IslandBus.nextAlarm.collectAsState()
     val egg by IslandBus.egg.collectAsState()
     val payReady by IslandBus.payReady.collectAsState()
+    val inbox by IslandBus.inbox.collectAsState()
     // Будильник появляется в острове за 12 часов и уходит, когда прозвенел: просыпаемся ровно в эти два момента,
     // а не каждые полминуты. Пока телефон спит, ожидание стоит — поэтому со включением экрана пересчитываем
     val screenOn by IslandBus.screenOn.collectAsState()
@@ -187,6 +190,17 @@ fun IslandOverlay(
         }
     }
     val chronoActive = chrono.values.filterNot { it.finished(chronoNow) }
+
+    // «История уведомлений»: уведомление уходит из острова ровно к своему сроку; пока экран погашен, ожидание
+    // стоит — со включением экрана пересчитываем. Выключили историю — список очищается
+    LaunchedEffect(inbox, screenOn, s.historyMinutes) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            Inbox.prune(now)
+            val next = Inbox.nextExpiry(now) ?: break
+            delay(next + 50)
+        }
+    }
 
     // Пробная «живая активность» исчезает по времени, даже если таймер удаления не сработал (сон телефона)
     val hasExpiring = live.values.any { it.expiresAt > 0 }
@@ -238,7 +252,9 @@ fun IslandOverlay(
         val m = media
         if (s.cardMedia && m != null && !(s.hideWhenPlayerOpen && foreground == m.pkg)) persistent += Act.MediaA(m)
         if (s.cardProgress) progress.values.maxByOrNull { it.postTime }?.let { persistent += Act.ProgressA(it) }
-        if (s.cardCharging && battery.charging) persistent += Act.ChargingA(battery)
+        // «Только при подключении» — зарядка не занимает остров всё время, пока телефон заряжается
+        if (s.cardCharging && battery.charging && !s.chargingBrief) persistent += Act.ChargingA(battery)
+        if (s.historyMinutes != 0 && inbox.isNotEmpty()) persistent += Act.InboxA(inbox)
         // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь
         val alarm = nextAlarm
         if (s.cardAlarm && alarm != null && alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS) persistent += Act.AlarmA(alarm)
@@ -299,17 +315,9 @@ fun IslandOverlay(
         Controls.collapse()
     }
 
-    val hidden = s.hideIdle && primary is Act.Idle && !showExpanded && !calibrating
-
-    // Перед сменой формы просим окно стать большим, чтобы анимация шла внутри неподвижного окна
-    val transitionKey = "${primary.id}|$showExpanded|${secondary?.id}|$hidden"
-    val lastKey = remember { arrayOfNulls<String>(1) }
-    SideEffect {
-        if (lastKey[0] != transitionKey) {
-            lastKey[0] = transitionKey
-            onTransition()
-        }
-    }
+    // «Скрывать пустую капсулу» не прячет замок экрана блокировки: он виден, пока телефон заблокирован
+    val keyguard by IslandBus.keyguard.collectAsState()
+    val hidden = s.hideIdle && primary is Act.Idle && !showExpanded && !calibrating && !(s.evLock && keyguard)
 
     // Спрятанный остров не ловит касания, даже пока уходит
     if (hidden) {
@@ -382,10 +390,11 @@ private fun IslandRow(
             .padding(ISLAND_PAD_DP.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        // Пустое место слева уравновешивает пузырь, чтобы остров стоял над камерой
-        Spacer(Modifier.animatedWidth(slot))
+        // Пустое место с другой стороны уравновешивает пузырь, чтобы остров стоял над камерой
+        val left = s.bubbleSide == BubbleSide.LEFT
+        if (left) BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = true) else Spacer(Modifier.animatedWidth(slot))
         IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds)
-        BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds)
+        if (left) Spacer(Modifier.animatedWidth(slot)) else BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = false)
     }
 }
 
@@ -402,18 +411,20 @@ private fun Modifier.animatedWidth(width: State<Dp>) = layout { measurable, cons
  * Отдельная функция: внутри Row подставился бы RowScope.AnimatedVisibility.
  */
 @Composable
-private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSettings, onBounds: (Rect) -> Unit) {
+private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSettings, onBounds: (Rect) -> Unit, left: Boolean) {
     Box(
         Modifier
             .zIndex(-1f)
             .layout { measurable, constraints ->
                 val w = slot.value.roundToPx().coerceAtLeast(0)
                 val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
-                layout(w, p.height) { p.place(w - p.width, 0) }
+                // Справа пузырь прижат к дальнему краю места под него, слева — к ближнему краю экрана; пока место
+                // растёт, он выходит из-под острова
+                layout(w, p.height) { p.place(if (left) 0 else w - p.width, 0) }
             }
             .onGloballyPositioned { onBounds(it.boundsInWindow()) },
     ) {
-        val drop = TransformOrigin(0f, 0.5f)
+        val drop = TransformOrigin(if (left) 1f else 0f, 0.5f)
         AnimatedVisibility(
             visible && act != null,
             enter = if (s.reduceEffects) fadeIn() else scaleIn(islandSpec(s), initialScale = 0.4f, transformOrigin = drop) + fadeIn(tween(90)),
@@ -438,8 +449,9 @@ private fun IslandBody(
     val haptic = rememberHaptic()
     val scope = rememberCoroutineScope()
     val conf = LocalConfiguration.current
-    // Раскрытый остров iPhone — 371 pt при ширине экрана 393 pt, то есть по 11 с каждой стороны
-    val expandedWidth = (conf.screenWidthDp.dp - 22.dp).coerceAtMost(460.dp)
+    // Раскрытый остров iPhone — 371 pt при ширине экрана 393 pt, то есть по 11 с каждой стороны;
+    // «Ширина раскрытого острова» в «Оформлении» делает его уже
+    val expandedWidth = expandedWidth(conf.screenWidthDp.dp, s)
     val h = s.height.dp
 
     // Скругления — как в ролике: плеер и фонарик 46, навигатор 42, обновление 36, уведомление 32
@@ -447,6 +459,7 @@ private fun IslandBody(
         expanded && (primary is Act.MediaA || primary is Act.TorchA) -> 46.dp
         expanded && primary is Act.LiveA -> 42.dp
         expanded -> 44.dp
+        primary is Act.NoticeA && primary.n.style == NoticeStyle.MESSAGE && s.messageStyle == MessageStyle.PILL -> 40.dp
         primary is Act.NoticeA && (primary.n.style == NoticeStyle.MESSAGE || primary.n.style == NoticeStyle.EGG) -> 32.dp
         primary is Act.NoticeA && primary.n.style == NoticeStyle.UPDATE -> 36.dp
         primary is Act.NoticeA && primary.n.style == NoticeStyle.WIDE && primary.n.title.isNotBlank() -> noticeHeight(s) / 2
@@ -549,7 +562,7 @@ private fun IslandBody(
                 if (s.liquidGlass && !calibrating) {
                     Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value }) { sheen.value }
                 } else {
-                    Modifier.background(if (calibrating) CalibrationRed else Color(s.color))
+                    Modifier.background(if (calibrating) CalibrationRed else islandFill(s))
                 },
             )
             .then(
@@ -830,7 +843,7 @@ private fun Bubble(act: Act, s: IslandSettings) {
             .clip(CircleShape)
             .then(
                 if (s.liquidGlass) Modifier.glassSurface(CircleShape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value })
-                else Modifier.background(Color(s.color)),
+                else Modifier.background(islandFill(s)),
             )
             .then(if (s.outline) Modifier.border(s.outlineWidth.dp, Color(s.outlineColor), CircleShape) else Modifier)
             .clickable {
@@ -861,6 +874,7 @@ private fun Bubble(act: Act, s: IslandSettings) {
             is Act.CallA -> Icon(Ios.call, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
             is Act.ChargingA -> Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
+            is Act.InboxA -> AppIcon(act.items.last().appIcon, inner, Ios.chatbubble, Tints.Blue)
             else -> Unit
         }
     }
@@ -915,4 +929,16 @@ fun islandShape(corner: Dp, notch: Boolean): RoundedCornerShape =
 private class AnimatedIslandShape(private val corner: State<Dp>, private val notch: Boolean) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
         islandShape(corner.value, notch).createOutline(size, layoutDirection, density)
+}
+
+/** Заливка острова: цвет из «Цвета капсулы» с непрозрачностью из «Оформления». */
+fun islandFill(s: IslandSettings): Color = Color(s.color).let { it.copy(alpha = it.alpha * s.islandOpacity.coerceIn(10, 100) / 100f) }
+
+/**
+ * Ширина раскрытого острова и широких плашек: почти во всю ширину экрана, уже — по «Ширине раскрытого острова»,
+ * но не уже капсулы и не шире экрана.
+ */
+fun expandedWidth(screen: Dp, s: IslandSettings): Dp {
+    val full = (screen - 22.dp).coerceAtMost(460.dp)
+    return (full * (s.expandedWidthPercent.coerceIn(60, 100) / 100f)).coerceAtLeast((s.width.dp + 60.dp).coerceAtMost(full))
 }

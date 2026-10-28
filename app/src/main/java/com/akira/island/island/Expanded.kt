@@ -3,6 +3,7 @@
 package com.akira.island.island
 
 import android.content.Context
+import android.media.AudioManager
 import android.text.format.DateFormat
 import android.os.SystemClock
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -105,7 +106,10 @@ import com.akira.island.core.TimerState
 import com.akira.island.core.TorchState
 import com.akira.island.core.formatDuration
 import com.akira.island.core.tr
+import com.akira.island.core.trf
+import com.akira.island.core.InboxItem
 import com.akira.island.data.IslandSettings
+import com.akira.island.service.Inbox
 import com.akira.island.data.QuickAction
 import com.akira.island.data.SettingsRepo
 import com.akira.island.service.ClockApps
@@ -123,21 +127,101 @@ fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: Batte
         TorchCard(act.t, s)
         return
     }
-    // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал
+    // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал.
+    // Само содержимое — крупнее или мельче по «Размеру содержимого»
     Box(Modifier.width(width).padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
-        when (act) {
-            is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
-            is Act.TimerA -> TimerExpanded(act.t, s)
-            is Act.StopwatchA -> StopwatchExpanded(act.w)
-            is Act.TorchA -> Unit
-            is Act.ChronoA -> ChronoExpanded(act.c)
-            is Act.ProgressA -> ProgressExpanded(act.p)
-            is Act.ChargingA -> ChargingExpanded(act.b)
-            is Act.LiveA -> LiveExpanded(act.l)
-            is Act.CallA -> CallExpanded(act.c)
-            is Act.AlarmA -> AlarmExpanded(act.a, s)
-            else -> IdleExpanded(s, battery)
+        Scaled(s.contentScale) {
+            when (act) {
+                is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
+                is Act.TimerA -> TimerExpanded(act.t, s)
+                is Act.StopwatchA -> StopwatchExpanded(act.w)
+                is Act.TorchA -> Unit
+                is Act.ChronoA -> ChronoExpanded(act.c)
+                is Act.ProgressA -> ProgressExpanded(act.p)
+                is Act.LiveA -> LiveExpanded(act.l)
+                is Act.CallA -> CallExpanded(act.c)
+                is Act.AlarmA -> AlarmExpanded(act.a, s)
+                is Act.InboxA -> InboxExpanded(act.items)
+                // Зарядка раскрывается как пустой остров: часы, заряд и кнопки — зарядка не закрывает их собой
+                else -> IdleExpanded(s, battery)
+            }
         }
+    }
+}
+
+/**
+ * «История уведомлений» раскрытой: последние уведомления, новое сверху. Нажатие открывает уведомление,
+ * «Очистить» убирает все. На заблокированном телефоне — как в шторке: скрытые без имени и текста.
+ */
+@Composable
+private fun InboxExpanded(items: List<InboxItem>) {
+    val context = LocalContext.current
+    val locked by IslandBus.locked.collectAsState()
+    val now = rememberWallNow(30_000)
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Уведомления", "Notifications"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island,
+                modifier = Modifier.weight(1f))
+            PillButton(Ios.close, tr("Очистить", "Clear")) {
+                Inbox.clear()
+                Controls.collapse()
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        items.asReversed().take(INBOX_SHOWN).forEach { item ->
+            val hidden = locked && item.sensitive
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable {
+                        if (!Controls.send(context, item.intent)) Controls.openApp(context, item.pkg)
+                        Inbox.remove(item.key)
+                        Controls.collapse()
+                    }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val face = if (hidden) item.appIcon else item.avatar ?: item.appIcon
+                if (face != null) {
+                    Image(face, null, Modifier.size(36.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                } else {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2C2C2E)), contentAlignment = Alignment.Center) {
+                        Icon(Ios.chatbubble, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (hidden) item.appName else item.title, color = Color.White, fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold.island, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(6.dp))
+                        Text(ago(now - item.time), color = Dim, fontSize = 12.sp, maxLines = 1)
+                    }
+                    val text = if (hidden) tr("Содержимое скрыто", "Content hidden") else item.text
+                    if (text.isNotEmpty()) {
+                        Text(text, color = Dim, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        if (items.size > INBOX_SHOWN) {
+            Text(trf("И ещё {0}", "And {0} more", items.size - INBOX_SHOWN), color = Dim, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/** Сколько уведомлений истории видно в раскрытом острове: больше в окно не помещается. */
+private const val INBOX_SHOWN = 5
+
+/** «сейчас», «5 мин», «2 ч». */
+private fun ago(ms: Long): String {
+    val min = ms / 60_000
+    return when {
+        min < 1 -> tr("сейчас", "now")
+        min < 60 -> trf("{0} мин", "{0} min", min)
+        else -> trf("{0} ч", "{0} h", min / 60)
     }
 }
 
@@ -155,7 +239,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
             Art(m.art, 60.dp, 14.4.dp, Modifier.clickable { Controls.openApp(context, m.pkg) })
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
                     modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE))
                 if (m.artist.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
@@ -184,7 +268,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
         // Время по краям полосы, как на iPhone и в ролике
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(formatDuration(pos), color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal),
+            Text(formatDuration(pos), color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island),
                 modifier = Modifier.width(34.dp))
             SeekBar(
                 fraction = if (m.durationMs > 0) pos.toFloat() / m.durationMs else 0f,
@@ -195,7 +279,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
             )
             Text(
                 if (m.durationMs > 0) "-" + formatDuration(m.durationMs - pos) else "",
-                color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal), textAlign = TextAlign.End,
+                color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), textAlign = TextAlign.End,
                 modifier = Modifier.width(38.dp),
             )
         }
@@ -248,12 +332,12 @@ private fun CallExpanded(c: CallInfo) {
             if (c.avatar != null) {
                 Image(c.avatar, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                Text(c.name.take(1).uppercase(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text(c.name.take(1).uppercase(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold.island)
             }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f).clickable { Controls.openCall(context, c) }) {
-            Text(c.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            Text(c.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
             Text(formatDuration(now - c.base), color = Tints.Green, fontSize = 15.sp, style = Digits)
         }
@@ -290,7 +374,7 @@ private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
                 withStyle(SpanStyle(color = Color.White)) { append(text.take(chars)) }
                 withStyle(SpanStyle(color = Color.White.copy(alpha = 0.32f))) { append(text.drop(chars)) }
             },
-            fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -360,7 +444,7 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(tr("Таймер", "Timer"), color = Tints.Orange, fontSize = 15.sp)
-                Text(tr("Время вышло", "Time's up"), color = Tints.Orange, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                Text(tr("Время вышло", "Time's up"), color = Tints.Orange, fontSize = 24.sp, fontWeight = FontWeight.SemiBold.island)
             }
             PillButton(Ios.stop, tr("Стоп", "Stop"), bg = Tints.Orange, fg = Color.Black) { Controls.cancelTimer() }
         }
@@ -378,7 +462,7 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
         Spacer(Modifier.weight(1f))
         Text(if (t.paused) tr("Пауза", "Paused") else tr("Таймер", "Timer"), color = color, fontSize = 15.sp, modifier = Modifier.padding(top = 14.dp))
         Spacer(Modifier.width(8.dp))
-        Text(formatDuration(left + 999), color = color, fontSize = 44.sp, style = Digits.copy(fontWeight = FontWeight.Normal), maxLines = 1)
+        Text(formatDuration(left + 999), color = color, fontSize = 44.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1)
     }
 }
 
@@ -400,7 +484,7 @@ private fun StopwatchExpanded(w: StopwatchState) {
         }
         Spacer(Modifier.weight(1f))
         Text(formatDuration(elapsed) + ",%d".format((elapsed % 1000) / 100), color = Tints.Orange, fontSize = 40.sp,
-            style = Digits.copy(fontWeight = FontWeight.Normal), maxLines = 1)
+            style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1)
     }
 }
 
@@ -422,7 +506,7 @@ private fun TorchCard(t: TorchState, s: IslandSettings) {
     val wave = if (s.reduceEffects) null else breath.animateFloat(0f, 1f, infiniteRepeatable(tween(1050, easing = LinearEasing)), label = "w")
     val flare = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val label = if (max > 1 && t.on) tr("Фонарик · ${(share * 100).toInt()}%", "Flashlight · ${(share * 100).toInt()}%") else tr("Фонарик", "Flashlight")
+    val label = if (max > 1 && t.on) trf("Фонарик · {0}%", "Flashlight · {0}%", (share * 100).toInt()) else tr("Фонарик", "Flashlight")
 
     Box(
         Modifier
@@ -476,7 +560,7 @@ private fun TorchCard(t: TorchState, s: IslandSettings) {
                 modifier = Modifier.padding(top = 20.dp).size(58.dp),
             )
             Spacer(Modifier.height(14.dp))
-            Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1)
         }
     }
 }
@@ -518,7 +602,7 @@ private fun ChronoExpanded(c: ChronoInfo) {
             modifier = Modifier.weight(1f).padding(top = 12.dp))
         Spacer(Modifier.width(8.dp))
         Text(formatDuration(c.elapsed(now)), color = Tints.Orange, fontSize = 40.sp,
-            style = Digits.copy(fontWeight = FontWeight.Normal), maxLines = 1)
+            style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1)
     }
 }
 
@@ -551,7 +635,7 @@ private fun ClockChrono(c: ChronoInfo) {
                     color = color, fontSize = 14.sp, maxLines = 1)
             }
             val text = if (c.countDown) formatDuration(value + 999) else formatDuration(value) + ",%d".format((value % 1000) / 100)
-            Text(text, color = color, fontSize = 40.sp, style = Digits.copy(fontWeight = FontWeight.Normal), maxLines = 1, softWrap = false)
+            Text(text, color = color, fontSize = 40.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1, softWrap = false)
         }
     }
 }
@@ -586,7 +670,7 @@ private fun ProgressExpanded(p: ProgressInfo) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIcon(p.icon, 44.dp, Ios.download, Tints.Blue)
             Spacer(Modifier.width(14.dp))
-            Text(p.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
+            Text(p.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (!p.indeterminate) {
                 Spacer(Modifier.width(8.dp))
@@ -616,9 +700,9 @@ private fun LiveExpanded(l: LiveInfo) {
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f).padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (l.distance != null) {
-                Text(l.distance, color = Color.White, fontSize = 27.sp, style = Digits.copy(fontWeight = FontWeight.Bold), maxLines = 1)
+                Text(l.distance, color = Color.White, fontSize = 27.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1)
             } else {
-                Text(l.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(l.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold.island, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             if (l.text.isNotEmpty()) {
                 Text(l.text, color = Tints.Gray, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -641,28 +725,9 @@ private fun LiveExpanded(l: LiveInfo) {
             ) {
                 Icon(Ios.navigate, null, tint = Color.Black, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(tr("Открыть", "Open"), color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(tr("Открыть", "Open"), color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold.island)
             }
         }
-    }
-}
-
-@Composable
-private fun ChargingExpanded(b: BatteryInfo) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(52.dp).clip(CircleShape).background(Tints.Green.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-            Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(26.dp))
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(tr("Заряжается", "Charging"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(10.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.15f))) {
-                Box(Modifier.fillMaxWidth(b.level.coerceIn(0, 100) / 100f).fillMaxHeight().clip(CircleShape).background(Tints.Green))
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Text("${b.level}%", color = Tints.Green, fontSize = 26.sp, style = Digits)
     }
 }
 
@@ -676,7 +741,12 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
     val now = rememberWallNow(1000)
     val time = DateFormat.getTimeFormat(context).format(Date(now))
     // «Пятница, 24 октября» или «Friday, October 24» — на языке острова
-    val date = SimpleDateFormat(if (Lang.en) "EEEE, MMMM d" else "EEEE, d MMMM", Lang.locale).format(Date(now))
+    val pattern = when (Lang.code) {
+        "en" -> "EEEE, MMMM d"
+        "pt" -> "EEEE, d 'de' MMMM"
+        else -> "EEEE, d MMMM"
+    }
+    val date = SimpleDateFormat(pattern, Lang.locale).format(Date(now))
         .replaceFirstChar { it.titlecase(Lang.locale) }
     val alarm by IslandBus.nextAlarm.collectAsState()
     Column {
@@ -692,8 +762,7 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                     ) {
                         Icon(Ios.alarm, null, tint = AlarmTint, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(5.dp))
-                        Text(tr("${wakeTime(context, a.triggerAt)} · через ${durationWords(a.triggerAt - now)}",
-                            "${wakeTime(context, a.triggerAt)} · in ${durationWords(a.triggerAt - now)}"),
+                        Text(trf("{0} · через {1}", "{0} · in {1}", wakeTime(context, a.triggerAt), durationWords(a.triggerAt - now)),
                             color = AlarmTint, fontSize = 13.sp, maxLines = 1)
                     }
                 }
@@ -727,7 +796,7 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                     SettingsRepo.update { copy(timerMinutes = (timerMinutes - 1).coerceAtLeast(1)) }
                 }
                 Text(
-                    tr("${s.timerMinutes} мин", "${s.timerMinutes} min"), color = Color.White, fontSize = 16.sp, style = Digits,
+                    trf("{0} мин", "{0} min", s.timerMinutes), color = Color.White, fontSize = 16.sp, style = Digits,
                     textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
                 )
                 RoundButton(Ios.add, size = 38.dp, iconScale = 0.44f) {
@@ -751,6 +820,8 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
 
 @Composable
 private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
+    val ringer by IslandBus.ringer.collectAsState()
+    val dnd by IslandBus.dnd.collectAsState()
     val icon = when (a) {
         QuickAction.STOPWATCH -> Ios.stopwatch
         QuickAction.FLASHLIGHT -> Ios.flashlight
@@ -758,8 +829,24 @@ private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
         QuickAction.CAMERA -> Icons.Rounded.PhotoCamera
         QuickAction.LOCK -> Ios.lock
         QuickAction.TIMER -> Ios.timer
+        QuickAction.RINGER -> when (ringer) {
+            AudioManager.RINGER_MODE_SILENT -> Ios.bellOff
+            AudioManager.RINGER_MODE_VIBRATE -> Ios.vibrate
+            else -> Ios.bell
+        }
+        QuickAction.DND -> Ios.moon
     }
-    PillButton(icon, a.short, modifier) {
+    // У «Режима звука» подпись — сам режим; «Не беспокоить» горит, пока включено
+    val label = when (a) {
+        QuickAction.RINGER -> when (ringer) {
+            AudioManager.RINGER_MODE_SILENT -> tr("Без звука", "Silent")
+            AudioManager.RINGER_MODE_VIBRATE -> tr("Вибрация", "Vibrate")
+            else -> tr("Звонок", "Ring")
+        }
+        else -> a.short
+    }
+    val on = a == QuickAction.DND && dnd
+    PillButton(icon, label, modifier, bg = if (on) Tints.Purple else Color.White.copy(alpha = 0.14f)) {
         when (a) {
             QuickAction.STOPWATCH -> {
                 Controls.startStopwatch()
@@ -779,6 +866,8 @@ private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
                 Controls.lockScreen()
             }
             QuickAction.TIMER -> Controls.startTimer(SettingsRepo.current.timerMinutes)
+            QuickAction.RINGER -> Controls.cycleRinger(context)
+            QuickAction.DND -> Controls.toggleDnd(context)
         }
     }
 }

@@ -6,11 +6,28 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 > Since 1.6.1 the app and the island speak English (Features → General → Language). Earlier versions were in Russian only, so older entries give the Russian label in brackets.
 
-## [1.6.6] — 2026-10-28
+## [1.7.0] — 2026-10-28
 
-- 💬 **Consecutive messages**: follow-up messages in the same conversation (WhatsApp and others) now show in the island, not only the first one.
-- 💳 **Payment**: after the tap-to-pay screen, a bank “Transfer …” notification (SBP, QR) counts as the payment; “Payment successful” on screen without an amount shows as “Paid”; Belarusian banks.
-- 🔎 “Payment diagnostics” now also records what appeared on screen after the tap-to-pay screen — if “Paid” did not show, send that text.
+### 🎛️ More settings — as you asked
+- 🔔 **Notifications**: a Card or Pill style; how long to show them — up to 30 seconds or "Until you swipe it away"; **Notification history** — unread ones wait in the island as app icons and as a list when expanded; **Skip repeats**; **Silent notifications** (Snapchat, Instagram and many others) and **rules for each app** — always or never; **Why it didn't show** — what the island decided about recent notifications.
+- 🎨 **Appearance**: island **opacity**; the **width** of the expanded island and notifications and **text and icon size**; the **font** — Inter, the system font or your own .ttf/.otf file — and its **weight**; a **delay before showing** and events shown for up to 10 seconds; capsule width up to 400 dp, height up to 90 dp, width with activity up to +200 dp.
+- 📱 **Behavior**: in landscape — hide, **At the camera** (like on iPhone: the island turns with the phone and doesn't move) or top center; **on the lock screen** — show or hide until unlocked; the second-activity circle **on the left or right**.
+- 🔘 **Expanded island buttons**: **Sound mode** (ring → vibrate → silent) and **Do Not Disturb**.
+- ⚡ **Charging**: "Only when plugged in" — a banner for a couple of seconds without the percentage capsule; the expanded island while charging has the clock and buttons.
+
+### 🌍 Languages
+- **Indonesian, Portuguese (Brazil) and Kazakh.** "System default" picks your phone's language by itself.
+
+### 🧩 Compatibility
+- 🎙️ Voice recorders and screen recording (Xiaomi, Samsung, Oppo, Huawei and others) — red recording with the time and Stop.
+- ⏱️ Clock timers and stopwatches that only have the time in the notification text (some Xiaomi, vivo and others).
+- 🎧 **Discord**, Zoom, Teams and other calls — incoming with buttons and an ongoing call with the time.
+
+### 🐞 Fixes
+- ✨ The island no longer flickers when expanding and collapsing (ColorOS and other skins): the island window doesn't change size while it works, and the touch window moves once, when the island has settled.
+- 💬 Consecutive messages in one conversation (WhatsApp and others) all show, not only the first one.
+- 💳 Payment: a "Transfer …" right after the tap-to-pay screen counts as the payment; "Payment successful" on screen without an amount shows as "Paid"; Belarusian banks; "Payment diagnostics" also records the screen after paying.
+- 🔒 The lock on the lock screen shows even with "Hide the empty capsule", and when the lock kicks in later than the screen turns on.
 
 ## [1.6.5] — 2026-10-28
 

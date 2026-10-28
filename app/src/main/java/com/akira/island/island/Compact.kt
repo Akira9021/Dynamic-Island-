@@ -52,6 +52,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -89,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import com.akira.island.core.AppMessage
+import com.akira.island.core.InboxItem
 import com.akira.island.core.CallInfo
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
@@ -102,16 +104,18 @@ import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.formatDuration
 import com.akira.island.data.IslandSettings
+import com.akira.island.data.MessageStyle
 import com.akira.island.data.SettingsRepo
 import com.akira.island.service.Messages
 import androidx.compose.runtime.collectAsState
 import com.akira.island.core.tr
-import com.akira.island.ui.Inter
+import com.akira.island.core.trf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Цифры одной ширины, чтобы время не «прыгало» */
-val Digits = TextStyle(fontFamily = Inter, fontFeatureSettings = "tnum", fontWeight = FontWeight.SemiBold)
+/** Цифры одной ширины, чтобы время не «прыгало». Шрифт и толщина — из «Оформления → Шрифт» */
+val Digits: TextStyle
+    get() = TextStyle(fontFamily = IslandType.family, fontFeatureSettings = "tnum", fontWeight = FontWeight.SemiBold.island)
 
 /** Высота капсулы, когда в ней что-то есть: чуть толще пустой, чтобы не выглядеть тонкой полоской. */
 fun activeHeight(s: IslandSettings): Dp = (s.height + s.activeExtra).dp
@@ -161,14 +165,14 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
                             transformOrigin = TransformOrigin(0.5f, 0.1f)
                         })
                     },
-                    right = { Text(tr("Таймер", "Timer"), color = Tints.Orange, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) },
+                    right = { Text(tr("Таймер", "Timer"), color = Tints.Orange, fontSize = 16.sp, fontWeight = FontWeight.SemiBold.island) },
                 )
             } else {
                 val left = act.t.left(now)
                 val color = if (left <= 10_000 && !act.t.paused) Tints.Red else Tints.Orange
                 CompactRow(h, gap, side * 1.4f,
                     left = { Icon(if (act.t.paused) Ios.pause else Ios.timer, null, tint = color, modifier = Modifier.size(icon)) },
-                    right = { TimeText(formatDuration(left + 999), color, 18, FontWeight.Bold) },
+                    right = { TimeText(formatDuration(left + 999), color, 18, FontWeight.Bold.island) },
                 )
             }
         }
@@ -177,7 +181,7 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
             val now = rememberNow(250, active = act.w.running)
             CompactRow(h, gap, side * 1.4f,
                 left = { Icon(Ios.stopwatch, null, tint = Tints.Orange, modifier = Modifier.size(icon)) },
-                right = { TimeText(formatDuration(act.w.elapsed(now)), Tints.Orange, 18, FontWeight.Bold) },
+                right = { TimeText(formatDuration(act.w.elapsed(now)), Tints.Orange, 18, FontWeight.Bold.island) },
             )
         }
 
@@ -194,7 +198,7 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
                         else -> AppIcon(act.c.icon, h * 0.56f, Ios.timer, tint)
                     }
                 },
-                right = { TimeText(formatDuration(act.c.elapsed(now)), tint, 18, FontWeight.Bold) },
+                right = { TimeText(formatDuration(act.c.elapsed(now)), tint, 18, FontWeight.Bold.island) },
             )
         }
 
@@ -251,11 +255,17 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
 
         is Act.PayA -> PayReady(tr("Оплата", "Pay"), tr("К терминалу", "Hold near reader"), act.p.icon, s, wideWidth)
 
+        // «История уведомлений»: значки приложений, от которых что-то ждёт, и сколько всего
+        is Act.InboxA -> CompactRow(h, gap, side * 1.4f,
+            left = { AppStack(act.items, h * 0.56f, islandFill(s)) },
+            right = { TimeText("${act.items.size}", Tints.Blue, 16) },
+        )
+
     }
 }
 
 @Composable
-private fun TimeText(text: String, color: Color, size: Int = 16, weight: FontWeight = FontWeight.SemiBold) {
+private fun TimeText(text: String, color: Color, size: Int = 16, weight: FontWeight = FontWeight.SemiBold.island) {
     Text(text, color = color, fontSize = size.sp, style = Digits.copy(fontWeight = weight), maxLines = 1, softWrap = false)
 }
 
@@ -347,6 +357,7 @@ private fun MediaCompact(m: MediaInfo, s: IslandSettings) {
 @Composable
 private fun NoticeCompact(n: Notice, s: IslandSettings, wideWidth: Dp) {
     when {
+        n.style == NoticeStyle.MESSAGE && n.message != null && s.messageStyle == MessageStyle.PILL -> MessagePill(n, n.message, s)
         n.style == NoticeStyle.MESSAGE && n.message != null -> MessageCard(n, n.message, s, wideWidth)
         n.style == NoticeStyle.PAY_DONE -> PayDone(n, s, wideWidth)
         n.style == NoticeStyle.LIVE && n.live != null -> LiveBanner(n, n.live, s, wideWidth)
@@ -383,13 +394,13 @@ private fun WideNotice(n: Notice, s: IslandSettings, wideWidth: Dp) {
             Icon(n.icon, null, tint = n.tint, modifier = Modifier.size(height * 0.355f).scale(pop.value))
             Spacer(Modifier.width(9.dp))
             // «Не беспокоить», «Режим полёта» не влезают до камеры — шрифт чуть меньше, а не многоточие
-            FitText(n.title, Color.White, 17.sp, 13.sp, FontWeight.SemiBold, Modifier.weight(1f, fill = false))
+            FitText(n.title, Color.White, 17.sp, 13.sp, FontWeight.SemiBold.island, Modifier.weight(1f, fill = false))
         }
         Spacer(Modifier.width(compactGap(s)))
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically) {
             if (value != null) {
-                FitText(value, n.tint, if (value.length <= 5) 17.sp else 16.sp, 12.sp, FontWeight.SemiBold,
+                FitText(value, n.tint, if (value.length <= 5) 17.sp else 16.sp, 12.sp, FontWeight.SemiBold.island,
                     Modifier.weight(1f, fill = false), style = Digits)
             }
             if (n.battery != null) {
@@ -431,7 +442,7 @@ private fun PillNotice(n: Notice, s: IslandSettings) {
         },
         right = {
             if (n.state != null) {
-                Text(n.state, color = n.tint, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+                Text(n.state, color = n.tint, fontSize = 16.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1, softWrap = false)
             }
         },
         // Как в ролике: подпись в полный размер, пилюля для неё чуть шире
@@ -473,7 +484,7 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
     Column(
         Modifier
             .animateContentSize(islandSpec(s))
-            .width(messageWidth())
+            .width(messageWidth(s))
             .padding(bottom = 12.dp),
     ) {
         // Шапка на уровне камеры: слева приложение, справа время — как боковые части острова iPhone
@@ -496,82 +507,87 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
             }
         }
         Spacer(Modifier.height((messageTop(s) - s.height.dp).coerceAtLeast(4.dp)))
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
-            NotifIcon(if (hidden) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (hidden) m.appName else n.title, color = Color.White, fontSize = 15.sp, lineHeight = 20.sp,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                    )
-                    if (m.history.size > 1 && !hidden) {
-                        Spacer(Modifier.width(8.dp))
-                        CountPill(m.history.size, open, accent) {
-                            haptic()
-                            open = !open
+        // Ниже шапки — крупнее или мельче по «Размеру содержимого»; шапка у камеры остаётся как есть
+        Scaled(s.contentScale) {
+            Column {
+                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
+                    NotifIcon(if (hidden) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (hidden) m.appName else n.title, color = Color.White, fontSize = 15.sp, lineHeight = 20.sp,
+                                fontWeight = FontWeight.SemiBold.island, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                            )
+                            if (m.history.size > 1 && !hidden) {
+                                Spacer(Modifier.width(8.dp))
+                                CountPill(m.history.size, open, accent) {
+                                    haptic()
+                                    open = !open
+                                }
+                            }
+                        }
+                        if (hidden) {
+                            Text(tr("Содержимое скрыто", "Content hidden"), color = dim, fontSize = 14.sp, lineHeight = 19.sp, maxLines = 1)
+                        } else if (open && m.history.size > 1) {
+                            m.history.forEachIndexed { i, line ->
+                                Text(
+                                    line, color = Color.White.copy(alpha = if (i == m.history.lastIndex) 0.9f else 0.6f),
+                                    fontSize = 14.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(bottom = 2.dp),
+                                )
+                            }
+                        } else if (m.text.isNotEmpty()) {
+                            Text(
+                                m.text, color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 19.sp, maxLines = s.msgLines.coerceIn(1, 8),
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
-                if (hidden) {
-                    Text(tr("Содержимое скрыто", "Content hidden"), color = dim, fontSize = 14.sp, lineHeight = 19.sp, maxLines = 1)
-                } else if (open && m.history.size > 1) {
-                    m.history.forEachIndexed { i, line ->
-                        Text(
-                            line, color = Color.White.copy(alpha = if (i == m.history.lastIndex) 0.9f else 0.6f),
-                            fontSize = 14.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(bottom = 2.dp),
-                        )
+                if (replyAction != null) {
+                    // Строка ответа стоит под текстом, как кнопки, — на одной линии с ним
+                    Box(Modifier.padding(start = 16.dp + iconSize + 12.dp, end = 16.dp)) {
+                        ReplyField(replyAction, accent) { text ->
+                            if (text.isBlank()) return@ReplyField
+                            if (Controls.sendReply(context, replyAction, text)) {
+                                Messages.onReplied(m.key)
+                                IslandBus.reply.value = null
+                                IslandBus.notice.value = null
+                                // Как в ролике: на миг «Отправлено» с галочкой и кому
+                                IslandBus.post(
+                                    Notice(
+                                        title = tr("Отправлено", "Sent"),
+                                        state = n.title,
+                                        icon = n.icon,
+                                        tint = accent,
+                                        style = NoticeStyle.SENT,
+                                        extraMs = -SettingsRepo.current.noticeDurationMs / 2L,
+                                    ),
+                                )
+                            } else {
+                                // Поле остаётся открытым с текстом — можно попробовать ещё раз или ответить в приложении
+                                Toast.makeText(context, tr("Не удалось отправить ответ", "Couldn't send the reply"), Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
-                } else if (m.text.isNotEmpty()) {
-                    Text(
-                        m.text, color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 19.sp, maxLines = s.msgLines.coerceIn(1, 8),
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-        if (replyAction != null) {
-            // Строка ответа стоит под текстом, как кнопки, — на одной линии с ним
-            Box(Modifier.padding(start = 16.dp + iconSize + 12.dp, end = 16.dp)) {
-                ReplyField(replyAction, accent) { text ->
-                    if (text.isBlank()) return@ReplyField
-                    if (Controls.sendReply(context, replyAction, text)) {
-                        Messages.onReplied(m.key)
-                        IslandBus.reply.value = null
-                        IslandBus.notice.value = null
-                        // Как в ролике: на миг «Отправлено» с галочкой и кому
-                        IslandBus.post(
-                            Notice(
-                                title = tr("Отправлено", "Sent"),
-                                state = n.title,
-                                icon = n.icon,
-                                tint = accent,
-                                style = NoticeStyle.SENT,
-                                extraMs = -SettingsRepo.current.noticeDurationMs / 2L,
-                            ),
-                        )
-                    } else {
-                        // Поле остаётся открытым с текстом — можно попробовать ещё раз или ответить в приложении
-                        Toast.makeText(context, tr("Не удалось отправить ответ", "Couldn't send the reply"), Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        } else if (m.actions.isNotEmpty() && !locked) {
-            // Кнопки стоят под текстом, на одной линии с ним, как в шторке
-            Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp + iconSize + 12.dp, end = 16.dp, top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                m.actions.forEachIndexed { i, a ->
-                    // Последняя кнопка уступает место, если подпись длинная
-                    TextAction(a.title, accent, if (i == m.actions.lastIndex) Modifier.weight(1f, fill = false) else Modifier, size = 14.sp) {
-                        if (a.isReply) {
-                            IslandBus.reply.value = ReplyState(n.id, a)
-                        } else {
-                            Controls.send(context, a.intent)
-                            IslandBus.notice.value = null
+                } else if (m.actions.isNotEmpty() && !locked) {
+                    // Кнопки стоят под текстом, на одной линии с ним, как в шторке
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 16.dp + iconSize + 12.dp, end = 16.dp, top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        m.actions.forEachIndexed { i, a ->
+                            // Последняя кнопка уступает место, если подпись длинная
+                            TextAction(a.title, accent, if (i == m.actions.lastIndex) Modifier.weight(1f, fill = false) else Modifier, size = 14.sp) {
+                                if (a.isReply) {
+                                    IslandBus.reply.value = ReplyState(n.id, a)
+                                } else {
+                                    Controls.send(context, a.intent)
+                                    IslandBus.notice.value = null
+                                }
+                            }
                         }
                     }
                 }
@@ -580,9 +596,82 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
     }
 }
 
-/** Ширина плашки уведомления — как у всплывающего уведомления Android: по 16 dp от краёв экрана. */
+/**
+ * Уведомление пилюлей («Вид уведомлений → Пилюля»): у камеры слева аватар и кто пишет, справа приложение,
+ * под ними одна строка текста. Занимает меньше места, чем карточка; нажатие открывает приложение.
+ */
 @Composable
-fun messageWidth(): Dp = (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtMost(460.dp)
+private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
+    val locked by IslandBus.locked.collectAsState()
+    val hidden = locked && m.sensitive
+    val dim = Color.White.copy(alpha = 0.6f)
+    Column(Modifier.width(messageWidth(s)).padding(bottom = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().height(s.height.dp).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                val face = if (hidden) m.appIcon else m.avatar ?: m.appIcon
+                if (face != null) {
+                    Image(face, null, Modifier.size(20.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(
+                    if (hidden) m.appName else n.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold.island,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(compactGap(s)))
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Text(m.appName, color = dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false))
+                if (m.appIcon != null) {
+                    Spacer(Modifier.width(5.dp))
+                    Image(m.appIcon, null, Modifier.size(14.dp).clip(RoundedCornerShape(4.dp)))
+                }
+            }
+        }
+        Scaled(s.contentScale) {
+            Text(
+                if (hidden) tr("Содержимое скрыто", "Content hidden") else m.text.ifEmpty { m.appName },
+                color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 18.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+/** Значки приложений внахлёст, новое — сверху и слева; у каждого ободок цвета острова. */
+@Composable
+private fun AppStack(items: List<InboxItem>, size: Dp, ring: Color) {
+    val apps = items.asReversed().distinctBy { it.pkg }.take(3)
+    val step = size * 0.55f
+    Box(Modifier.size(width = size + step * (apps.size - 1).coerceAtLeast(0), height = size)) {
+        for (k in apps.indices.reversed()) {
+            val icon = apps[k].appIcon
+            Box(
+                Modifier.offset(x = step * k).size(size).clip(CircleShape).background(ring).padding(1.5.dp).clip(CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (icon != null) {
+                    Image(icon, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                } else {
+                    Icon(Ios.chatbubble, null, tint = Tints.Blue, modifier = Modifier.fillMaxSize().padding(3.dp))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Ширина плашки уведомления — как у всплывающего уведомления Android: по 16 dp от краёв экрана;
+ * уже — по «Ширине раскрытого острова».
+ */
+@Composable
+fun messageWidth(s: IslandSettings): Dp {
+    val full = (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtMost(460.dp)
+    return (full * (s.expandedWidthPercent.coerceIn(60, 100) / 100f)).coerceAtLeast((s.width.dp + 60.dp).coerceAtMost(full))
+}
 
 /**
  * Откуда в плашке начинается само уведомление: под строкой состояния, на той же высоте, что у системного
@@ -658,7 +747,7 @@ private fun TextAction(title: String, accent: Color, modifier: Modifier = Modifi
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            title, color = accent.copy(alpha = if (pressed) 0.55f else 1f), fontSize = size, fontWeight = FontWeight.SemiBold,
+            title, color = accent.copy(alpha = if (pressed) 0.55f else 1f), fontSize = size, fontWeight = FontWeight.SemiBold.island,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
@@ -697,7 +786,7 @@ private fun ReplyField(action: MsgAction, accent: Color, onSend: (String) -> Uni
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                textStyle = TextStyle(color = Color.White, fontSize = 15.sp, fontFamily = Inter),
+                textStyle = TextStyle(color = Color.White, fontSize = 15.sp, fontFamily = IslandType.family),
                 cursorBrush = SolidColor(accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { onSend(text) }),
@@ -734,13 +823,13 @@ private fun PayReady(title: String, caption: String?, appIcon: ImageBitmap?, s: 
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             ContactlessWaves(Tints.Lavender, !s.reduceEffects, Modifier.size(height * 0.42f))
             Spacer(Modifier.width(10.dp))
-            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1)
         }
         Spacer(Modifier.width(compactGap(s)))
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             if (caption != null) {
                 // «Hold near reader» длиннее «К терминалу» — чуть уменьшается, а не обрезается
-                FitText(caption, Tints.Gray, 14.sp, 11.sp, FontWeight.Normal, Modifier.weight(1f, fill = false))
+                FitText(caption, Tints.Gray, 14.sp, 11.sp, FontWeight.Normal.island, Modifier.weight(1f, fill = false))
             }
             if (appIcon != null) {
                 Spacer(Modifier.width(9.dp))
@@ -763,12 +852,12 @@ private fun PayDone(n: Notice, s: IslandSettings, wideWidth: Dp) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             CheckBadge(n.tint, !s.reduceEffects, Modifier.size(height * 0.42f))
             Spacer(Modifier.width(10.dp))
-            Text(n.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(n.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1)
         }
         Spacer(Modifier.width(compactGap(s)))
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             if (n.state != null) {
-                Text(n.state, color = n.tint, fontSize = 18.sp, style = Digits.copy(fontWeight = FontWeight.Bold), maxLines = 1,
+                Text(n.state, color = n.tint, fontSize = 18.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
         }
@@ -813,7 +902,7 @@ private fun LiveCompact(l: LiveInfo, s: IslandSettings) {
         right = {
             val short = liveShort(l)
             if (short != null) {
-                Text(short, color = tint, fontSize = 17.sp, style = Digits.copy(fontWeight = FontWeight.Bold), maxLines = 1,
+                Text(short, color = tint, fontSize = 17.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             } else {
                 GlowDot(tint, h * 0.22f, !s.reduceEffects)
@@ -841,7 +930,7 @@ private fun LiveBanner(n: Notice, l: LiveInfo, s: IslandSettings, wideWidth: Dp)
             Spacer(Modifier.width(10.dp))
             Text(
                 l.distance ?: l.title, color = Color.White, fontSize = if (l.distance != null) 19.sp else 16.sp,
-                style = Digits.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(compactGap(s)))
@@ -851,7 +940,9 @@ private fun LiveBanner(n: Notice, l: LiveInfo, s: IslandSettings, wideWidth: Dp)
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
             }
             // На узкой плашке — коротко: «12:31 · 19 ч»; полностью — в раскрытом виде
-            val shortEta = l.eta?.removePrefix("Прибытие в ")?.removePrefix("Arrive ")?.split(" · ")?.take(2)?.joinToString(" · ")
+            val arrive = trf("Прибытие в {0}", "Arrive {0}", "")
+            val shortEta = l.eta?.removePrefix(arrive)?.removePrefix("Прибытие в ")?.removePrefix("Arrive ")?.split(" · ")?.take(2)
+                ?.joinToString(" · ")
             if (shortEta != null) {
                 Text(shortEta, color = tint, fontSize = 13.sp, style = Digits, maxLines = 1)
             }
@@ -887,13 +978,13 @@ private fun IncomingCall(c: CallInfo, s: IslandSettings, wideWidth: Dp) {
             if (c.avatar != null) {
                 Image(c.avatar, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                Text(c.name.take(1).uppercase(), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text(c.name.take(1).uppercase(), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold.island)
             }
         }
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
             Text(tr("Входящий вызов", "Incoming call"), color = Tints.Gray, fontSize = 12.5.sp, lineHeight = 15.sp, maxLines = 1)
-            Text(c.name, color = Color.White, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            Text(c.name, color = Color.White, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))

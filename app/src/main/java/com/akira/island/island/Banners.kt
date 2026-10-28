@@ -80,7 +80,7 @@ fun SentBanner(n: Notice, s: IslandSettings, wideWidth: Dp) {
                 Icon(ImageVector.vectorResource(R.drawable.ios_check), null, tint = onAccent(n.tint), modifier = Modifier.size(height * 0.26f))
             }
             Spacer(Modifier.width(10.dp))
-            Text(n.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(n.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1)
         }
         Spacer(Modifier.width(compactGap(s)))
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
@@ -117,7 +117,7 @@ fun UpdateCard(n: Notice, s: IslandSettings, wideWidth: Dp) {
             AppMark(n, 48.dp)
             Spacer(Modifier.width(13.dp))
             Column(Modifier.weight(1f)) {
-                Text(n.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                Text(n.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
                 // Пока качается, справа кольцо — вместо длинной подписи коротко, что происходит
                 val caption = if (loading) tr("Скачивается…", "Downloading…") else n.caption
@@ -126,7 +126,7 @@ fun UpdateCard(n: Notice, s: IslandSettings, wideWidth: Dp) {
                     Text(failed, color = Tints.Orange, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 } else if (caption != null) {
                     // Длинная подпись чуть уменьшается, а не обрезается
-                    FitText(caption, Tints.Gray, 13.sp, 11.sp, FontWeight.Normal)
+                    FitText(caption, Tints.Gray, 13.sp, 11.sp, FontWeight.Normal.island)
                 }
             }
             when {
@@ -234,7 +234,7 @@ private fun RowScope.CardButton(
             Spacer(Modifier.width(6.dp))
         }
         Text(text, color = fg, fontSize = 15.sp, maxLines = 1,
-            style = Digits.copy(fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold))
+            style = Digits.copy(fontWeight = if (bold) FontWeight.Bold.island else FontWeight.SemiBold.island))
     }
 }
 

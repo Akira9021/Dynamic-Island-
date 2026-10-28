@@ -22,6 +22,7 @@ import android.os.SystemClock
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Lang
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -135,16 +136,20 @@ object LiveParser {
 
     private val ruUnit = Regex("""(\d+)(?:,(\d+))?\s?(км|метров|метра|мин|м|ч)\.?(?!\p{L})""")
 
-    /** По-английски — и единицы: «4,2 км» → «4.2 km», «12 мин» → «12 min». Иначе как прислал навигатор. */
+    /**
+     * Единицы на языке острова: по-английски «4,2 км» → «4.2 km», «12 мин» → «12 min», по-индонезийски и
+     * по-португальски — латиницей, но с запятой. По-русски и по-казахски — как прислал навигатор.
+     */
     fun units(s: String): String {
-        if (!Lang.en) return s
+        val c = Lang.code
+        if (c == "ru" || c == "kk") return s
         return ruUnit.replace(s) { m ->
             val (whole, frac, unit) = m.destructured
-            val n = if (frac.isEmpty()) whole else "$whole.$frac"
+            val n = if (frac.isEmpty()) whole else if (c == "en") "$whole.$frac" else "$whole,$frac"
             val u = when (unit) {
                 "км" -> "km"
-                "мин" -> "min"
-                "ч" -> "h"
+                "мин" -> if (c == "id") "mnt" else "min"
+                "ч" -> if (c == "id") "j" else "h"
                 else -> "m"
             }
             "$n $u"
@@ -156,7 +161,7 @@ object LiveParser {
         val joined = texts.joinToString(" ")
         val time = clock.find(joined)?.value
         val min = minutes.find(joined)?.value
-        return listOfNotNull(time?.let { tr("Прибытие в $it", "Arrive $it") }, min?.replace(Regex("""\s+"""), " ")?.let(::units))
+        return listOfNotNull(time?.let { trf("Прибытие в {0}", "Arrive {0}", it) }, min?.replace(Regex("""\s+"""), " ")?.let(::units))
             .takeIf { it.isNotEmpty() }?.joinToString(" · ")
     }
 
@@ -223,9 +228,9 @@ object LiveParser {
                 if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
             }
             walk(root)
-            Remote(texts, image, tr("раскладка есть, текстов: ${texts.size}", "custom layout, texts: ${texts.size}"))
+            Remote(texts, image, trf("раскладка есть, текстов: {0}", "custom layout, texts: {0}", texts.size))
         }.getOrElse {
-            Remote(emptyList(), null, tr("раскладку не удалось прочитать: ${it.javaClass.simpleName}", "couldn't read the layout: ${it.javaClass.simpleName}"))
+            Remote(emptyList(), null, trf("раскладку не удалось прочитать: {0}", "couldn't read the layout: {0}", it.javaClass.simpleName))
         }
     }
 }
@@ -251,7 +256,7 @@ object LiveDebug {
         val body = buildString {
             appendLine(NotificationParser.appLabel(context, sbn.packageName) + " (" + sbn.packageName + ")")
             val category = n.category ?: "—"
-            appendLine(tr("постоянное: ${sbn.isOngoing}, категория: $category", "ongoing: ${sbn.isOngoing}, category: $category"))
+            appendLine(trf("постоянное: {0}, категория: {1}", "ongoing: {0}, category: {1}", sbn.isOngoing, category))
             appendLine(tr("заголовок: ", "title: ") + title.ifEmpty { "—" })
             appendLine(tr("текст: ", "text: ") + text.ifEmpty { "—" })
             if (bigText.isNotEmpty() && bigText != text) appendLine(tr("большой текст: ", "big text: ") + bigText)
@@ -284,8 +289,10 @@ object LiveDebug {
             val street = r.street ?: "—"
             val eta = r.eta ?: "—"
             val turn = r.turn?.toString() ?: tr("по картинке", "from the picture")
-            appendLine(tr("нашлось: расстояние $dist, улица $street, прибытие $eta, поворот $turn",
-                "found: distance $dist, street $street, arrival $eta, turn $turn"))
+            appendLine(trf(
+                "нашлось: расстояние {0}, улица {1}, прибытие {2}, поворот {3}",
+                "found: distance {0}, street {1}, arrival {2}, turn {3}", dist, street, eta, turn,
+            ))
             items.filter { it.text.isNotEmpty() }.sortedWith(compareBy({ it.top }, { it.left })).take(40).forEach {
                 appendLine("  «${it.text}» ${it.left},${it.top}–${it.right},${it.bottom}")
             }

@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Lang
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import com.akira.island.update.DownloadState
 import com.akira.island.update.UpdateChecker
@@ -75,10 +76,10 @@ fun UpdateSection() {
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(tr("Доступна версия ${release.version}", "Version ${release.version} is available"),
+                Text(trf("Доступна версия {0}", "Version {0} is available", release.version),
                     color = Ui.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 val size = if (release.sizeBytes > 0) tr(" · %.1f МБ", " · %.1f MB").format(release.sizeBytes / 1_048_576.0) else ""
-                Text(tr("Сейчас установлена ${UpdateChecker.currentVersion(context)}$size", "Installed: ${UpdateChecker.currentVersion(context)}$size"),
+                Text(trf("Сейчас установлена {0}{1}", "Installed: {0}{1}", UpdateChecker.currentVersion(context), size),
                     color = Ui.Sub, fontSize = 14.sp)
             }
         }
@@ -108,7 +109,7 @@ fun UpdateSection() {
                     color = Ui.Primary,
                     trackColor = Ui.IconBg,
                 )
-                Text(tr("Скачиваю… ${(d.progress * 100).toInt()}%", "Downloading… ${(d.progress * 100).toInt()}%"),
+                Text(trf("Скачиваю… {0}%", "Downloading… {0}%", (d.progress * 100).toInt()),
                     color = Ui.Sub, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
             }
             ready != null -> {
@@ -149,10 +150,10 @@ private fun FilledPill(text: String, onClick: () -> Unit) {
 /** Что показать про проверку обновлений: подпись под «Проверить сейчас». */
 fun updateStatusText(state: UpdateState, current: String): String = when (state) {
     UpdateState.Checking -> tr("Проверяю…", "Checking…")
-    UpdateState.UpToDate -> tr("У вас последняя версия $current", "You have the latest version $current")
-    is UpdateState.Available -> tr("Доступна версия ${state.release.version}", "Version ${state.release.version} is available")
+    UpdateState.UpToDate -> trf("У вас последняя версия {0}", "You have the latest version {0}", current)
+    is UpdateState.Available -> trf("Доступна версия {0}", "Version {0} is available", state.release.version)
     is UpdateState.Error -> state.message
-    UpdateState.Idle -> tr("Сейчас установлена версия $current", "Installed version: $current")
+    UpdateState.Idle -> trf("Сейчас установлена версия {0}", "Installed version: {0}", current)
 }
 
 /**
@@ -164,7 +165,7 @@ fun WhatsNewDialog() {
     val context = LocalContext.current
     val current = remember { UpdateChecker.currentVersion(context) }
     val notes = remember {
-        runCatching { context.assets.open(whatsNewFile()).bufferedReader().use { it.readText() } }.getOrNull()
+        runCatching { context.assets.open(whatsNewFile(context)).bufferedReader().use { it.readText() } }.getOrNull()
     }
     val seen = SettingsRepo.current.lastSeenVersion
     var show by remember {
@@ -188,13 +189,13 @@ fun NotesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val current = remember { UpdateChecker.currentVersion(context) }
     val notes = remember {
-        runCatching { context.assets.open(whatsNewFile()).bufferedReader().use { it.readText() } }.getOrNull()
+        runCatching { context.assets.open(whatsNewFile(context)).bufferedReader().use { it.readText() } }.getOrNull()
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Ui.Card,
         titleContentColor = Ui.Text,
-        title = { Text(tr("Что нового в $current", "What's new in $current")) },
+        title = { Text(trf("Что нового в {0}", "What's new in {0}", current)) },
         text = {
             if (notes != null) {
                 ReleaseNotes(notes, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()))
@@ -241,5 +242,11 @@ private fun inline(text: String): AnnotatedString = buildAnnotatedString {
     }
 }
 
-/** «Что нового» внутри приложения на его языке. */
-private fun whatsNewFile() = if (Lang.en) "whatsnew.en.md" else "whatsnew.md"
+/** «Что нового» внутри приложения на его языке: свой файл языка, если он есть, иначе английский. */
+private fun whatsNewFile(context: android.content.Context): String {
+    val c = Lang.code
+    if (c == "ru") return "whatsnew.md"
+    val own = "whatsnew.$c.md"
+    val has = c != "en" && runCatching { context.assets.list("")?.contains(own) == true }.getOrDefault(false)
+    return if (has) own else "whatsnew.en.md"
+}

@@ -50,8 +50,10 @@ import androidx.compose.ui.unit.sp
 import com.akira.island.R
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import com.akira.island.service.LiveDebug
+import com.akira.island.service.NotifDebug
 import com.akira.island.service.PayDebug
 import com.akira.island.ui.Group
 import com.akira.island.ui.GroupItem
@@ -202,7 +204,10 @@ fun AppInfoScreen(open: (Screen) -> Unit) {
             }
             GroupItem(Pos.Middle, Icons.Rounded.Refresh, tr("Проверить сейчас", "Check now"), updateStatusText(update, version),
                 onClick = { scope.launch { UpdateChecker.check(context.applicationContext, force = true) } }, color = Tile.Blue)
-            GroupItem(Pos.Last, Icons.Rounded.NewReleases, tr("Что нового", "What's new"), tr("Изменения в версии $version", "Changes in version $version"),
+            GroupItem(Pos.Last, Icons.Rounded.NewReleases, tr("Что нового", "What's new"), trf(
+                "Изменения в версии {0}",
+                "Changes in version {0}", version,
+            ),
                 onClick = { notes = true }, color = Tile.Purple) { Arrow() }
         }
 
@@ -249,10 +254,10 @@ private fun AppHeader(version: String, update: UpdateState) {
         }
         Spacer(Modifier.height(14.dp))
         Text(tr("Динамический остров", "Dynamic Island"), color = Ui.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(tr("Версия $version", "Version $version"), color = Ui.Sub, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
+        Text(trf("Версия {0}", "Version {0}", version), color = Ui.Sub, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
         val (label, color) = when (update) {
             UpdateState.UpToDate -> tr("Последняя версия", "Up to date") to Tints.Green
-            is UpdateState.Available -> tr("Доступна версия ${update.release.version}", "Version ${update.release.version} is available") to Ui.Primary
+            is UpdateState.Available -> trf("Доступна версия {0}", "Version {0} is available", update.release.version) to Ui.Primary
             UpdateState.Checking -> tr("Проверяю обновления…", "Checking for updates…") to Ui.Sub
             is UpdateState.Error -> tr("Не удалось проверить обновления", "Couldn't check for updates") to Tints.Orange
             UpdateState.Idle -> null to Ui.Sub
@@ -358,6 +363,23 @@ fun PayDiagScreen(onBack: () -> Unit) {
         ),
         tr("Пока ничего нет: остров не видел ни экрана оплаты, ни уведомлений банков.",
             "Nothing yet: the island hasn't seen a payment screen or a bank notification."),
+        log, onBack,
+    )
+}
+
+/** «Почему не показано»: что остров решил о последних уведомлениях — только приложение и причина. */
+@Composable
+fun NotifDiagScreen(onBack: () -> Unit) {
+    val log by NotifDebug.log.collectAsState()
+    DumpScreen(
+        tr("Почему не показано", "Why it didn't show"),
+        tr(
+            "Пусть придёт уведомление, которого не было в острове, и вернитесь сюда: ниже — что остров решил о последних " +
+                "уведомлениях. Только название приложения и причина, без текста сообщений; записи пропадают после перезапуска.",
+            "Let a notification that didn't show in the island arrive, then come back here: below is what the island decided " +
+                "about recent notifications. Only the app name and the reason, no message text; entries are gone after a restart.",
+        ),
+        tr("Пока ничего нет: уведомлений приложений не приходило.", "Nothing yet: no app notifications have arrived."),
         log, onBack,
     )
 }

@@ -1,7 +1,12 @@
-### 💬 Consecutive messages
-- Follow-up messages in the same conversation (WhatsApp and others) now show in the island, not only the first one.
+### 🎛️ More settings
+- **Notifications**: Card or Pill, how long to show, **notification history**, silent notifications and rules for each app — Features → Notifications.
+- **Appearance**: opacity, expanded island width, text size, **your own font** and weight, a delay before showing.
+- **Behavior**: the island **at the camera** in games and videos, hide on the lock screen, the circle on the left or right.
+- **Sound mode** and **Do Not Disturb** buttons in the expanded island.
 
-### 💳 Payment
-- After the tap-to-pay screen, a bank “Transfer …” notification (SBP, QR) counts as the payment.
-- “Payment successful” on screen without an amount now shows as “Paid”.
-- “Payment diagnostics” also records the screen after payment: if “Paid” did not show, tap “Copy all” and send the text.
+### 🌍 Languages
+- Indonesian, Portuguese and Kazakh.
+
+### 🐞 Fixes
+- The island no longer flickers when expanding, consecutive messages all show, payments are recognized more reliably.
+- Voice recorders and screen recording, Xiaomi and vivo Clock, Discord calls.

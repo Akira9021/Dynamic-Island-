@@ -84,6 +84,9 @@ import com.akira.island.ui.screens.KeepAliveScreen
 import com.akira.island.ui.screens.LookScreen
 import com.akira.island.ui.screens.LyricsScreen
 import com.akira.island.ui.screens.NotificationsScreen
+import com.akira.island.ui.screens.NotifAppsScreen
+import com.akira.island.ui.screens.NotifDiagScreen
+import com.akira.island.ui.screens.FontScreen
 import com.akira.island.ui.screens.PayDiagScreen
 import com.akira.island.ui.screens.PermissionsScreen
 import com.akira.island.ui.screens.SizeScreen
@@ -93,7 +96,7 @@ import com.akira.island.update.UpdateChecker
 
 enum class Screen {
     CARDS, EVENTS, GESTURES, LYRICS, SIZE, COLORS, INSTRUCTION, ABOUT, DIAG, LOOK, ANIM, EFFECTS, BANNERS,
-    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS,
+    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT,
 }
 
 class MainActivity : ComponentActivity() {
@@ -174,7 +177,10 @@ private fun AppRoot() {
                     Screen.BANNERS.name -> BannersScreen(back)
                     Screen.PERMISSIONS.name -> PermissionsScreen(back, open)
                     Screen.TESTS.name -> TestsScreen(back)
-                    Screen.NOTIFICATIONS.name -> NotificationsScreen(back)
+                    Screen.NOTIFICATIONS.name -> NotificationsScreen(back, open)
+                    Screen.NOTIF_APPS.name -> NotifAppsScreen(back)
+                    Screen.NOTIF_DIAG.name -> NotifDiagScreen(back)
+                    Screen.FONT.name -> FontScreen(back)
                     Screen.BEHAVIOR.name -> BehaviorScreen(back)
                 }
             }
