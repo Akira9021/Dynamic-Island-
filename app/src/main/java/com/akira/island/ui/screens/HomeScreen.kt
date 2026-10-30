@@ -100,6 +100,9 @@ import com.akira.island.ui.Tile
 import com.akira.island.ui.ToggleCard
 import com.akira.island.ui.Ui
 import com.akira.island.ui.UpdateSection
+import com.akira.island.ui.isOneUi
+import com.akira.island.ui.oneUiSurface
+import com.akira.island.ui.rememberThemePalette
 import com.akira.island.update.UpdateChecker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -486,6 +489,8 @@ fun Arrow() {
 @Composable
 fun IslandPreview(expanded: Boolean = false) {
     val s by SettingsRepo.state.collectAsState()
+    val oneUi = s.look.isOneUi()
+    val palette = rememberThemePalette(s.look)
     val demo = remember {
         MediaInfo(
             key = "demo", pkg = "", title = tr("Демо", "Demo"), artist = "", album = null, art = null,
@@ -508,14 +513,38 @@ fun IslandPreview(expanded: Boolean = false) {
             Modifier
                 // «Как вырез» — капсула от самого верха, как на экране
                 .padding(top = if (s.notch) 0.dp else 18.dp)
-                // «Свечение обложки» видно и на примере
-                .then(if (!expanded && s.fxGlow && !s.reduceEffects) Modifier.drawBehind { islandGlow(demo.accent, 1f, corner.toPx(), s.notch) } else Modifier)
+                // «Свечение обложки» видно и на примере; в One UI оно держится цвета темы
+                .then(
+                    if (!expanded && s.fxGlow && !s.reduceEffects) {
+                        Modifier.drawBehind { islandGlow(if (oneUi) palette.accent else demo.accent, 1f, corner.toPx(), s.notch) }
+                    } else {
+                        Modifier
+                    },
+                )
                 .clip(shape)
                 .then(
-                    if (s.liquidGlass) Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f)
-                    else Modifier.background(Color(s.color)),
+                    when {
+                        oneUi && s.liquidGlass -> Modifier.glassSurface(shape, palette.surfaceBottom, s.glassOpacity / 100f)
+                        oneUi -> Modifier.oneUiSurface(shape, palette)
+                        s.liquidGlass -> Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f)
+                        else -> Modifier.background(Color(s.color))
+                    },
                 )
-                .then(if (s.outline) Modifier.border(s.outlineWidth.dp, if (s.outlineFromArt) Tints.Lavender else Color(s.outlineColor), shape) else Modifier)
+                .then(
+                    if (s.outline) {
+                        Modifier.border(
+                            s.outlineWidth.dp,
+                            when {
+                                oneUi -> palette.accent
+                                s.outlineFromArt -> Tints.Lavender
+                                else -> Color(s.outlineColor)
+                            },
+                            shape,
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
                 .animateContentSize(),
         ) {
             CompactContent(act, s, 400.dp)

@@ -10,7 +10,7 @@
 
 Notifications with reply · navigation · payments · music with lyrics · calls · timers · downloads · charging · flashlight · system events
 
-[![Version 1.6.2](https://img.shields.io/badge/version-1.6.2-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
+[![Version 1.6.5](https://img.shields.io/badge/version-1.6.5-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Akira9021/Dynamic-Island-/total?style=for-the-badge&label=downloads&color=34C759&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/Akira9021/Dynamic-Island-/android.yml?style=for-the-badge&label=build&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/actions)
 <br>
@@ -18,6 +18,11 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
 ![No ads](https://img.shields.io/badge/ads-0-black?style=flat-square)
+
+> [!NOTE]
+> This fork adds a Samsung One UI look. On Samsung the island starts in One UI style and takes its accent
+> from the current phone theme (One UI / Material You palette, then the wallpaper). If the theme color can't
+> be read, the island turns gray. Change it in Appearance → Capsule color → Island look.
 
 <img src="docs/preview.en.png" width="820" alt="Collapsed and expanded island views: idle, music, charging, timer, call, the player with lyrics, incoming call, headphones">
 
@@ -32,16 +37,16 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 
 ---
 
-## ✨ What's new in 1.6.2
+## ✨ What's new in 1.6.5
 
-- 📏 **A smaller island**, with width and height adjustable again — Appearance → Position and size
-- 💧 **Like a notch** for waterdrop cameras
-- 🎬 **Softer animations**, Elasticity right on the Appearance tab
-- 🔒 **A lock** on the lock screen
-- 🎵 **Like** in the player — Yandex Music and others
-- 💳 **More reliable "Paid"** and Payment diagnostics
-- 🛠️ **Keep the island running** — on Home
-- ⬇️ Updates are checked **every 3 hours**
+- 🎬 **Liquid expansion**: content grows with the island — Appearance → Animations
+- 🎛️ **Your own buttons** in the expanded island, or just the clock — Features → Behavior
+- 📸 **Screenshot without the island** — with a button or a gesture
+- 🏦 **Bank app won't open?** The Island tile in quick settings turns the island off for a while
+- 📞 **Calls** in any phone language; swipe an incoming call up to hide it
+- 🫧 **A smoother collapsed island**: the bubble splits off like a drop, a 60 fps equalizer
+- 📌 **Keep the island loaded** and **On a schedule**
+- 🐞 Fixed: the previous track's artwork, "alarms" from calendars and a stuck "00:00"
 
 <div align="center">
 <img src="docs/app.en.png" width="820" alt="The app: Home with Keep the island running, Appearance with Elasticity, Position and size with width, height and Like a notch, Keep running and Try it">

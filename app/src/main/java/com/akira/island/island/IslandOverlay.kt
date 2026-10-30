@@ -107,6 +107,10 @@ import com.akira.island.data.TapAction
 import com.akira.island.service.CallMonitor
 import com.akira.island.service.NavScreen
 import com.akira.island.service.PayMonitor
+import com.akira.island.ui.ThemePalette
+import com.akira.island.ui.isOneUi
+import com.akira.island.ui.oneUiSurface
+import com.akira.island.ui.rememberThemePalette
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -367,6 +371,9 @@ private fun IslandRow(
     onBodyBounds: (Rect) -> Unit,
     onBubbleBounds: (Rect) -> Unit,
 ) {
+    // One UI: цвет нынешней темы Samsung; не прочитался — серый стиль
+    val oneUi = s.look.isOneUi()
+    val palette = rememberThemePalette(s.look)
     Row(
         Modifier
             // Сдвиг вбок — для камеры не по центру. Широкие плашки и раскрытый остров при этом не уезжают
@@ -384,8 +391,8 @@ private fun IslandRow(
     ) {
         // Пустое место слева уравновешивает пузырь, чтобы остров стоял над камерой
         Spacer(Modifier.animatedWidth(slot))
-        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds)
-        BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds)
+        IslandBody(primary, showExpanded, s, oneUi, palette, lyrics, battery, calibrating, onBodyBounds)
+        BubbleSlot(slot, bubbleVisible, bubbleAct, s, oneUi, palette, onBubbleBounds)
     }
 }
 
@@ -402,7 +409,15 @@ private fun Modifier.animatedWidth(width: State<Dp>) = layout { measurable, cons
  * Отдельная функция: внутри Row подставился бы RowScope.AnimatedVisibility.
  */
 @Composable
-private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSettings, onBounds: (Rect) -> Unit) {
+private fun BubbleSlot(
+    slot: State<Dp>,
+    visible: Boolean,
+    act: Act?,
+    s: IslandSettings,
+    oneUi: Boolean,
+    palette: ThemePalette,
+    onBounds: (Rect) -> Unit,
+) {
     Box(
         Modifier
             .zIndex(-1f)
@@ -419,7 +434,7 @@ private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSe
             enter = if (s.reduceEffects) fadeIn() else scaleIn(islandSpec(s), initialScale = 0.4f, transformOrigin = drop) + fadeIn(tween(90)),
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.4f, transformOrigin = drop) + fadeOut(tween(120, delayMillis = 60)),
         ) {
-            if (act != null) Bubble(act, s)
+            if (act != null) Bubble(act, s, oneUi, palette)
         }
     }
 }
@@ -429,6 +444,8 @@ private fun IslandBody(
     primary: Act,
     expanded: Boolean,
     s: IslandSettings,
+    oneUi: Boolean,
+    palette: ThemePalette,
     lyrics: Lyrics?,
     battery: BatteryInfo,
     calibrating: Boolean,
@@ -457,8 +474,10 @@ private fun IslandBody(
         primary is Act.Idle -> h / 2
         else -> activeHeight(s) / 2
     }
+    // One UI: у раскрытых карточек скругление сдержаннее, чем у капсулы iPhone, — ближе к панелям Samsung
+    val shownCorner = if (oneUi && expanded) minOf(cornerTarget, 28.dp) else cornerTarget
     // Скругление читается при рисовании: кадр раскрытия перерисовывает рамку и стекло, а не пересобирает остров
-    val corner = animateDpAsState(cornerTarget, islandSpec(s), label = "corner")
+    val corner = animateDpAsState(shownCorner, islandSpec(s), label = "corner")
     val shape = remember(corner, s.notch) { AnimatedIslandShape(corner, s.notch) }
     val accent = (primary as? Act.MediaA)?.m?.accent
     val outlineColor = if (s.outlineFromArt && accent != null) accent else Color(s.outlineColor)
@@ -467,9 +486,11 @@ private fun IslandBody(
     val playingArt = (primary as? Act.MediaA)?.m?.takeIf { it.playing }?.accent
     val lastArt = remember { arrayOf(Color.White) }
     if (playingArt != null) lastArt[0] = playingArt
-    val glowOn = s.fxGlow && !s.reduceEffects && !calibrating && playingArt != null
+    // В One UI ореол вокруг острова тоже держится цвета темы, а не только обложки
+    val glowOn = s.fxGlow && !s.reduceEffects && !calibrating &&
+        (playingArt != null || (oneUi && primary !is Act.Idle))
     val glowAlpha by animateFloatAsState(if (glowOn) 1f else 0f, tween(500), label = "glowAlpha")
-    val glowTint by animateColorAsState(lastArt[0], tween(500), label = "glowTint")
+    val glowTint by animateColorAsState(if (oneUi) palette.accent else lastArt[0], tween(500), label = "glowTint")
 
     // «Как фрукт»: при раскрытии остров сплющивается и отпружинивает
     val jellyX = remember { Animatable(1f) }
@@ -546,16 +567,22 @@ private fun IslandBody(
                 }
             }
             .then(
-                if (s.liquidGlass && !calibrating) {
-                    Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value }) { sheen.value }
-                } else {
-                    Modifier.background(if (calibrating) CalibrationRed else Color(s.color))
+                when {
+                    calibrating -> Modifier.background(CalibrationRed)
+                    s.liquidGlass -> Modifier.glassSurface(
+                        shape,
+                        if (oneUi) palette.surfaceBottom else Color(s.color),
+                        s.glassOpacity / 100f,
+                        tilt = { tilt.value },
+                    ) { sheen.value }
+                    oneUi -> Modifier.oneUiSurface(shape, palette)
+                    else -> Modifier.background(Color(s.color))
                 },
             )
             .then(
                 when {
                     calibrating -> Modifier.border(2.dp, Color.White, shape)
-                    s.outline -> Modifier.border(s.outlineWidth.dp, outlineColor, shape)
+                    s.outline -> Modifier.border(s.outlineWidth.dp, if (oneUi) palette.accent else outlineColor, shape)
                     else -> Modifier
                 },
             )
@@ -818,7 +845,7 @@ private fun perform(context: Context, action: TapAction, act: Act) {
 
 /** Вторая активность — круглый пузырь справа от острова. */
 @Composable
-private fun Bubble(act: Act, s: IslandSettings) {
+private fun Bubble(act: Act, s: IslandSettings, oneUi: Boolean, palette: ThemePalette) {
     val h = activeHeight(s)
     val haptic = rememberHaptic()
     val tilt = IslandBus.glassTilt.collectAsState()
@@ -829,10 +856,21 @@ private fun Bubble(act: Act, s: IslandSettings) {
             .then(if (s.shadow && !s.reduceEffects) Modifier.shadow(8.dp, CircleShape) else Modifier)
             .clip(CircleShape)
             .then(
-                if (s.liquidGlass) Modifier.glassSurface(CircleShape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value })
-                else Modifier.background(Color(s.color)),
+                when {
+                    s.liquidGlass -> Modifier.glassSurface(
+                        CircleShape,
+                        if (oneUi) palette.surfaceBottom else Color(s.color),
+                        s.glassOpacity / 100f,
+                        tilt = { tilt.value },
+                    )
+                    oneUi -> Modifier.oneUiSurface(CircleShape, palette)
+                    else -> Modifier.background(Color(s.color))
+                },
             )
-            .then(if (s.outline) Modifier.border(s.outlineWidth.dp, Color(s.outlineColor), CircleShape) else Modifier)
+            .then(
+                if (s.outline) Modifier.border(s.outlineWidth.dp, if (oneUi) palette.accent else Color(s.outlineColor), CircleShape)
+                else Modifier,
+            )
             .clickable {
                 haptic()
                 Controls.expand(act.id)

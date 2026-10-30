@@ -10,7 +10,7 @@
 
 Уведомления с ответом · навигатор · оплата · музыка с текстом песен · звонки · таймеры · загрузки · зарядка · фонарик · системные события
 
-[![Версия 1.6.2](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.6.2-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
+[![Версия 1.6.5](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.6.5-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
 [![Загрузки](https://img.shields.io/github/downloads/Akira9021/Dynamic-Island-/total?style=for-the-badge&label=%D0%B7%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8&color=34C759&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases)
 [![Сборка](https://img.shields.io/github/actions/workflow/status/Akira9021/Dynamic-Island-/android.yml?style=for-the-badge&label=%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/actions)
 <br>
@@ -18,6 +18,11 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
 ![Без рекламы](https://img.shields.io/badge/%D1%80%D0%B5%D0%BA%D0%BB%D0%B0%D0%BC%D1%8B-0-black?style=flat-square)
+
+> [!NOTE]
+> Это форк с интерфейсом под Samsung One UI. На Samsung остров сам включается в стиле One UI
+> и берёт акцент из текущей темы телефона (палитра One UI / Material You, затем обои). Если цвет
+> темы прочитать нельзя — остров становится серым. Вид меняется в «Оформление → Цвет капсулы → Вид острова».
 
 <img src="docs/preview.png" width="820" alt="Свёрнутые и раскрытые виды острова: покой, музыка, зарядка, таймер, звонок, плеер с текстом песни, входящий вызов, наушники">
 
@@ -29,16 +34,16 @@
 
 ---
 
-## ✨ Что нового в 1.6.2
+## ✨ Что нового в 1.6.5
 
-- 📏 **Остров меньше**, ширина и высота снова настраиваются — «Оформление → Положение и размер»
-- 💧 **«Как вырез»** для камеры-капли
-- 🎬 **Мягче анимации**, «Упругость» прямо в «Оформлении»
-- 🔒 **Замок** на экране блокировки
-- 🎵 **«Нравится»** в плеере — Яндекс Музыка и др.
-- 💳 **«Оплачено» надёжнее** и «Диагностика оплаты»
-- 🛠️ **«Чтобы остров не закрывался»** — на главной
-- ⬇️ Обновления проверяются **раз в 3 часа**
+- 🎬 **«Жидкое раскрытие»**: содержимое растёт вместе с островом — «Оформление → Анимации»
+- 🎛️ **Свои кнопки** в раскрытом острове или только часы — «Функции → Поведение»
+- 📸 **Скриншот без острова** — кнопкой или жестом
+- 🏦 **Банк не пускает?** Плитка «Остров» в шторке выключает остров на время
+- 📞 **Звонки** на любом языке телефона, входящий смахивается вверх
+- 🫧 **Плавнее свёрнутый остров**: пузырь выходит каплей, эквалайзер — 60 кадров
+- 📌 **«Не выгружать остров»** и **«По расписанию»**
+- 🐞 Исправлены обложка прошлого трека, «будильник» от календарей и «00:00»
 
 <div align="center">
 <img src="docs/app.png" width="820" alt="Приложение: «Главная» с пунктом «Чтобы остров не закрывался», «Оформление» с «Упругостью», «Положение и размер» с шириной, высотой и «Как вырез», «Работа в фоне» и «Проверка»">
