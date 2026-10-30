@@ -19,6 +19,11 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
 ![No ads](https://img.shields.io/badge/ads-0-black?style=flat-square)
 
+> [!NOTE]
+> This fork adds a Samsung One UI look. On Samsung the island starts in One UI style and takes its accent
+> from the current phone theme (One UI / Material You palette, then the wallpaper). If the theme color can't
+> be read, the island turns gray. Change it in Appearance → Capsule color → Island look.
+
 <img src="docs/preview.en.png" width="820" alt="Collapsed and expanded island views: idle, music, charging, timer, call, the player with lyrics, incoming call, headphones">
 
 ### [⬇️ Download the latest version](https://github.com/Akira9021/Dynamic-Island-/releases/latest)

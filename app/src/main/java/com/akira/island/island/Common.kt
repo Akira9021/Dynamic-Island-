@@ -80,6 +80,9 @@ import com.akira.island.data.AccentMode
 import com.akira.island.data.ExpandStyle
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
+import com.akira.island.ui.isOneUi
+import com.akira.island.ui.themeAccent
+import com.akira.island.ui.themePalette
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import com.akira.island.core.IslandBus
@@ -560,19 +563,15 @@ fun rememberAccent(s: IslandSettings, adaptive: Color? = null): Color {
 }
 
 fun resolveAccent(context: android.content.Context, s: IslandSettings, adaptive: Color?): Color = when (s.accentMode) {
-    AccentMode.DEFAULT -> Tints.Lavender
+    // В стиле One UI кнопки по умолчанию тоже окрашены темой телефона
+    AccentMode.DEFAULT -> if (s.look.isOneUi()) themePalette(context, s.look).accent else Tints.Lavender
     AccentMode.CUSTOM -> Color(s.accentColor)
     AccentMode.ADAPTIVE -> adaptive ?: Tints.Lavender
     AccentMode.SYSTEM -> systemAccent(context) ?: Tints.Lavender
 }
 
-/** Акцент обоев (Material You) — светлый тон 200, хорошо читается на чёрном. Только Android 12+. */
-fun systemAccent(context: android.content.Context): Color? =
-    if (android.os.Build.VERSION.SDK_INT >= 31) {
-        runCatching { Color(context.getColor(android.R.color.system_accent1_200)) }.getOrNull()
-    } else {
-        null
-    }
+/** Акцент темы — из палитры One UI/Material You или из обоев, светлый тон для тёмной капсулы. */
+fun systemAccent(context: android.content.Context): Color? = themeAccent(context)
 
 /** Чем рисовать поверх [accent]: чёрным на светлом цвете, белым на тёмном. */
 fun onAccent(accent: Color): Color = if (accent.luminance() > 0.5f) Color(0xFF1B1830) else Color.White

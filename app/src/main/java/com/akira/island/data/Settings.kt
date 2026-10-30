@@ -72,6 +72,24 @@ enum class QuickAction(private val ru: String, private val en: String, private v
     val short: String get() = tr(shortRu, shortEn)
 }
 
+/** Как выглядит остров: как на iPhone или в духе Samsung One UI. */
+@Serializable
+enum class IslandLook(
+    private val ru: String,
+    private val en: String,
+    private val hintRu: String,
+    private val hintEn: String,
+) {
+    AUTO("Как на телефоне", "Match the phone", "На Samsung — One UI, на других — как на iPhone", "One UI on Samsung, iPhone style elsewhere"),
+    ONE_UI("One UI · цвет темы", "One UI · theme color", "Скругления и цвет нынешней темы Samsung; тема недоступна — серый", "Samsung One UI shapes and the current theme color; gray if unavailable"),
+    ONE_UI_GRAY("One UI · серый", "One UI · gray", "Тот же стиль, но всегда серый — без цвета темы", "The same style, always gray — no theme color"),
+    IPHONE("Как на iPhone", "iPhone style", "Чёрная капсула, как в исходном приложении", "The original black capsule"),
+    ;
+
+    val title: String get() = tr(ru, en)
+    val hint: String get() = tr(hintRu, hintEn)
+}
+
 /** Откуда берётся цвет кнопок «Ответить», «Пометить прочитанным» и отправки в карточке уведомления. */
 @Serializable
 enum class AccentMode(private val ru: String, private val en: String, private val hintRu: String, private val hintEn: String) {
@@ -173,6 +191,9 @@ data class IslandSettings(
     val activeWidth: Int = 40,
     // Нет в старых настройках → 1, тогда размеры переносятся на новые
     val layoutVersion: Int = 1,
+
+    /** Внешний вид острова: исходный iPhone или One UI с цветом темы Samsung (AUTO — по производителю) */
+    val look: IslandLook = IslandLook.AUTO,
 
     // Цвета
     val color: Long = 0xFF000000,

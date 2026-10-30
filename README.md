@@ -19,6 +19,11 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
 ![Без рекламы](https://img.shields.io/badge/%D1%80%D0%B5%D0%BA%D0%BB%D0%B0%D0%BC%D1%8B-0-black?style=flat-square)
 
+> [!NOTE]
+> Это форк с интерфейсом под Samsung One UI. На Samsung остров сам включается в стиле One UI
+> и берёт акцент из текущей темы телефона (палитра One UI / Material You, затем обои). Если цвет
+> темы прочитать нельзя — остров становится серым. Вид меняется в «Оформление → Цвет капсулы → Вид острова».
+
 <img src="docs/preview.png" width="820" alt="Свёрнутые и раскрытые виды острова: покой, музыка, зарядка, таймер, звонок, плеер с текстом песни, входящий вызов, наушники">
 
 ### [⬇️ Скачать последнюю версию](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
