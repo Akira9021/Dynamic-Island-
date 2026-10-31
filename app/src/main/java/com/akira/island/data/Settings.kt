@@ -88,13 +88,14 @@ enum class AccentMode(private val ru: String, private val en: String, private va
 /** Язык приложения и острова. «Как в системе» — русский, если телефон на русском, иначе английский. */
 @Serializable
 enum class AppLanguage {
-    SYSTEM, RU, EN;
+    SYSTEM, RU, EN, ID;
 
     val title: String
         get() = when (this) {
             SYSTEM -> tr("Как в системе", "System default")
             RU -> "Русский"
             EN -> "English"
+            ID -> "Bahasa Indonesia"
         }
 }
 
