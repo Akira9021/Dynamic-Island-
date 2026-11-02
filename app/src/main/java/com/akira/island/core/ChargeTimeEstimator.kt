@@ -23,7 +23,7 @@ class ChargeTimeEstimator private constructor(
     
     // Moving average window for current readings (~60 seconds at 10s intervals = 6 samples)
     private val currentSamples = ConcurrentLinkedQueue<Long>()
-    private const val MAX_CURRENT_SAMPLES = 6
+    private val MAX_CURRENT_SAMPLES = 6
     
     // Exponential moving average for per-percent charge times by plug type
     // Key: plug type (BatteryManager.BATTERY_PLUGGED_*), Value: array of seconds per percent (1-100)
@@ -36,11 +36,11 @@ class ChargeTimeEstimator private constructor(
     private var isCharging = false
     
     // Constants
-    private const val MAX_PLAUSIBLE_MS = 24 * 60 * 60 * 1000L // 24 hours
-    private const val CURRENT_SAMPLE_INTERVAL_MS = 10_000L // 10 seconds
-    private const val UPDATE_THROTTLE_MS = 30_000L // 30 seconds
-    private const val MIN_LEVEL_FOR_CAPACITY = 5 // Minimum battery level to estimate full capacity
-    private const val SLOWDOWN_START_PERCENT = 80 // Above this, charging slows down (constant voltage phase)
+    private val MAX_PLAUSIBLE_MS = 24 * 60 * 60 * 1000L // 24 hours
+    private val CURRENT_SAMPLE_INTERVAL_MS = 10_000L // 10 seconds
+    private val UPDATE_THROTTLE_MS = 30_000L // 30 seconds
+    private val MIN_LEVEL_FOR_CAPACITY = 5 // Minimum battery level to estimate full capacity
+    private val SLOWDOWN_START_PERCENT = 80 // Above this, charging slows down (constant voltage phase)
     
     // Slowdown factor: 1.0 up to 80%, then increases to ~2.0 at 100%
     private val slowdownFactors = DoubleArray(101).apply {
@@ -99,7 +99,7 @@ class ChargeTimeEstimator private constructor(
         }
         
         // Sample current for moving average (only while charging and visible)
-        if (currentNow != Long.MIN_VALUE && currentNow != Integer.MIN_VALUE && currentNow != 0L) {
+        if (currentNow != Long.MIN_VALUE && currentNow != Integer.MIN_VALUE.toLong() && currentNow != 0L) {
             val normalizedCurrent = normalizeCurrent(currentNow)
             if (normalizedCurrent > 0) {
                 currentSamples.add(normalizedCurrent)
@@ -132,7 +132,7 @@ class ChargeTimeEstimator private constructor(
         
         val estimate = computeEstimate(level, plugged, chargeCounter)
         lastEstimateUpdate = now
-        lastEstimatedMinutes = estimate?.minutes ?: -1
+        lastEstimatedMinutes = estimate ?: -1
         return estimate?.let { ChargeEstimate(it, false) }
     }
     
@@ -152,12 +152,10 @@ class ChargeTimeEstimator private constructor(
         if (Build.VERSION.SDK_INT >= 28) {
             val bmEstimate = batteryManager?.computeChargeTimeRemaining()
             if (bmEstimate != null && bmEstimate > 0 && bmEstimate < MAX_PLAUSIBLE_MS) {
-                if (BuildConfig.DEBUG) Log.d("ChargeTimeEstimator", "BatteryManager estimate: ${bmEstimate}ms")
-                return (bmEstimate / 60000).coerceAtLeast(1)
+                Log.d("ChargeTimeEstimator", "BatteryManager estimate: ${bmEstimate}ms")
+                return (bmEstimate / 60000).coerceAtLeast(1).toInt()
             }
-            if (BuildConfig.DEBUG && (bmEstimate == null || bmEstimate <= 0 || bmEstimate >= MAX_PLAUSIBLE_MS)) {
-                Log.d("ChargeTimeEstimator", "BatteryManager returned implausible value: $bmEstimate")
-            }
+            Log.d("ChargeTimeEstimator", "BatteryManager returned implausible value: $bmEstimate")
         }
         
         // 2. Fallback: current + charge counter with moving average
@@ -280,7 +278,7 @@ class ChargeTimeEstimator private constructor(
                     learnedTimes[k.toInt()] = v.toDoubleArray()
                 }
             } catch (e: Exception) {
-                if (BuildConfig.DEBUG) Log.w("ChargeTimeEstimator", "Failed to parse learned times", e)
+                Log.w("ChargeTimeEstimator", "Failed to parse learned times", e)
             }
         }
     }
