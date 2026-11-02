@@ -226,6 +226,8 @@ data class IslandSettings(
     // по умолчанию меньше; ширина и высота настраиваются в «Положении и размере»
     val width: Int = 104,
     val height: Int = 31,
+    /** Скругление углов острова в % от обычного (#33): 100 — как было, меньше — углы острее, под экран телефона */
+    val cornerPercent: Int = 100,
     val offsetX: Int = 0,
     val offsetY: Int = 11,
     /**
