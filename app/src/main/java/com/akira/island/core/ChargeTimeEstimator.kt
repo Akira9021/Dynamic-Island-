@@ -5,6 +5,7 @@ import android.os.BatteryManager
 import android.util.Log
 import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.abs
 
 /**
  * Estimates remaining charge time using multiple strategies:
@@ -284,8 +285,8 @@ class ChargeTimeEstimator private constructor(
     }
     
     private fun saveLearnedTimes() {
-        val serializable = learnedTimes.mapValues { (_, v) -> v.toList() }
-        val json = Json.encodeToString(serializable)
+        val serializable = learnedTimes.entries.associate { (k, v) -> k.toString() to v.toList() }
+        val json = Json.encodeToString<Map<String, List<Double>>>(serializable)
         prefs.edit().putString("learned_times", json).apply()
     }
     
