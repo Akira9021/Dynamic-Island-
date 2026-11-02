@@ -610,21 +610,48 @@ private fun IslandBody(
                     onLongPress = onLong,
                 )
             }
-            .pointerInput(Unit) {
+              .pointerInput(Unit) {
                 val threshold = 36.dp.toPx()
                 val side = 56.dp.toPx()
                 var dx = 0f
                 var dy = 0f
+                // Смахивание вправо — только на той плашке, на которой начался жест
+                var startId: Any? = null
+                var startTime = 0L
+                fun onNotice(act: Act) =
+                    act is Act.NoticeA && act.id == startId && !isExpanded && IslandBus.reply.value == null
                 detectDragGestures(
                     onDragStart = {
                         dx = 0f
                         dy = 0f
+                        startId = current.id
+                        startTime = SystemClock.elapsedRealtime()
                     },
                     onDragEnd = {
                         scope.launch { pull.animateTo(0f, spring(dampingRatio = 0.45f)) }
                         val vertical = abs(dy) > abs(dx)
                         val act = current
+                        // Смахнули вправо: далеко или быстрым щелчком
+                        val swipedAway = onNotice(act) && !vertical && dx > side &&
+                            (dx > size.width * 0.3f || SystemClock.elapsedRealtime() - startTime < 300)
+                        val away = conf.screenWidthDp.dp.toPx()
+                        if (!swipedAway && noticeDrag.value != 0f) {
+                            scope.launch { noticeDrag.animateTo(0f, spring(dampingRatio = 0.6f)) }
+                        }
                         when {
+                            swipedAway -> {
+                                haptic()
+                                val key = (act as? Act.NoticeA)?.n?.message?.key
+                                scope.launch {
+                                    noticeDrag.animateTo(away, tween(160))
+                                    IslandBus.notice.value = null
+                                    if (key != null) NotifListener.dismiss(key)
+                                    // Остров возвращается на место уже невидимым и проявляется со следующим содержимым
+                                    noticeAlpha.snapTo(0f)
+                                    noticeDrag.snapTo(0f)
+                                    noticeAlpha.animateTo(1f, tween(220))
+                                }
+                            }
                             !isExpanded && vertical && dy > threshold && settings.swipeExpand && !act.transient &&
                                 (act !is Act.Idle || settings.idleExpand) -> {
                                 haptic()
@@ -653,13 +680,20 @@ private fun IslandBody(
                             }
                         }
                     },
-                    onDragCancel = { scope.launch { pull.animateTo(0f) } },
+                    onDragCancel = {
+                        scope.launch { pull.animateTo(0f) }
+                        scope.launch { noticeDrag.animateTo(0f, spring(dampingRatio = 0.6f)) }
+                    },
                     onDrag = { change, amount ->
                         change.consume()
                         dx += amount.x
                         dy += amount.y
                         if (!isExpanded && settings.swipeExpand) {
                             scope.launch { pull.snapTo((dy / (threshold * 3)).coerceIn(0f, 1f)) }
+                        }
+                        // Плашка уведомления едет за пальцем вправо
+                        if (onNotice(current) && abs(dx) > abs(dy)) {
+                            scope.launch { noticeDrag.snapTo(dx.coerceAtLeast(0f)) }
                         }
                     },
                 )
