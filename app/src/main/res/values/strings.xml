@@ -3,5 +3,12 @@
     <string name="app_name">Dynamic Island</string>
     <string name="a11y_label">Dynamic Island</string>
     <string name="tile_label">Island</string>
-    <string name="a11y_desc">Shows a Dynamic Island–style capsule over the camera: music, timers, download progress, the flashlight and system events. The service sees which app is open to hide the player and show payments. The screen is read only in navigation apps (2GIS, Yandex Navigator, Maps and others), the Clock app and payment apps while they are open: in navigation apps — the distance to the next turn, the street, the arrival time and the arrow direction; in Clock — the timer and stopwatch time; in payment apps (Mir Pay, T-Pay, Google Wallet and others) — the phone payment screen and the amount, to show “Hold near reader” and then “Paid”. What is read stays on the phone; only the song title and artist go online, to find lyrics.</string>
+    <string name="a11y_desc">Shows a Dynamic Island–style capsule over the camera: music, timers, download progress, the flashlight and system events. The service sees which app is open to hide the player and show payments. The screen is read only in navigation apps (2GIS, Yandex Navigator, Maps and others), the Clock app and payment apps while they are open: in navigation apps — the distance to the next turn, the street, the arrival time and the arrow direction; in Clock — the timer and stopwatch time; in payment apps (Mir Pay, T-Pay, Google Wallet and others) — the phone payment screen and the amount, to show "Hold near reader" and then "Paid". What is read stays on the phone; only the song title and artist go online, to find lyrics.</string>
+    
+    <!-- Charge time -->
+    <string name="charge_time_format_hours_minutes">%dh %dm</string>
+    <string name="charge_time_format_minutes">%dm</string>
+    <string name="charge_time_format_less_minute"><1m</string>
+    <string name="charge_time_show">Show charge time</string>
+    <string name="charge_time_show_summary">Show estimated time to full charge instead of percentage</string>
 </resources>

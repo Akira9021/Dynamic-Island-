@@ -865,6 +865,7 @@ private fun Bubble(act: Act, s: IslandSettings) {
     val haptic = rememberHaptic()
     val tilt = IslandBus.glassTilt.collectAsState()
     val now = rememberNow(500, active = act is Act.TimerA)
+    val wallNow = rememberWallNow(500)
     Box(
         Modifier
             .size(h)
@@ -902,7 +903,19 @@ private fun Bubble(act: Act, s: IslandSettings) {
             }
             is Act.CallA -> Icon(Ios.call, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
-            is Act.ChargingA -> Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
+            is Act.ChargingA -> {
+                val b = act.b
+                val chargeStart = b.chargeStartTimeElapsedRealtime
+                val remainingMinutes = b.chargeTimeMinutes
+                if (chargeStart > 0 && remainingMinutes != null && remainingMinutes > 0) {
+                    val elapsedMs = (SystemClock.elapsedRealtime() - chargeStart).coerceAtLeast(0)
+                    val remainingMs = remainingMinutes * 60_000L
+                    val totalMs = elapsedMs + remainingMs
+                    val fraction = if (totalMs > 0) (elapsedMs.toFloat() / totalMs).coerceIn(0f, 1f) else 0f
+                    ProgressRing(fraction, Tints.Green, Modifier.size(inner), stroke = 2.5.dp)
+                }
+                Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.5f))
+            }
             else -> Unit
         }
     }

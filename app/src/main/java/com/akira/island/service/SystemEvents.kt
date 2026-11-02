@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.akira.island.core.BatteryInfo
+import com.akira.island.core.ChargeTimeEstimator
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Notice
@@ -35,6 +36,8 @@ import com.akira.island.R
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Ios
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /** Системные события, которые остров показывает короткими уведомлениями. */
@@ -57,6 +60,8 @@ class SystemEvents(private val context: Context) {
     private val wifiNetworks = HashSet<Network>()
     /** Когда подключили или отключили зарядку — кабель от компьютера не должен давать вторую плашку «USB» */
     private var lastPowerChange = 0L
+    /** Время начала зарядки (elapsedRealtime), 0 если не заряжается */
+    private var chargeStartTime = 0L
 
     /** Первые секунды после запуска система присылает текущее состояние — это не события. */
     private val warmingUp get() = SystemClock.elapsedRealtime() - startedAt < 3000
@@ -324,7 +329,41 @@ class SystemEvents(private val context: Context) {
         val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
         val charging = plugged != 0 &&
             (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
-        IslandBus.battery.value = BatteryInfo(level, charging)
+        
+        // Get charge counter and current for the estimator
+        val chargeCounter = intent.getLongExtra(BatteryManager.EXTRA_CHARGE_COUNTER, Long.MIN_VALUE)
+        val currentNow = intent.getLongExtra(BatteryManager.EXTRA_CURRENT_NOW, Long.MIN_VALUE)
+
+        // Track charge start time
+        val now = SystemClock.elapsedRealtime()
+        if (charging && chargeStartTime == 0) {
+            chargeStartTime = now
+        } else if (!charging) {
+            chargeStartTime = 0
+        }
+        
+        // Compute charge time estimate asynchronously
+        var chargeTimeMinutes: Int? = null
+        if (charging) {
+            chargeTimeMinutes = ChargeTimeEstimator.getInstance(context).onBatteryChanged(
+                level = level,
+                status = status,
+                plugged = plugged,
+                chargeCounter = chargeCounter,
+                currentNow = currentNow,
+            )?.minutes
+        } else {
+            // Reset estimator when not charging
+            ChargeTimeEstimator.getInstance(context).onBatteryChanged(
+                level = level,
+                status = status,
+                plugged = plugged,
+                chargeCounter = chargeCounter,
+                currentNow = currentNow,
+            )
+        }
+        
+        IslandBus.battery.value = BatteryInfo(level, charging, chargeTimeMinutes, chargeStartTime)
 
         if (charging || level > 5) {
             lowWarned = false
