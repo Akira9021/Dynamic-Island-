@@ -497,6 +497,9 @@ private fun IslandBody(
     }
     // Оттягивание вниз пальцем
     val pull = remember { Animatable(0f) }
+        // Смахивание уведомления вправо: насколько плашка уехала и насколько она видна
+    val noticeDrag = remember { Animatable(0f) }
+    val noticeAlpha = remember { Animatable(1f) }
 
     // Liquid Glass: при смене содержимого по стеклу пробегает блик, при наклоне телефона блики сдвигаются
     val tilt = IslandBus.glassTilt.collectAsState()
