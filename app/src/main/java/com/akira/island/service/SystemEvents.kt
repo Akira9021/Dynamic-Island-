@@ -161,6 +161,7 @@ class SystemEvents(private val context: Context) {
 
             Intent.ACTION_POWER_CONNECTED -> {
                 lastPowerChange = SystemClock.elapsedRealtime()
+                refreshBattery()
                 val level = IslandBus.battery.value.level
                 notice(
                     s.evChargeStart,
@@ -171,6 +172,7 @@ class SystemEvents(private val context: Context) {
 
             Intent.ACTION_POWER_DISCONNECTED -> {
                 lastPowerChange = SystemClock.elapsedRealtime()
+                refreshBattery()
                 val level = IslandBus.battery.value.level
                 notice(
                     s.evChargeStop,
@@ -179,7 +181,10 @@ class SystemEvents(private val context: Context) {
                 )
             }
 
-            Intent.ACTION_USER_PRESENT -> onUnlocked()
+            Intent.ACTION_USER_PRESENT -> {
+                refreshBattery()
+                onUnlocked()
+            }
 
             Intent.ACTION_SCREEN_OFF -> {
                 IslandBus.screenOn.value = false
@@ -193,6 +198,9 @@ class SystemEvents(private val context: Context) {
 
             Intent.ACTION_SCREEN_ON -> {
                 IslandBus.screenOn.value = true
+                // Пока экран выключен, прошивка может придерживать ACTION_BATTERY_CHANGED, и остров
+                // показывал старый заряд (#29) — берём текущий сразу при включении
+                refreshBattery()
                 IslandBus.locked.value = isLocked()
                 IslandBus.keyguard.value = isKeyguard()
             }
@@ -319,6 +327,12 @@ class SystemEvents(private val context: Context) {
         val filter = notifications?.currentInterruptionFilter ?: return false
         return filter != NotificationManager.INTERRUPTION_FILTER_ALL &&
             filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
+    }
+
+    /** Текущий заряд из последнего (sticky) ACTION_BATTERY_CHANGED, не дожидаясь следующего. */
+    private fun refreshBattery() {
+        runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }
+            .getOrNull()?.let(::onBattery)
     }
 
     private fun onBattery(intent: Intent) {

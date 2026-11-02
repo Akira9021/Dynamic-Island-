@@ -769,15 +769,16 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
             }
             if (battery.level >= 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (battery.charging) Ios.batteryCharging else Ios.batteryFull, null,
-                        tint = when {
-                            battery.charging -> Tints.Green
-                            battery.level <= 15 -> Tints.Red
-                            else -> Color.White
-                        },
-                        modifier = Modifier.size(22.dp),
-                    )
+                    if (battery.charging) {
+                        Icon(Ios.batteryCharging, null, tint = Tints.Green, modifier = Modifier.size(22.dp))
+                    } else {
+                        // Заливка по уровню заряда, а не всегда полная батарейка (#31)
+                        BatteryGlyph(
+                            battery.level,
+                            if (battery.level <= 15) Tints.Red else Color.White,
+                            Modifier.size(24.dp, 11.dp),
+                        )
+                    }
                     Spacer(Modifier.width(4.dp))
                     Text("${battery.level}%", color = Color.White, fontSize = 16.sp, style = Digits)
                 }
