@@ -532,7 +532,11 @@ private fun IslandBody(
                 val bump = Egg.bump() * PayFx.pop.floatValue
                 scaleX = jellyX.value * (1f + 0.03f * pull.value) * bump
                 scaleY = jellyY.value * (1f + 0.08f * pull.value) * bump
-                translationX = shake.value.dp.toPx()
+                val nd = noticeDrag.value
+                translationX = shake.value.dp.toPx() + nd
+                // Уезжая вправо, плашка тает
+                val dragFade = if (nd > 0f) 1f - (nd / (size.width * 0.9f).coerceAtLeast(1f)).coerceIn(0f, 1f) else 1f
+                alpha = noticeAlpha.value * dragFade
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
