@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Height
+import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.SwapVert
@@ -114,8 +115,12 @@ fun SizeScreen(onBack: () -> Unit) {
                 GroupStepSlider(Pos.First, Icons.Rounded.Straighten, tr("Ширина", "Width"), s.width, 50..400, color = Tile.Purple) { v ->
                     set { copy(width = v) }
                 }
-                GroupStepSlider(Pos.Last, Icons.Rounded.Height, tr("Высота", "Height"), s.height, 18..90, color = Tile.Pink) { v ->
+                GroupStepSlider(Pos.Middle, Icons.Rounded.Height, tr("Высота", "Height"), s.height, 18..90, color = Tile.Pink) { v ->
                     set { copy(height = v) }
+                }
+                GroupStepSlider(Pos.Last, Icons.Rounded.RoundedCorner, tr("Скругление", "Corner rounding"), s.cornerPercent, 0..100,
+                    unit = "%", color = Tile.Indigo) { v ->
+                    set { copy(cornerPercent = v) }
                 }
             }
         }
@@ -141,4 +146,5 @@ fun SizeScreen(onBack: () -> Unit) {
 
 /** Всё, что настраивается на этом экране, — из [from]: для «назад» и «Сбросить». */
 private fun IslandSettings.withPlacement(from: IslandSettings) =
-    copy(offsetX = from.offsetX, offsetY = from.offsetY, width = from.width, height = from.height, notch = from.notch)
+    copy(offsetX = from.offsetX, offsetY = from.offsetY, width = from.width, height = from.height, notch = from.notch,
+        cornerPercent = from.cornerPercent)

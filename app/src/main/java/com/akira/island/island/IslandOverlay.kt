@@ -469,7 +469,7 @@ private fun IslandBody(
         primary is Act.CallA && primary.c.incoming -> callHeight(s) / 2
         primary is Act.Idle -> h / 2
         else -> activeHeight(s) / 2
-    }
+    } * (s.cornerPercent.coerceIn(0, 100) / 100f)
     // Скругление читается при рисовании: кадр раскрытия перерисовывает рамку и стекло, а не пересобирает остров
     val corner = animateDpAsState(cornerTarget, islandSpec(s), label = "corner")
     val shape = remember(corner, s.notch) { AnimatedIslandShape(corner, s.notch) }
