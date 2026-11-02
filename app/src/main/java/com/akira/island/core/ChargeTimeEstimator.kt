@@ -3,6 +3,7 @@ package com.akira.island.core
 import android.os.Build
 import android.os.BatteryManager
 import android.util.Log
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
@@ -286,7 +287,7 @@ class ChargeTimeEstimator private constructor(
     
     private fun saveLearnedTimes() {
         val serializable = learnedTimes.entries.associate { (k, v) -> k.toString() to v.toList() }
-        val json = Json.encodeToString<Map<String, List<Double>>>(serializable)
+        val json = Json.encodeToString(serializable)
         prefs.edit().putString("learned_times", json).apply()
     }
     
