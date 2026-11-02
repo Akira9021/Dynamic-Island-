@@ -329,19 +329,21 @@ class SystemEvents(private val context: Context) {
         val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
         val charging = plugged != 0 &&
             (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
-        
-        // Get charge counter and current for the estimator
-        val chargeCounter = intent.getLongExtra(BatteryManager.EXTRA_CHARGE_COUNTER, Long.MIN_VALUE)
-        val currentNow = intent.getLongExtra(BatteryManager.EXTRA_CURRENT_NOW, Long.MIN_VALUE)
+
+        // Charge counter and current are read via BatteryManager.getLongProperty,
+        // they are not passed as extras in the ACTION_BATTERY_CHANGED intent
+        val bm = context.getSystemService(BatteryManager::class.java)
+        val chargeCounter = bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: Long.MIN_VALUE
+        val currentNow = bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: Long.MIN_VALUE
 
         // Track charge start time
         val now = SystemClock.elapsedRealtime()
-        if (charging && chargeStartTime == 0) {
+        if (charging && chargeStartTime == 0L) {
             chargeStartTime = now
         } else if (!charging) {
-            chargeStartTime = 0
+            chargeStartTime = 0L
         }
-        
+
         // Compute charge time estimate asynchronously
         var chargeTimeMinutes: Int? = null
         if (charging) {
