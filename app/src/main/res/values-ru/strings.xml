@@ -8,7 +8,7 @@
     <!-- Время зарядки -->
     <string name="charge_time_format_hours_minutes">%d ч %d мин</string>
     <string name="charge_time_format_minutes">%d мин</string>
-    <string name="charge_time_format_less_minute"><1 мин</string>
+    <string name="charge_time_format_less_minute">&lt;1 мин</string>
     <string name="charge_time_show">Показывать время зарядки</string>
     <string name="charge_time_show_summary">Показывать оценочное время до полной зарядки вместо процента</string>
 </resources>

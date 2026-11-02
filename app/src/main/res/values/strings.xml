@@ -8,7 +8,7 @@
     <!-- Charge time -->
     <string name="charge_time_format_hours_minutes">%dh %dm</string>
     <string name="charge_time_format_minutes">%dm</string>
-    <string name="charge_time_format_less_minute"><1m</string>
+    <string name="charge_time_format_less_minute">&lt;1m</string>
     <string name="charge_time_show">Show charge time</string>
     <string name="charge_time_show_summary">Show estimated time to full charge instead of percentage</string>
 </resources>
