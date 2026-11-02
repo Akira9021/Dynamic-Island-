@@ -25,6 +25,9 @@ object Controls {
     var torchOff: () -> Unit = {}
     var torchLevel: (Int) -> Unit = {}
 
+    // Подставляет NotifListener, пока доступ к уведомлениям включён: убирает уведомление из шторки по ключу
+    var cancelNotification: (String) -> Unit = {}
+
     fun expand(id: String) {
         IslandBus.focus.value = id
         IslandBus.expanded.value = true

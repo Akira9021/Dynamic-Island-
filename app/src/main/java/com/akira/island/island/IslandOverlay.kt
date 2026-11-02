@@ -644,6 +644,12 @@ private fun IslandBody(
                             !isExpanded && vertical && dy < -threshold && act is Act.NoticeA -> {
                                 IslandBus.notice.value = null
                             }
+                            // Смахнуть сообщение вбок — удалить его совсем, и из шторки тоже (#36)
+                            !isExpanded && !vertical && abs(dx) > side && act is Act.NoticeA && act.n.message != null -> {
+                                haptic()
+                                Controls.cancelNotification(act.n.message.key)
+                                IslandBus.notice.value = null
+                            }
                             // Подсказку оплаты тоже можно смахнуть
                             !isExpanded && vertical && dy < -threshold && act is Act.PayA -> PayMonitor.clearReady()
                             // И входящий звонок, если не хочется отвечать: звонок идёт дальше, но остров свободен

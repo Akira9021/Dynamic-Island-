@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import com.akira.island.core.CallInfo
 import com.akira.island.core.ChronoInfo
+import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.LiveKind
 import com.akira.island.core.ProgressInfo
@@ -27,6 +28,7 @@ class NotifListener : NotificationListenerService() {
     override fun onListenerConnected() {
         SettingsRepo.init(this)
         media = MediaMonitor(applicationContext).also { it.start() }
+        Controls.cancelNotification = { key -> runCatching { cancelNotification(key) } }
         // Уже висящие уведомления разбираем без показа сообщений — они не новые
         runCatching { activeNotifications?.forEach { NotificationParser.onPosted(this, it, initial = true) } }
     }
@@ -34,6 +36,7 @@ class NotifListener : NotificationListenerService() {
     override fun onListenerDisconnected() {
         media?.stop()
         media = null
+        Controls.cancelNotification = {}
         IslandBus.progress.value = emptyMap()
         IslandBus.chrono.value = emptyMap()
         IslandBus.calls.value = emptyMap()
