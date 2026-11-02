@@ -25,6 +25,7 @@ class NotifListener : NotificationListenerService() {
     private var media: MediaMonitor? = null
 
     override fun onListenerConnected() {
+        instance = this
         SettingsRepo.init(this)
         media = MediaMonitor(applicationContext).also { it.start() }
         // Уже висящие уведомления разбираем без показа сообщений — они не новые
@@ -32,6 +33,7 @@ class NotifListener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        if (instance === this) instance = null
         media?.stop()
         media = null
         IslandBus.progress.value = emptyMap()
@@ -47,6 +49,22 @@ class NotifListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         NotificationParser.onRemoved(sbn.key)
+    }
+
+    /** Убрать уведомление из шторки, если система разрешает его смахнуть. */
+    private fun cancelIfClearable(key: String) {
+        val sbn = runCatching { getActiveNotifications(arrayOf(key))?.firstOrNull() }.getOrNull() ?: return
+        if (sbn.isClearable) runCatching { cancelNotification(key) }
+    }
+
+    companion object {
+        @Volatile
+        private var instance: NotifListener? = null
+
+        /** Смахнуть уведомление из шторки. Без доступа к уведомлениям ничего не делает. */
+        fun dismiss(key: String) {
+            instance?.cancelIfClearable(key)
+        }
     }
 }
 
