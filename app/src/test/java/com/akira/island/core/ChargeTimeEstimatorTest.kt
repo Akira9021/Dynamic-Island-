@@ -71,7 +71,7 @@ class ChargeTimeEstimatorTest {
     }
 
     @Test
-    fun `slowdownFactors - up to 80% is 1.0`() {
+    fun `slowdownFactors - up to 80 percent is one`() {
         // We can't directly test private field, but we can verify the logic
         // slowdownFactors[0..80] should be 1.0
         for (i in 0..80) {
@@ -81,7 +81,7 @@ class ChargeTimeEstimatorTest {
     }
 
     @Test
-    fun `slowdownFactors - above 80% increases`() {
+    fun `slowdownFactors - above 80 percent increases`() {
         // 81% = 1.05, 90% = 1.5, 100% = 2.0
         assertEquals(1.05, 1.0 + (81 - 80) / 20.0 * 1.0, 0.001)
         assertEquals(1.5, 1.0 + (90 - 80) / 20.0 * 1.0, 0.001)
@@ -91,9 +91,9 @@ class ChargeTimeEstimatorTest {
 
 // Helper function to test normalizeCurrent logic (copied from ChargeTimeEstimator)
 private fun normalizeCurrentForTest(raw: Long): Long {
-    val absValue = kotlin.math.abs(raw)
-    if (absValue == 0L || absValue == Long.MIN_VALUE.toLong() || absValue == Integer.MIN_VALUE.toLong()) {
+    if (raw == 0L || raw == Long.MIN_VALUE || raw == Integer.MIN_VALUE.toLong()) {
         return 0
     }
+    val absValue = kotlin.math.abs(raw)
     return if (absValue < 20000) absValue * 1000 else absValue
 }

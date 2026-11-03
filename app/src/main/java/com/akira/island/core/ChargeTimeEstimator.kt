@@ -1,5 +1,6 @@
 package com.akira.island.core
 
+import android.content.Context
 import android.os.Build
 import android.os.BatteryManager
 import android.util.Log
@@ -7,43 +8,48 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
+import kotlin.math.roundToLong
 
 /**
- * Estimates remaining charge time using multiple strategies:
+ * Estimates remaining charge time using multiple strategies, in order:
  * 1. BatteryManager.computeChargeTimeRemaining() on API 28+ (if plausible)
- * 2. Current + charge counter fallback with moving average
- * 3. Learned per-percent charging times by power source type (AC/USB/Wireless)
- * 
- * This class is pure Kotlin with no Android framework dependencies in its core logic,
- * making it easily unit-testable.
+ * 2. Per-percent times learned from previous charging sessions
+ * 3. Rate observed during the current charging session
+ * 4. Current + charge counter (when the device exposes both)
+ * 5. Typical rate for the power source (AC/USB/Wireless)
+ *
+ * Strategy 5 makes sure an estimate is available as soon as the cable is
+ * plugged in, even on devices that do not expose the charge counter.
  */
 class ChargeTimeEstimator private constructor(
-    private val context: android.content.Context,
+    private val context: Context,
 ) {
     private val batteryManager = context.getSystemService(BatteryManager::class.java)
-    private val prefs = context.getSharedPreferences("charge_time_estimator", android.content.Context.MODE_PRIVATE)
-    
+    private val prefs = context.getSharedPreferences("charge_time_estimator", Context.MODE_PRIVATE)
+
     // Moving average window for current readings (~60 seconds at 10s intervals = 6 samples)
     private val currentSamples = ConcurrentLinkedQueue<Long>()
     private val MAX_CURRENT_SAMPLES = 6
-    
+
     // Exponential moving average for per-percent charge times by plug type
     // Key: plug type (BatteryManager.BATTERY_PLUGGED_*), Value: array of seconds per percent (1-100)
     private val learnedTimes = mutableMapOf<Int, DoubleArray>()
-    
+
     // Last seen battery level and plug type for learning
     private var lastLevel = -1
     private var lastPlugType = 0
-    private var lastChargeStartTime = 0L
+    private var lastLevelChangeTime = 0L
     private var isCharging = false
-    
+
+    // Average seconds per percent observed during the current session
+    private var sessionRateSecs = 0.0
+
     // Constants
     private val MAX_PLAUSIBLE_MS = 24 * 60 * 60 * 1000L // 24 hours
-    private val CURRENT_SAMPLE_INTERVAL_MS = 10_000L // 10 seconds
     private val UPDATE_THROTTLE_MS = 30_000L // 30 seconds
     private val MIN_LEVEL_FOR_CAPACITY = 5 // Minimum battery level to estimate full capacity
     private val SLOWDOWN_START_PERCENT = 80 // Above this, charging slows down (constant voltage phase)
-    
+
     // Slowdown factor: 1.0 up to 80%, then increases to ~2.0 at 100%
     private val slowdownFactors = DoubleArray(101).apply {
         for (i in 0..100) {
@@ -51,14 +57,15 @@ class ChargeTimeEstimator private constructor(
             else 1.0 + (i - SLOWDOWN_START_PERCENT) / 20.0 * 1.0 // Linear from 1.0 to 2.0
         }
     }
-    
+
     private var lastEstimateUpdate = 0L
+    private var lastEstimate: Int? = null
     private var lastEstimatedMinutes = -1
-    
+
     companion object {
         @Volatile private var INSTANCE: ChargeTimeEstimator? = null
-        
-        fun getInstance(context: android.content.Context): ChargeTimeEstimator {
+
+        fun getInstance(context: Context): ChargeTimeEstimator {
             val existing = INSTANCE
             if (existing != null) return existing
             return synchronized(this) {
@@ -66,9 +73,9 @@ class ChargeTimeEstimator private constructor(
             }
         }
     }
-    
+
     /**
-     * Call this when ACTION_BATTERY_CHANGED is received.
+     * Call this when ACTION_BATTERY_CHANGED is received (or periodically while charging).
      * Updates internal state and learns from charging patterns.
      */
     fun onBatteryChanged(
@@ -81,25 +88,32 @@ class ChargeTimeEstimator private constructor(
         val now = System.currentTimeMillis()
         val wasCharging = isCharging
         isCharging = plugged != 0 && (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
-        
+
         // Handle charging start/stop
         if (isCharging && !wasCharging) {
-            // Charging started
-            lastChargeStartTime = now
+            // Charging started: reset the session but keep learned history
             lastLevel = level
             lastPlugType = plugged
+            lastLevelChangeTime = now
+            sessionRateSecs = 0.0
             currentSamples.clear()
+            lastEstimate = null
+            lastEstimatedMinutes = -1
+            lastEstimateUpdate = 0L
             loadLearnedTimes()
         } else if (!isCharging && wasCharging) {
             // Charging stopped - save learned data
             saveLearnedTimes()
             lastLevel = -1
+            sessionRateSecs = 0.0
+            lastEstimate = null
+            lastEstimatedMinutes = -1
         }
-        
+
         if (!isCharging || level <= 0) {
             return null
         }
-        
+
         // Sample current for moving average (only while charging and visible)
         if (currentNow != Long.MIN_VALUE && currentNow != Integer.MIN_VALUE.toLong() && currentNow != 0L) {
             val normalizedCurrent = normalizeCurrent(currentNow)
@@ -110,187 +124,187 @@ class ChargeTimeEstimator private constructor(
                 }
             }
         }
-        
+
         // Learn per-percent charge time when level increases
         if (level > lastLevel && lastLevel > 0) {
-            val elapsedSeconds = (now - lastChargeStartTime) / 1000
+            val elapsedSeconds = (now - lastLevelChangeTime) / 1000.0
             val percentGained = level - lastLevel
             if (percentGained > 0 && elapsedSeconds > 0) {
-                val secsPerPercent = elapsedSeconds.toDouble() / percentGained
+                val secsPerPercent = elapsedSeconds / percentGained
                 // Discard absurd values (more than 1 hour per percent = extremely slow)
-                if (secsPerPercent < 3600) {
+                if (secsPerPercent in 1.0..3600.0) {
+                    sessionRateSecs = if (sessionRateSecs > 0) {
+                        0.4 * secsPerPercent + 0.6 * sessionRateSecs
+                    } else {
+                        secsPerPercent
+                    }
                     learnPercentTime(lastPlugType, level, secsPerPercent)
+                    saveLearnedTimes()
                 }
             }
-            lastChargeStartTime = now
+            lastLevelChangeTime = now
         }
         lastLevel = level
         lastPlugType = plugged
-        
+
         // Throttle estimate updates to ~30 seconds
         if (now - lastEstimateUpdate < UPDATE_THROTTLE_MS) {
             return lastEstimate?.let { ChargeEstimate(it, true) }
         }
-        
+
         val estimate = computeEstimate(level, plugged, chargeCounter)
         lastEstimateUpdate = now
+        lastEstimate = estimate
         lastEstimatedMinutes = estimate ?: -1
         return estimate?.let { ChargeEstimate(it, false) }
     }
-    
-    private var lastEstimate: Int? = null
-    
+
     /**
      * Get the current estimate without updating (for UI).
      */
     fun getCurrentEstimate(): Int? = lastEstimatedMinutes.takeIf { it > 0 }
-    
+
     /**
      * Compute the remaining charge time in minutes.
      * Returns null if not charging or estimate not available.
      */
     private fun computeEstimate(level: Int, plugged: Int, chargeCounter: Long): Int? {
+        if (level <= 0 || level >= 100) return null
+
         // 1. Try BatteryManager API (API 28+)
         if (Build.VERSION.SDK_INT >= 28) {
-            val bmEstimate = batteryManager?.computeChargeTimeRemaining()
+            val bmEstimate = runCatching { batteryManager?.computeChargeTimeRemaining() }.getOrNull()
             if (bmEstimate != null && bmEstimate > 0 && bmEstimate < MAX_PLAUSIBLE_MS) {
                 Log.d("ChargeTimeEstimator", "BatteryManager estimate: ${bmEstimate}ms")
-                return (bmEstimate / 60000).coerceAtLeast(1).toInt()
+                return (bmEstimate / 60_000L).coerceAtLeast(1L).toInt()
             }
             Log.d("ChargeTimeEstimator", "BatteryManager returned implausible value: $bmEstimate")
         }
-        
-        // 2. Fallback: current + charge counter with moving average
-        val avgCurrent = currentSamples.averageOrNull()
-        if (avgCurrent != null && avgCurrent > 0) {
-            // Estimate full capacity from charge counter
-            // chargeCounter is in µAh, level is 0-100
-            if (level >= MIN_LEVEL_FOR_CAPACITY && chargeCounter > 0 && chargeCounter != Long.MIN_VALUE) {
-                val estimatedFullCapacity = (chargeCounter * 100L) / level
-                val remainingCapacity = estimatedFullCapacity - chargeCounter
-                if (remainingCapacity > 0) {
-                    val hours = remainingCapacity.toDouble() / avgCurrent
-                    val minutes = (hours * 60).toLong()
-                    if (minutes > 0 && minutes < 24 * 60) {
-                        // Apply slowdown factor for levels above 80%
-                        val factor = slowdownFactors[level.coerceIn(0, 100)]
-                        val adjusted = (minutes * factor).toLong()
-                        return applyHysteresis(adjusted.coerceAtLeast(1).toInt())
-                    }
-                }
-            }
-        }
-        
-        // 3. Learned per-percent times
+
+        // 2. Learned per-percent times (from current and previous sessions)
         val learned = learnedTimes[plugged]
         if (learned != null) {
             var totalSeconds = 0.0
-            var hasData = false
+            var missingPercent = 0
             for (p in (level + 1)..100) {
-                val t = learned[p]
-                if (t > 0) {
-                    totalSeconds += t
-                    hasData = true
-                } else {
-                    // No learned data for this percent - use fallback with slowdown
-                    val fallbackEstimate = estimateFromCurrentFallback(level, plugged, chargeCounter)
-                    if (fallbackEstimate != null) {
-                        totalSeconds += fallbackEstimate * 60.0
-                        hasData = true
-                    }
-                    break
-                }
+                val t = learned.getOrNull(p) ?: 0.0
+                if (t > 0) totalSeconds += t else missingPercent++
             }
-            if (hasData && totalSeconds > 0) {
-                val minutes = (totalSeconds / 60).toLong()
-                return applyHysteresis(minutes.coerceAtLeast(1).toInt())
+            if (totalSeconds > 0) {
+                val fillRate = currentFallbackRateSecs(level, chargeCounter)
+                    ?: sessionRateSecs.takeIf { it > 0 }
+                    ?: defaultRateSecs(plugged)
+                totalSeconds += missingPercent * fillRate
+                return toMinutes(totalSeconds)
             }
         }
-        
-        // 4. Pure fallback with slowdown factor
-        return estimateFromCurrentFallback(level, plugged, chargeCounter)?.let { applyHysteresis(it) }
-    }
-    
-    private fun estimateFromCurrentFallback(level: Int, plugged: Int, chargeCounter: Long): Int? {
-        val avgCurrent = currentSamples.averageOrNull()
-        if (avgCurrent != null && avgCurrent > 0 && level >= MIN_LEVEL_FOR_CAPACITY && chargeCounter > 0) {
-            val estimatedFullCapacity = (chargeCounter * 100L) / level
-            val remainingCapacity = estimatedFullCapacity - chargeCounter
-            if (remainingCapacity > 0) {
-                val hours = remainingCapacity.toDouble() / avgCurrent
-                val minutes = (hours * 60).toLong()
-                if (minutes > 0 && minutes < 24 * 60) {
-                    val factor = slowdownFactors[level.coerceIn(0, 100)]
-                    return (minutes * factor).toLong().coerceAtLeast(1).toInt()
-                }
-            }
+
+        // 3. Rate observed during this session
+        if (sessionRateSecs > 0) {
+            return toMinutes((100 - level) * sessionRateSecs)
         }
-        return null
+
+        // 4. Current + charge counter
+        currentFallbackRateSecs(level, chargeCounter)?.let { rate ->
+            return toMinutes((100 - level) * rate)
+        }
+
+        // 5. Typical rate for this power source, so an estimate exists right after plugging in
+        return toMinutes((100 - level) * defaultRateSecs(plugged))
     }
-    
+
+    /**
+     * Seconds per percent derived from current and charge counter.
+     * Returns null when the device does not expose those properties.
+     */
+    private fun currentFallbackRateSecs(level: Int, chargeCounter: Long): Double? {
+        if (level < MIN_LEVEL_FOR_CAPACITY || chargeCounter <= 0 || chargeCounter == Long.MIN_VALUE) return null
+        val avgCurrent = currentSamples.averageOrNull() ?: return null
+        if (avgCurrent <= 0) return null
+        // chargeCounter is in µAh, current in µA
+        val estimatedFullCapacity = chargeCounter.toDouble() * 100.0 / level
+        val remainingCapacity = estimatedFullCapacity - chargeCounter
+        if (remainingCapacity <= 0) return null
+        val remainingSeconds = remainingCapacity / avgCurrent * 3600.0
+        return remainingSeconds / (100 - level).coerceAtLeast(1)
+    }
+
+    /** Typical seconds per percent by power source, used before real data is available. */
+    private fun defaultRateSecs(plugged: Int): Double = when (plugged) {
+        BatteryManager.BATTERY_PLUGGED_AC -> 36.0
+        BatteryManager.BATTERY_PLUGGED_USB -> 72.0
+        BatteryManager.BATTERY_PLUGGED_WIRELESS -> 120.0
+        else -> 60.0
+    }
+
+    private fun toMinutes(seconds: Double): Int? {
+        if (seconds <= 0 || seconds.isNaN() || seconds.isInfinite()) return null
+        val minutes = (seconds / 60.0).roundToLong()
+        if (minutes <= 0) return applyHysteresis(1)
+        if (minutes >= 24 * 60) return null
+        return applyHysteresis(minutes.toInt())
+    }
+
     /**
      * Apply hysteresis to prevent the displayed value from jumping up/down.
      * Round to nearest minute, only update if change >= 2 minutes.
      */
     private fun applyHysteresis(newMinutes: Int): Int {
-        // Round to nearest minute
-        val rounded = (newMinutes + 0.5).toInt()
-        // Only update if change >= 2 minutes
+        val rounded = newMinutes.coerceAtLeast(1)
         val last = lastEstimatedMinutes
         if (last > 0 && abs(rounded - last) < 2) {
             return last
         }
-        return rounded.coerceAtLeast(1)
+        return rounded
     }
-    
+
     /**
      * Normalize current reading to µA.
      * Heuristic: if absolute value < 20000, assume mA, multiply by 1000.
      * Current can be negative during charging, use absolute value.
      */
     private fun normalizeCurrent(raw: Long): Long {
-        val absValue = kotlin.math.abs(raw)
-        // Discard special values
-        if (absValue == 0L || absValue == Long.MIN_VALUE.toLong() || absValue == Integer.MIN_VALUE.toLong()) {
+        // Discard special values (getLongProperty returns Integer.MIN_VALUE when unsupported)
+        if (raw == 0L || raw == Long.MIN_VALUE || raw == Integer.MIN_VALUE.toLong()) {
             return 0
         }
+        val absValue = abs(raw)
         // Heuristic: values < 20000 are likely in mA, convert to µA
         return if (absValue < 20000) absValue * 1000 else absValue
     }
-    
+
     /**
      * Learn the time per percent for a given plug type.
      * Uses exponential moving average: new = 0.3 * observed + 0.7 * old
      */
     private fun learnPercentTime(plugType: Int, percent: Int, secsPerPercent: Double) {
+        if (percent !in 1..100) return
         val array = learnedTimes.getOrPut(plugType) { DoubleArray(101) }
         val old = array[percent]
         val updated = if (old > 0) 0.3 * secsPerPercent + 0.7 * old else secsPerPercent
         array[percent] = updated
         learnedTimes[plugType] = array
     }
-    
+
     private fun loadLearnedTimes() {
-        val jsonString = prefs.getString("learned_times", null)
-        if (jsonString != null) {
-            try {
-                val parsed = Json.decodeFromString<Map<String, List<Double>>>(jsonString)
-                learnedTimes.clear()
-                parsed.forEach { (k, v) ->
-                    learnedTimes[k.toInt()] = v.toDoubleArray()
-                }
-            } catch (e: Exception) {
-                Log.w("ChargeTimeEstimator", "Failed to parse learned times", e)
+        val jsonString = prefs.getString("learned_times", null) ?: return
+        try {
+            val parsed = Json.decodeFromString<Map<String, List<Double>>>(jsonString)
+            learnedTimes.clear()
+            parsed.forEach { (k, v) ->
+                learnedTimes[k.toInt()] = v.toDoubleArray()
             }
+        } catch (e: Exception) {
+            Log.w("ChargeTimeEstimator", "Failed to parse learned times", e)
         }
     }
-    
+
     private fun saveLearnedTimes() {
         val serializable = learnedTimes.entries.associate { (k, v) -> k.toString() to v.toList() }
         val json = Json.encodeToString(serializable)
         prefs.edit().putString("learned_times", json).apply()
     }
-    
+
     /**
      * Result of a charge time estimation.
      * @param minutes Estimated minutes remaining to full charge

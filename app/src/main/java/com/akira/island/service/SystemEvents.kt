@@ -62,6 +62,20 @@ class SystemEvents(private val context: Context) {
     private var lastPowerChange = 0L
     /** Время начала зарядки (elapsedRealtime), 0 если не заряжается */
     private var chargeStartTime = 0L
+    /** Идёт ли зарядка прямо сейчас — пока идёт, раз в полминуты обновляем оценку */
+    private var chargingNow = false
+
+    /** Пока заряжается, перечитываем состояние: оценка времени должна идти вниз, а не стоять. */
+    private val batteryTick = object : Runnable {
+        override fun run() {
+            if (!chargingNow) return
+            runCatching {
+                val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                if (sticky != null) onBattery(sticky)
+            }
+            main.postDelayed(this, BATTERY_TICK_MS)
+        }
+    }
 
     /** Первые секунды после запуска система присылает текущее состояние — это не события. */
     private val warmingUp get() = SystemClock.elapsedRealtime() - startedAt < 3000
@@ -153,6 +167,8 @@ class SystemEvents(private val context: Context) {
     }
 
     fun stop() {
+        main.removeCallbacks(batteryTick)
+        chargingNow = false
         runCatching { context.unregisterReceiver(receiver) }
         runCatching { context.contentResolver.unregisterContentObserver(brightnessObserver) }
         runCatching { connectivity?.unregisterNetworkCallback(wifiCallback) }
@@ -344,6 +360,17 @@ class SystemEvents(private val context: Context) {
             chargeStartTime = 0L
         }
 
+        // Battery broadcasts only arrive when the level changes (every few minutes),
+        // so keep refreshing the estimate while charging.
+        if (charging && !chargingNow) {
+            chargingNow = true
+            main.removeCallbacks(batteryTick)
+            main.postDelayed(batteryTick, BATTERY_TICK_MS)
+        } else if (!charging && chargingNow) {
+            chargingNow = false
+            main.removeCallbacks(batteryTick)
+        }
+
         // Compute charge time estimate asynchronously
         var chargeTimeMinutes: Int? = null
         if (charging) {
@@ -380,5 +407,7 @@ class SystemEvents(private val context: Context) {
         const val BT_BATTERY_CHANGED = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
         const val EXTRA_BT_BATTERY = "android.bluetooth.device.extra.BATTERY_LEVEL"
         const val USB_STATE = "android.hardware.usb.action.USB_STATE"
+        /** Как часто обновлять оценку времени зарядки, пока идёт зарядка */
+        const val BATTERY_TICK_MS = 30_000L
     }
 }
