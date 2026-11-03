@@ -49,6 +49,15 @@ class ChargeTimeEstimator private constructor(
     private val UPDATE_THROTTLE_MS = 30_000L // 30 seconds
     private val MIN_LEVEL_FOR_CAPACITY = 5 // Minimum battery level to estimate full capacity
     private val SLOWDOWN_START_PERCENT = 80 // Above this, charging slows down (constant voltage phase)
+    /** Anything slower than 10 minutes per percent is useless data and is discarded. */
+    private val MAX_SECS_PER_PERCENT = 600.0
+
+    // Raw readings of the last calculation, only used for the debug log
+    private var lastRawCurrent = Long.MIN_VALUE
+    private var lastNormalizedCurrent = 0L
+    private var lastCurrentUnit = "unsupported"
+    private var lastRawChargeCounter = Long.MIN_VALUE
+    private var lastSystemRaw = "n/a"
 
     // Slowdown factor: 1.0 up to 80%, then increases to ~2.0 at 100%
     private val slowdownFactors = DoubleArray(101).apply {
@@ -105,6 +114,7 @@ class ChargeTimeEstimator private constructor(
             lastEstimatedMinutes = -1
             lastEstimateUpdate = 0L
             loadLearnedTimes()
+            logHistory()
         } else if (!isCharging && wasCharging) {
             // Charging stopped - save learned data
             saveLearnedTimes()
@@ -118,14 +128,17 @@ class ChargeTimeEstimator private constructor(
             return null
         }
 
+        // Keep the raw values for the debug log and sample the normalized current
+        lastRawCurrent = currentNow
+        lastNormalizedCurrent = normalizeCurrent(currentNow)
+        lastCurrentUnit = currentUnitOf(currentNow)
+        lastRawChargeCounter = chargeCounter
+
         // Sample current for moving average (only while charging and visible)
-        if (currentNow != Long.MIN_VALUE && currentNow != Integer.MIN_VALUE.toLong() && currentNow != 0L) {
-            val normalizedCurrent = normalizeCurrent(currentNow)
-            if (normalizedCurrent > 0) {
-                currentSamples.add(normalizedCurrent)
-                while (currentSamples.size > MAX_CURRENT_SAMPLES) {
-                    currentSamples.poll()
-                }
+        if (lastNormalizedCurrent > 0) {
+            currentSamples.add(lastNormalizedCurrent)
+            while (currentSamples.size > MAX_CURRENT_SAMPLES) {
+                currentSamples.poll()
             }
         }
 
@@ -135,8 +148,8 @@ class ChargeTimeEstimator private constructor(
             val percentGained = level - lastLevel
             if (percentGained > 0 && elapsedSeconds > 0) {
                 val secsPerPercent = elapsedSeconds / percentGained
-                // Discard absurd values (more than 1 hour per percent = extremely slow)
-                if (secsPerPercent in 1.0..3600.0) {
+                // Discard absurd values (more than 10 minutes per percent = useless)
+                if (secsPerPercent in 1.0..MAX_SECS_PER_PERCENT) {
                     sessionRateSecs = if (sessionRateSecs > 0) {
                         0.4 * secsPerPercent + 0.6 * sessionRateSecs
                     } else {
@@ -173,49 +186,111 @@ class ChargeTimeEstimator private constructor(
      * Returns null if not charging or estimate not available.
      */
     private fun computeEstimate(level: Int, plugged: Int, chargeCounter: Long): Int? {
-        if (level <= 0 || level >= 100) return null
+        lastSystemRaw = "n/a"
+        if (level <= 0 || level >= 100) {
+            return logResult("none", 0.0, "")
+        }
 
         // 1. Try BatteryManager API (API 28+)
         if (Build.VERSION.SDK_INT >= 28) {
             val bmEstimate = runCatching { batteryManager?.computeChargeTimeRemaining() }.getOrNull()
+            lastSystemRaw = bmEstimate?.toString() ?: "null"
             if (bmEstimate != null && bmEstimate > 0 && bmEstimate < MAX_PLAUSIBLE_MS) {
-                Log.d("ChargeTimeEstimator", "BatteryManager estimate: ${bmEstimate}ms")
-                return (bmEstimate / 60_000L).coerceAtLeast(1L).toInt()
+                return logResult("system", bmEstimate / 1000.0, "slowdownMode=none")
             }
-            Log.d("ChargeTimeEstimator", "BatteryManager returned implausible value: $bmEstimate")
         }
 
         // 2. Learned per-percent times (from current and previous sessions)
         val learned = learnedTimes[plugged]
         if (learned != null) {
-            var totalSeconds = 0.0
+            var knownSeconds = 0.0
+            var knownPercent = 0
             var missingPercent = 0
             for (p in (level + 1)..100) {
                 val t = learned.getOrNull(p) ?: 0.0
-                if (t > 0) totalSeconds += t else missingPercent++
+                if (t > 0) {
+                    knownSeconds += t
+                    knownPercent++
+                } else {
+                    missingPercent++
+                }
             }
-            if (totalSeconds > 0) {
+            if (knownSeconds > 0) {
                 val fillRate = currentFallbackRateSecs(level, chargeCounter)
                     ?: sessionRateSecs.takeIf { it > 0 }
                     ?: defaultRateSecs(plugged)
-                totalSeconds += missingPercent * fillRate
-                return toMinutes(totalSeconds)
+                val totalSeconds = knownSeconds + missingPercent * fillRate
+                return logResult(
+                    "history", totalSeconds,
+                    "knownPct=$knownPercent missingPct=$missingPercent " +
+                        "fillSecsPerPct=${fmt(fillRate)} historySumSecs=${fmt(knownSeconds)} slowdownMode=none",
+                )
             }
         }
 
         // 3. Rate observed during this session
         if (sessionRateSecs > 0) {
-            return toMinutes((100 - level) * sessionRateSecs)
+            return logResult(
+                "session", (100 - level) * sessionRateSecs,
+                "sessionSecsPerPct=${fmt(sessionRateSecs)} slowdownMode=none",
+            )
         }
 
         // 4. Current + charge counter
         currentFallbackRateSecs(level, chargeCounter)?.let { rate ->
-            return toMinutes((100 - level) * rate)
+            return logResult("formula", (100 - level) * rate, "secsPerPct=${fmt(rate)} slowdownMode=none")
         }
 
         // 5. Typical rate for this power source, so an estimate exists right after plugging in
-        return toMinutes(remainingSecondsFromRate(level, defaultRateSecs(plugged), applySlowdown = true))
+        val rate = defaultRateSecs(plugged)
+        return logResult(
+            "default", remainingSecondsFromRate(level, rate, applySlowdown = true),
+            "secsPerPct=${fmt(rate)} slowdownMode=perPercent",
+        )
     }
+
+    /** Writes one structured debug line per calculation and returns the (hysteresis-adjusted) minutes. */
+    private fun logResult(branch: String, seconds: Double, extra: String): Int? {
+        val minutes = toMinutes(seconds)
+        val fullCapacity = estimatedFullCapacity(lastLevel, lastRawChargeCounter)
+        val slowdown = slowdownFactors[lastLevel.coerceIn(0, 100)]
+        val line = StringBuilder()
+            .append("branch=").append(branch)
+            .append(" level=").append(lastLevel)
+            .append(" plugged=").append(lastPlugType)
+            .append(" bmRaw=").append(lastSystemRaw)
+            .append(" currentRaw=").append(lastRawCurrent)
+            .append(" currentNorm=").append(lastNormalizedCurrent)
+            .append(" currentUnit=").append(lastCurrentUnit)
+            .append(" counterRaw=").append(lastRawChargeCounter)
+            .append(" counterNorm=").append(lastRawChargeCounter)
+            .append(" counterUnit=uAh")
+            .append(" fullCapacity=").append(fullCapacity?.roundToLong() ?: -1)
+            .append(" slowdown=").append(fmt(slowdown))
+            .append(" finalSecs=").append(seconds.roundToLong())
+            .append(" finalMin=").append(minutes ?: -1)
+        if (extra.isNotEmpty()) line.append(' ').append(extra)
+        ChargeEtaLog.log(context, line.toString())
+        return minutes
+    }
+
+    /** Writes the whole learned table at the start of every charge. */
+    private fun logHistory() {
+        if (learnedTimes.isEmpty()) {
+            ChargeEtaLog.log(context, "history empty")
+            return
+        }
+        learnedTimes.forEach { (plug, values) ->
+            val entries = (1..100).mapNotNull { p ->
+                val v = values.getOrNull(p) ?: 0.0
+                if (v > 0) "$p=${fmt(v)}" else null
+            }
+            ChargeEtaLog.log(context, "history plug=$plug secsPerPct={${entries.joinToString(",")}}")
+        }
+    }
+
+    /** Round to 1 decimal, enough for the log and locale-independent. */
+    private fun fmt(value: Double): String = ((value * 10).roundToLong() / 10.0).toString()
 
     /** Seconds left for the remaining percents at [rateSecs], optionally slowing down above 80%. */
     private fun remainingSecondsFromRate(level: Int, rateSecs: Double, applySlowdown: Boolean): Double {
@@ -226,17 +301,22 @@ class ChargeTimeEstimator private constructor(
         return total
     }
 
+    /** Full capacity in µAh derived from the charge counter, when the device exposes it. */
+    private fun estimatedFullCapacity(level: Int, chargeCounter: Long): Double? {
+        if (level < MIN_LEVEL_FOR_CAPACITY || chargeCounter <= 0 || chargeCounter == Long.MIN_VALUE) return null
+        return chargeCounter.toDouble() * 100.0 / level
+    }
+
     /**
      * Seconds per percent derived from current and charge counter.
      * Returns null when the device does not expose those properties.
      */
     private fun currentFallbackRateSecs(level: Int, chargeCounter: Long): Double? {
-        if (level < MIN_LEVEL_FOR_CAPACITY || chargeCounter <= 0 || chargeCounter == Long.MIN_VALUE) return null
+        val fullCapacity = estimatedFullCapacity(level, chargeCounter) ?: return null
         val avgCurrent = currentSamples.averageOrNull() ?: return null
         if (avgCurrent <= 0) return null
         // chargeCounter is in µAh, current in µA
-        val estimatedFullCapacity = chargeCounter.toDouble() * 100.0 / level
-        val remainingCapacity = estimatedFullCapacity - chargeCounter
+        val remainingCapacity = fullCapacity - chargeCounter
         if (remainingCapacity <= 0) return null
         val remainingSeconds = remainingCapacity / avgCurrent * 3600.0
         return remainingSeconds / (100 - level).coerceAtLeast(1)
@@ -286,6 +366,13 @@ class ChargeTimeEstimator private constructor(
         return if (absValue < 20000) absValue * 1000 else absValue
     }
 
+    /** Unit implied by the raw current reading, mirroring [normalizeCurrent]. */
+    private fun currentUnitOf(raw: Long): String = when {
+        raw == 0L || raw == Long.MIN_VALUE || raw == Integer.MIN_VALUE.toLong() -> "unsupported"
+        abs(raw) < 20000 -> "mA"
+        else -> "uA"
+    }
+
     /**
      * Learn the time per percent for a given plug type.
      * Uses exponential moving average: new = 0.3 * observed + 0.7 * old
@@ -295,21 +382,46 @@ class ChargeTimeEstimator private constructor(
         val array = learnedTimes.getOrPut(plugType) { DoubleArray(101) }
         val old = array[percent]
         val updated = if (old > 0) 0.3 * secsPerPercent + 0.7 * old else secsPerPercent
-        array[percent] = updated
+        array[percent] = updated.coerceAtMost(MAX_SECS_PER_PERCENT)
         learnedTimes[plugType] = array
     }
 
     private fun loadLearnedTimes() {
+        learnedTimes.clear()
         val jsonString = prefs.getString("learned_times", null) ?: return
         try {
             val parsed = Json.decodeFromString<Map<String, List<Double>>>(jsonString)
-            learnedTimes.clear()
+            var dropped = false
             parsed.forEach { (k, v) ->
-                learnedTimes[k.toInt()] = v.toDoubleArray()
+                val array = v.toDoubleArray()
+                for (i in array.indices) {
+                    if (array[i] > MAX_SECS_PER_PERCENT) {
+                        array[i] = 0.0
+                        dropped = true
+                    }
+                }
+                learnedTimes[k.toInt()] = array
+            }
+            if (dropped) {
+                ChargeEtaLog.log(context, "history cleanup: dropped values > ${MAX_SECS_PER_PERCENT}s per percent")
+                saveLearnedTimes()
             }
         } catch (e: Exception) {
             Log.w("ChargeTimeEstimator", "Failed to parse learned times", e)
         }
+    }
+
+    /** Debug action: forget everything learned and start from the typical rates again. */
+    fun clearLearnedTimes() {
+        learnedTimes.clear()
+        prefs.edit().remove("learned_times").apply()
+        sessionRateSecs = 0.0
+        currentSamples.clear()
+        lastLevelChangeTime = System.currentTimeMillis()
+        lastEstimate = null
+        lastEstimatedMinutes = -1
+        lastEstimateUpdate = 0L
+        ChargeEtaLog.log(context, "history cleared")
     }
 
     private fun saveLearnedTimes() {
