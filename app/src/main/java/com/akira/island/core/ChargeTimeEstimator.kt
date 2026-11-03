@@ -87,7 +87,11 @@ class ChargeTimeEstimator private constructor(
     ): ChargeEstimate? {
         val now = System.currentTimeMillis()
         val wasCharging = isCharging
-        isCharging = plugged != 0 && (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
+        // Same universal rule as SystemEvents: plugged and not explicitly
+        // discharging/not-charging (some OEMs report BATTERY_STATUS_UNKNOWN first).
+        isCharging = plugged != 0 &&
+            status != BatteryManager.BATTERY_STATUS_DISCHARGING &&
+            status != BatteryManager.BATTERY_STATUS_NOT_CHARGING
 
         // Handle charging start/stop
         if (isCharging && !wasCharging) {

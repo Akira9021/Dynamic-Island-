@@ -343,14 +343,22 @@ class SystemEvents(private val context: Context) {
         val level = if (raw >= 0) raw * 100 / scale else -1
         val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
         val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        // Universal check: plugged and not explicitly discharging/not-charging.
+        // Some OEMs report BATTERY_STATUS_UNKNOWN in the first broadcast.
         val charging = plugged != 0 &&
-            (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
+            status != BatteryManager.BATTERY_STATUS_DISCHARGING &&
+            status != BatteryManager.BATTERY_STATUS_NOT_CHARGING
 
         // Charge counter and current are read via BatteryManager.getLongProperty,
-        // they are not passed as extras in the ACTION_BATTERY_CHANGED intent
+        // they are not passed as extras in the ACTION_BATTERY_CHANGED intent.
+        // Not all devices expose them: getLongProperty can throw or return a sentinel.
         val bm = context.getSystemService(BatteryManager::class.java)
-        val chargeCounter = bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: Long.MIN_VALUE
-        val currentNow = bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: Long.MIN_VALUE
+        val chargeCounter = runCatching {
+            bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+        }.getOrNull() ?: Long.MIN_VALUE
+        val currentNow = runCatching {
+            bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+        }.getOrNull() ?: Long.MIN_VALUE
 
         // Track charge start time
         val now = SystemClock.elapsedRealtime()
