@@ -210,7 +210,16 @@ class ChargeTimeEstimator private constructor(
         }
 
         // 5. Typical rate for this power source, so an estimate exists right after plugging in
-        return toMinutes((100 - level) * defaultRateSecs(plugged))
+        return toMinutes(remainingSecondsFromRate(level, defaultRateSecs(plugged), applySlowdown = true))
+    }
+
+    /** Seconds left for the remaining percents at [rateSecs], optionally slowing down above 80%. */
+    private fun remainingSecondsFromRate(level: Int, rateSecs: Double, applySlowdown: Boolean): Double {
+        var total = 0.0
+        for (p in (level + 1)..100) {
+            total += rateSecs * if (applySlowdown) slowdownFactors[p] else 1.0
+        }
+        return total
     }
 
     /**
