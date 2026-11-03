@@ -374,12 +374,16 @@ class ChargeTimeEstimator private constructor(
 
     /**
      * Apply hysteresis to prevent the displayed value from jumping up/down.
-     * Round to nearest minute, only update if change >= 2 minutes.
+     * Round to nearest minute, only guard against small upward jumps.
+     * Small decreases are always accepted: while charging the remaining time
+     * must only ever go down, so blocking sub-2-minute drops would freeze the
+     * displayed estimate on a stale value.
      */
     private fun applyHysteresis(newMinutes: Int): Int {
         val rounded = newMinutes.coerceAtLeast(1)
         val last = lastEstimatedMinutes
-        if (last > 0 && abs(rounded - last) < 2) {
+        if (last > 0 && newMinutes > last && abs(rounded - last) < 2) {
+            // Small upward jumps are noise: keep the previous value.
             return last
         }
         return rounded
