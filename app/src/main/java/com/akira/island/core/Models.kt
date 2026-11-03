@@ -182,12 +182,14 @@ data class StopwatchState(val startedAt: Long?, val accumulated: Long) {
  * @param charging Whether the device is currently charging
  * @param chargeTimeMinutes Estimated minutes to full charge, null if unknown or not charging
  * @param chargeStartTimeElapsedRealtime ElapsedRealtime when charging started, 0 if not charging
+ * @param chargeProgress Monotonic ring progress 0..1 for the current charging session
  */
 data class BatteryInfo(
     val level: Int = -1,
     val charging: Boolean = false,
     val chargeTimeMinutes: Int? = null,
     val chargeStartTimeElapsedRealtime: Long = 0,
+    val chargeProgress: Float = 0f,
 )
 
 /** Как событие выглядит в острове. */

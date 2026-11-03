@@ -80,7 +80,7 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
             GroupToggle(Pos.Middle, Icons.Rounded.OfflineBolt, tr("Индикатор зарядки", "Charging indicator"),
                 tr("Когда устройство заряжается", "When the device is charging"),
                 s.cardCharging, color = Tile.Green) { set { copy(cardCharging = it) } }
-            GroupToggle(Pos.Middle, Icons.Rounded.Timer, tr("Показывать время зарядки", "Show charge time"),
+            GroupToggle(Pos.Middle, Icons.Rounded.Timer, tr("Показывать время до полной зарядки", "Show time to full charge"),
                 tr("В капсуле зарядки показывать оценку времени до 100% вместо процента",
                     "Show estimated time to full charge in the charging capsule instead of percentage"),
                 s.showChargeTime, color = Tile.Green) { set { copy(showChargeTime = it) } }

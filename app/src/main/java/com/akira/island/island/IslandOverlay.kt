@@ -904,15 +904,9 @@ private fun Bubble(act: Act, s: IslandSettings) {
             is Act.CallA -> Icon(Ios.call, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
             is Act.ChargingA -> {
-                val b = act.b
-                val chargeStart = b.chargeStartTimeElapsedRealtime
-                val remainingMinutes = b.chargeTimeMinutes
-                if (chargeStart > 0 && remainingMinutes != null && remainingMinutes > 0) {
-                    val elapsedMs = (SystemClock.elapsedRealtime() - chargeStart).coerceAtLeast(0)
-                    val remainingMs = remainingMinutes * 60_000L
-                    val totalMs = elapsedMs + remainingMs
-                    val fraction = if (totalMs > 0) (elapsedMs.toFloat() / totalMs).coerceIn(0f, 1f) else 0f
-                    ProgressRing(fraction, Tints.Green, Modifier.size(inner), stroke = 2.5.dp)
+                val progress = act.b.chargeProgress.coerceIn(0f, 1f)
+                if (progress > 0f) {
+                    ProgressRing(progress, Tints.Green, Modifier.size(inner), stroke = 2.5.dp)
                 }
                 Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.5f))
             }

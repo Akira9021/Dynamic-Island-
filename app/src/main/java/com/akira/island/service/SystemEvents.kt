@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.akira.island.core.BatteryInfo
+import com.akira.island.core.ChargeEtaLog
+import com.akira.island.core.ChargeRingMath
 import com.akira.island.core.ChargeTimeEstimator
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
@@ -39,6 +41,7 @@ import com.akira.island.island.Ios
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.roundToLong
 
 /** Системные события, которые остров показывает короткими уведомлениями. */
 class SystemEvents(private val context: Context) {
@@ -60,8 +63,15 @@ class SystemEvents(private val context: Context) {
     private val wifiNetworks = HashSet<Network>()
     /** Когда подключили или отключили зарядку — кабель от компьютера не должен давать вторую плашку «USB» */
     private var lastPowerChange = 0L
-    /** Время начала зарядки (elapsedRealtime), 0 если не заряжается */
-    private var chargeStartTime = 0L
+    /**
+     * Reference of the current charging session. Persisted so it survives
+     * service and UI restarts, and anchored to EXTRA_PLUGGED instead of the
+     * "charging" flag, which some OEMs make flicker while the cable is in.
+     */
+    private val ringPrefs = context.getSharedPreferences(RING_PREFS, Context.MODE_PRIVATE)
+    private var ringStart = ringPrefs.getLong(KEY_RING_START, 0L)
+    private var ringStartLevel = ringPrefs.getInt(KEY_RING_LEVEL, -1)
+    private var ringMaxProgress = ringPrefs.getFloat(KEY_RING_MAX, 0f)
     /** Идёт ли зарядка прямо сейчас — пока идёт, раз в полминуты обновляем оценку */
     private var chargingNow = false
 
@@ -337,6 +347,21 @@ class SystemEvents(private val context: Context) {
             filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
     }
 
+    private fun saveRingSession() {
+        ringPrefs.edit()
+            .putLong(KEY_RING_START, ringStart)
+            .putInt(KEY_RING_LEVEL, ringStartLevel)
+            .putFloat(KEY_RING_MAX, ringMaxProgress)
+            .apply()
+    }
+
+    private fun clearRingSession() {
+        ringStart = 0L
+        ringStartLevel = -1
+        ringMaxProgress = 0f
+        ringPrefs.edit().clear().apply()
+    }
+
     private fun onBattery(intent: Intent) {
         val raw = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
@@ -360,12 +385,22 @@ class SystemEvents(private val context: Context) {
             bm?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
         }.getOrNull() ?: Long.MIN_VALUE
 
-        // Track charge start time
+        // Ring reference: starts at plug-in and is cleared only at unplug.
+        // It is persisted, so restarting the service or the UI keeps the
+        // original instant instead of restarting the ring from zero.
         val now = SystemClock.elapsedRealtime()
-        if (charging && chargeStartTime == 0L) {
-            chargeStartTime = now
-        } else if (!charging) {
-            chargeStartTime = 0L
+        if (ringStart != 0L && !ChargeRingMath.isValidReference(ringStart, now)) {
+            // elapsedRealtime restarted: the saved reference is from a previous boot.
+            clearRingSession()
+        }
+        if (plugged == 0) {
+            if (ringStart != 0L) clearRingSession()
+        } else if (ringStart == 0L) {
+            ringStart = now
+            ringStartLevel = level
+            ringMaxProgress = 0f
+            saveRingSession()
+            ChargeEtaLog.log(context, "ring start level=$level start=$ringStart")
         }
 
         // Battery broadcasts only arrive when the level changes (every few minutes),
@@ -400,7 +435,28 @@ class SystemEvents(private val context: Context) {
             )
         }
         
-        IslandBus.battery.value = BatteryInfo(level, charging, chargeTimeMinutes, chargeStartTime)
+        // Monotonic ring progress, computed here so the UI only renders a
+        // stable value even when the estimate fluctuates between branches.
+        var chargeProgress = 0f
+        if (plugged != 0 && ringStart != 0L) {
+            val candidate = if (level >= 100) 1f
+            else ChargeRingMath.progress(now, ringStart, chargeTimeMinutes)
+            val next = ChargeRingMath.advance(ringMaxProgress, candidate)
+            if (next != ringMaxProgress) {
+                ringMaxProgress = next
+                ringPrefs.edit().putFloat(KEY_RING_MAX, next).apply()
+            }
+            chargeProgress = ringMaxProgress
+            ChargeEtaLog.log(
+                context,
+                "ring elapsed=${(now - ringStart).coerceAtLeast(0)} " +
+                    "remaining=${chargeTimeMinutes ?: -1}min " +
+                    "progress=${(chargeProgress * 1000).roundToLong() / 1000.0} " +
+                    "startLevel=$ringStartLevel level=$level",
+            )
+        }
+
+        IslandBus.battery.value = BatteryInfo(level, charging, chargeTimeMinutes, ringStart, chargeProgress)
 
         if (charging || level > 5) {
             lowWarned = false
@@ -417,5 +473,10 @@ class SystemEvents(private val context: Context) {
         const val USB_STATE = "android.hardware.usb.action.USB_STATE"
         /** Как часто обновлять оценку времени зарядки, пока идёт зарядка */
         const val BATTERY_TICK_MS = 30_000L
+        /** Persisted reference of the charging session (ring of the secondary bubble). */
+        const val RING_PREFS = "charge_ring"
+        const val KEY_RING_START = "ring_start"
+        const val KEY_RING_LEVEL = "ring_start_level"
+        const val KEY_RING_MAX = "ring_max_progress"
     }
 }
