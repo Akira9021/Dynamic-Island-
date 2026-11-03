@@ -72,6 +72,13 @@ class SystemEvents(private val context: Context) {
     private var ringStart = ringPrefs.getLong(KEY_RING_START, 0L)
     private var ringStartLevel = ringPrefs.getInt(KEY_RING_LEVEL, -1)
     private var ringMaxProgress = ringPrefs.getFloat(KEY_RING_MAX, 0f)
+    /**
+     * Remaining-time reference used by the ring. It is refreshed only when the
+     * battery level goes up, so a new estimate arriving while the charging card
+     * moves to the secondary bubble cannot recalculate the ring.
+     */
+    private var ringReferenceMinutes = ringPrefs.getInt(KEY_RING_REFERENCE, -1)
+    private var ringReferenceLevel = ringPrefs.getInt(KEY_RING_REFERENCE_LEVEL, -1)
     /** Идёт ли зарядка прямо сейчас — пока идёт, раз в полминуты обновляем оценку */
     private var chargingNow = false
 
@@ -352,6 +359,8 @@ class SystemEvents(private val context: Context) {
             .putLong(KEY_RING_START, ringStart)
             .putInt(KEY_RING_LEVEL, ringStartLevel)
             .putFloat(KEY_RING_MAX, ringMaxProgress)
+            .putInt(KEY_RING_REFERENCE, ringReferenceMinutes)
+            .putInt(KEY_RING_REFERENCE_LEVEL, ringReferenceLevel)
             .apply()
     }
 
@@ -359,7 +368,10 @@ class SystemEvents(private val context: Context) {
         ringStart = 0L
         ringStartLevel = -1
         ringMaxProgress = 0f
+        ringReferenceMinutes = -1
+        ringReferenceLevel = -1
         ringPrefs.edit().clear().apply()
+        ChargeEtaLog.log(context, "ring clear")
     }
 
     private fun onBattery(intent: Intent) {
@@ -399,6 +411,8 @@ class SystemEvents(private val context: Context) {
             ringStart = now
             ringStartLevel = level
             ringMaxProgress = 0f
+            ringReferenceMinutes = -1
+            ringReferenceLevel = level
             saveRingSession()
             ChargeEtaLog.log(context, "ring start level=$level start=$ringStart")
         }
@@ -439,8 +453,22 @@ class SystemEvents(private val context: Context) {
         // stable value even when the estimate fluctuates between branches.
         var chargeProgress = 0f
         if (plugged != 0 && ringStart != 0L) {
+            // Refresh the reference only when the level goes up. A new estimate
+            // arriving at the same level (or during the primary -> secondary
+            // transition) must not recalculate the ring.
+            val nextReference = ChargeRingMath.referenceMinutes(
+                saved = ringReferenceMinutes,
+                savedLevel = ringReferenceLevel,
+                currentLevel = level,
+                estimate = chargeTimeMinutes,
+            )
+            if (nextReference != ringReferenceMinutes) {
+                ringReferenceMinutes = nextReference
+                ringReferenceLevel = level
+                saveRingSession()
+            }
             val candidate = if (level >= 100) 1f
-            else ChargeRingMath.progress(now, ringStart, chargeTimeMinutes)
+            else ChargeRingMath.progress(now, ringStart, ringReferenceMinutes)
             val next = ChargeRingMath.advance(ringMaxProgress, candidate)
             if (next != ringMaxProgress) {
                 ringMaxProgress = next
@@ -450,7 +478,8 @@ class SystemEvents(private val context: Context) {
             ChargeEtaLog.log(
                 context,
                 "ring elapsed=${(now - ringStart).coerceAtLeast(0)} " +
-                    "remaining=${chargeTimeMinutes ?: -1}min " +
+                    "remaining=${chargeTimeMinutes ?: -1}min ref=$ringReferenceMinutes " +
+                    "refLevel=$ringReferenceLevel " +
                     "progress=${(chargeProgress * 1000).roundToLong() / 1000.0} " +
                     "startLevel=$ringStartLevel level=$level",
             )
@@ -478,5 +507,7 @@ class SystemEvents(private val context: Context) {
         const val KEY_RING_START = "ring_start"
         const val KEY_RING_LEVEL = "ring_start_level"
         const val KEY_RING_MAX = "ring_max_progress"
+        const val KEY_RING_REFERENCE = "ring_reference_minutes"
+        const val KEY_RING_REFERENCE_LEVEL = "ring_reference_level"
     }
 }

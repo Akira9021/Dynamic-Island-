@@ -121,4 +121,35 @@ class ChargeRingMathTest {
         assertEquals(0L, ChargeRingMath.remainingMs(-1))
         assertEquals(30 * minute, ChargeRingMath.remainingMs(30))
     }
+
+    @Test
+    fun `reference is captured from the first reliable estimate`() {
+        assertEquals(48, ChargeRingMath.referenceMinutes(-1, 42, 42, 48))
+        assertEquals(-1, ChargeRingMath.referenceMinutes(-1, 42, 42, null))
+    }
+
+    @Test
+    fun `reference is kept while the level does not change`() {
+        // The live estimate changes from 13 to 25 minutes at the same level:
+        // the ring must keep the time it was already using.
+        assertEquals(13, ChargeRingMath.referenceMinutes(13, 50, 50, 25))
+    }
+
+    @Test
+    fun `reference refreshes when the level goes up`() {
+        assertEquals(20, ChargeRingMath.referenceMinutes(13, 50, 51, 20))
+        // No estimate at the new level: keep the previous reference.
+        assertEquals(13, ChargeRingMath.referenceMinutes(13, 50, 51, null))
+    }
+
+    @Test
+    fun `ring keeps the saved reference during a primary to secondary transition`() {
+        // 20 minutes elapsed. The live estimate jumps to 25 but the ring was
+        // using 13; the saved reference must win, so the value does not change.
+        val saved = 13
+        val reference = ChargeRingMath.referenceMinutes(saved, 50, 50, 25)
+        val progress = ChargeRingMath.progress(start + 20 * minute, start, reference)
+        assertEquals(13, reference)
+        assertEquals(20f / 33f, progress, 0.0001f)
+    }
 }

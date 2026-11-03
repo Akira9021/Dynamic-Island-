@@ -50,6 +50,20 @@ object ChargeRingMath {
     fun remainingMs(minutes: Int?): Long =
         if (minutes != null && minutes > 0) minutes.toLong() * 60_000L else 0L
 
+    /**
+     * Remaining-time reference used by the ring.
+     *
+     * It is captured the first time a reliable estimate exists and refreshed
+     * only when the battery level goes up. A new estimate arriving while the
+     * level is unchanged (for example during the primary -> secondary
+     * transition) therefore cannot recalculate the ring.
+     */
+    fun referenceMinutes(saved: Int, savedLevel: Int, currentLevel: Int, estimate: Int?): Int {
+        if (saved > 0 && currentLevel <= savedLevel) return saved
+        val fresh = estimate?.takeIf { it > 0 }
+        return fresh ?: saved.takeIf { it > 0 } ?: -1
+    }
+
     /** The ring never goes backwards inside the same session. */
     fun advance(previous: Float, candidate: Float): Float =
         maxOf(previous.coerceIn(0f, 1f), candidate.coerceIn(0f, 1f))

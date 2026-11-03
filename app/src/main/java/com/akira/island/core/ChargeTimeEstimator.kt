@@ -15,11 +15,10 @@ import kotlin.math.roundToLong
  * 1. BatteryManager.computeChargeTimeRemaining() on API 28+ (if plausible)
  * 2. Per-percent times learned from previous charging sessions
  * 3. Rate observed during the current charging session
- * 4. Current + charge counter (when the device exposes both)
- * 5. Typical rate for the power source (AC/USB/Wireless)
+ * 4. Current + charge counter (only when the counter behaves like a real gauge)
  *
- * Strategy 5 makes sure an estimate is available as soon as the cable is
- * plugged in, even on devices that do not expose the charge counter.
+ * When none of them is reliable the estimate is null and the UI keeps
+ * showing the original battery percentage instead of an invented time.
  */
 class ChargeTimeEstimator private constructor(
     private val context: Context,
@@ -43,6 +42,15 @@ class ChargeTimeEstimator private constructor(
 
     // Average seconds per percent observed during the current session
     private var sessionRateSecs = 0.0
+
+    // Charge counter sanity: the peak seen during this session and whether the
+    // counter behaved like a real gauge. Once it drops while charging, the
+    // formula branch stays disabled until the next session.
+    private var counterPeak = 0L
+    private var counterPeakLevel = -1
+    private var counterReliable = true
+    /** The counter must rise above noise at least once before we trust it. */
+    private var counterRose = false
 
     // Constants
     private val MAX_PLAUSIBLE_MS = 24 * 60 * 60 * 1000L // 24 hours
@@ -110,6 +118,10 @@ class ChargeTimeEstimator private constructor(
             lastLevelChangeTime = now
             sessionRateSecs = 0.0
             currentSamples.clear()
+            counterPeak = 0L
+            counterPeakLevel = -1
+            counterReliable = true
+            counterRose = false
             lastEstimate = null
             lastEstimatedMinutes = -1
             lastEstimateUpdate = 0L
@@ -120,6 +132,10 @@ class ChargeTimeEstimator private constructor(
             saveLearnedTimes()
             lastLevel = -1
             sessionRateSecs = 0.0
+            counterPeak = 0L
+            counterPeakLevel = -1
+            counterReliable = true
+            counterRose = false
             lastEstimate = null
             lastEstimatedMinutes = -1
         }
@@ -133,6 +149,24 @@ class ChargeTimeEstimator private constructor(
         lastNormalizedCurrent = normalizeCurrent(currentNow)
         lastCurrentUnit = currentUnitOf(currentNow)
         lastRawChargeCounter = chargeCounter
+
+        // A real gauge never falls while charging. Once the counter drops below
+        // the peak of this session, the formula branch is disabled until unplug.
+        // It is enabled only after a rise above noise proves it is a real gauge.
+        if (chargeCounter > 0L) {
+            if (counterPeak <= 0L) {
+                counterPeak = chargeCounter
+                counterPeakLevel = level
+            } else if (chargeCounter > counterPeak) {
+                if (ChargeFormulaGuard.counterRoseAboveNoise(counterPeak, chargeCounter)) {
+                    counterRose = true
+                }
+                counterPeak = chargeCounter
+                counterPeakLevel = level
+            } else if (ChargeFormulaGuard.counterDroppedWhileCharging(counterPeak, chargeCounter, level, counterPeakLevel)) {
+                counterReliable = false
+            }
+        }
 
         // Sample current for moving average (only while charging and visible)
         if (lastNormalizedCurrent > 0) {
@@ -236,16 +270,19 @@ class ChargeTimeEstimator private constructor(
             )
         }
 
-        // 4. Current + charge counter
-        currentFallbackRateSecs(level, chargeCounter)?.let { rate ->
-            return logResult("formula", (100 - level) * rate, "secsPerPct=${fmt(rate)} slowdownMode=none")
+        // 4. Current + charge counter, only if the counter behaved like a real
+        // gauge and the derived full capacity is plausible for a phone battery.
+        if (counterReliable && counterRose) {
+            currentFallbackRateSecs(level, chargeCounter)?.let { rate ->
+                return logResult("formula", (100 - level) * rate, "secsPerPct=${fmt(rate)} slowdownMode=none")
+            }
         }
 
-        // 5. Typical rate for this power source, so an estimate exists right after plugging in
-        val rate = defaultRateSecs(plugged)
+        // 5. No reliable source: return null so the UI keeps showing the
+        // original percentage instead of an invented time.
         return logResult(
-            "default", remainingSecondsFromRate(level, rate, applySlowdown = true),
-            "secsPerPct=${fmt(rate)} slowdownMode=perPercent",
+            "none", 0.0,
+            "reason=no-reliable-source counterReliable=$counterReliable counterRose=$counterRose",
         )
     }
 
@@ -265,6 +302,9 @@ class ChargeTimeEstimator private constructor(
             .append(" counterRaw=").append(lastRawChargeCounter)
             .append(" counterNorm=").append(lastRawChargeCounter)
             .append(" counterUnit=uAh")
+            .append(" counterPeak=").append(counterPeak)
+            .append(" counterReliable=").append(counterReliable)
+            .append(" counterRose=").append(counterRose)
             .append(" fullCapacity=").append(fullCapacity?.roundToLong() ?: -1)
             .append(" slowdown=").append(fmt(slowdown))
             .append(" finalSecs=").append(seconds.roundToLong())
@@ -292,15 +332,6 @@ class ChargeTimeEstimator private constructor(
     /** Round to 1 decimal, enough for the log and locale-independent. */
     private fun fmt(value: Double): String = ((value * 10).roundToLong() / 10.0).toString()
 
-    /** Seconds left for the remaining percents at [rateSecs], optionally slowing down above 80%. */
-    private fun remainingSecondsFromRate(level: Int, rateSecs: Double, applySlowdown: Boolean): Double {
-        var total = 0.0
-        for (p in (level + 1)..100) {
-            total += rateSecs * if (applySlowdown) slowdownFactors[p] else 1.0
-        }
-        return total
-    }
-
     /** Full capacity in µAh derived from the charge counter, when the device exposes it. */
     private fun estimatedFullCapacity(level: Int, chargeCounter: Long): Double? {
         if (level < MIN_LEVEL_FOR_CAPACITY || chargeCounter <= 0 || chargeCounter == Long.MIN_VALUE) return null
@@ -312,7 +343,10 @@ class ChargeTimeEstimator private constructor(
      * Returns null when the device does not expose those properties.
      */
     private fun currentFallbackRateSecs(level: Int, chargeCounter: Long): Double? {
+        if (!counterReliable || !counterRose) return null
         val fullCapacity = estimatedFullCapacity(level, chargeCounter) ?: return null
+        // A capacity outside 1.500–12.000 mAh means the counter is not usable.
+        if (!ChargeFormulaGuard.isPlausibleCapacity(fullCapacity.roundToLong())) return null
         val avgCurrent = currentSamples.averageOrNull() ?: return null
         if (avgCurrent <= 0) return null
         // chargeCounter is in µAh, current in µA
