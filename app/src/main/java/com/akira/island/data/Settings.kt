@@ -529,8 +529,6 @@ object SettingsRepo {
             liquidExpand = d.liquidExpand,
             elasticity = d.elasticity,
             reduceEffects = d.reduceEffects,
-            noticeDurationMs = d.noticeDurationMs,
-            noticeDelayMs = d.noticeDelayMs,
         )
     }
 

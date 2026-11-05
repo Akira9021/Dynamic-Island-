@@ -1,5 +1,8 @@
 package com.akira.island.ui.screens
 
+import com.akira.island.island.PreviewScene
+import androidx.compose.runtime.saveable.rememberSaveable
+
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -12,6 +15,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.Height
+import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.FormatBold
@@ -105,7 +110,7 @@ fun CapsuleScreen(open: (Screen) -> Unit) {
             GroupItem(Pos.First, Icons.Rounded.OpenWith, tr("Положение и размер", "Position and size"),
                 trf("Капсула {0}×{1} dp — подогнать под камеру", "Capsule {0}×{1} dp — fit it to the camera", s.width, s.height),
                 color = Tile.Indigo, onClick = { open(Screen.SIZE) }) { Arrow() }
-            GroupItem(Pos.Last, Icons.Rounded.SwapHoriz, tr("Размеры", "Sizes"),
+            GroupItem(Pos.Last, Icons.Rounded.SwapHoriz, tr("Размер и форма", "Size and shape"),
                 trf(
                     "С активностью, раскрытый остров и уведомления: ширина {0}%, текст {1}%",
                     "With activity, expanded island and notifications: width {0}%, text {1}%", s.expandedWidthPercent, s.contentScale,
@@ -113,30 +118,10 @@ fun CapsuleScreen(open: (Screen) -> Unit) {
                 color = Tile.Purple, onClick = { open(Screen.LOOK) }) { Arrow() }
         }
 
-        SectionHeader(tr("Цвет и стекло", "Color and glass"))
-        Group {
-            GroupItem(Pos.First, Icons.Rounded.FormatColorFill, tr("Цвет капсулы", "Capsule color"), tr("Цвет, контур и тень", "Color, outline and shadow"),
-                color = Tile.Orange, onClick = { open(Screen.COLORS) }) { Arrow() }
-            // У стекла своя плотность — ниже, у Liquid Glass
-            if (!s.liquidGlass) {
-                GroupSlider(
-                    Pos.Middle, Icons.Rounded.Opacity, tr("Непрозрачность", "Opacity"),
-                    value = s.islandOpacity.toFloat(), range = 20f..100f, label = "${s.islandOpacity}%", color = Tile.Gray,
-                ) { v -> SettingsRepo.update { copy(islandOpacity = (v / 5).toInt() * 5) } }
-            }
-            GroupToggle(
-                if (s.liquidGlass) Pos.Middle else Pos.Last, Icons.Rounded.WaterDrop, "Liquid Glass",
-                tr("Стекло с бликами и сияющей кромкой, как в iOS. Блики двигаются при наклоне",
-                    "Glass with highlights and a glowing edge, like in iOS. Highlights move when you tilt the phone"),
-                s.liquidGlass, color = Tile.Teal, badge = tr("Экспериментальный", "Experimental"),
-            ) { v -> SettingsRepo.update { copy(liquidGlass = v) } }
-            if (s.liquidGlass) {
-                GroupSlider(
-                    Pos.Last, Icons.Rounded.Opacity, tr("Плотность стекла", "Glass density"),
-                    value = s.glassOpacity.toFloat(), range = 40f..100f, label = "${s.glassOpacity}%", color = Tile.Teal,
-                ) { v -> SettingsRepo.update { copy(glassOpacity = v.toInt()) } }
-            }
-        }
+        SectionHeader(tr("Цвет и материал", "Color and material"))
+        GroupItem(Pos.Single, Icons.Rounded.FormatColorFill, tr("Цвет и рамка", "Color and border"),
+            tr("Капсула и карточки: заливка, рамка, стекло и кнопки", "Capsule and cards: fill, border, glass and controls"),
+            color = Tile.Orange, onClick = { open(Screen.COLORS) }) { Arrow() }
 
         SectionHeader(tr("Шрифт", "Font"))
         GroupItem(Pos.Single, Icons.Rounded.FontDownload, tr("Шрифт острова", "Island font"),
@@ -147,14 +132,6 @@ fun CapsuleScreen(open: (Screen) -> Unit) {
             GroupItem(Pos.First, Icons.Rounded.Animation, tr("Раскрытие острова", "Island expansion"),
                 "${s.expandStyle.title} · ${s.durationPercent}%",
                 color = Tile.Blue, onClick = { open(Screen.ANIM) }) { Arrow() }
-            // Новое раскрытие — отдельным переключателем: выключено — прежнее перетекание
-            GroupToggle(Pos.Middle, Icons.Rounded.BubbleChart, tr("Жидкое раскрытие", "Liquid expansion"),
-                tr("Содержимое растёт вместе с островом и проявляется из размытия",
-                    "The content grows together with the island and emerges from a blur"),
-                s.liquidExpand, color = Tile.Indigo, badge = tr("Новое", "New"),
-            ) { v -> SettingsRepo.update { copy(liquidExpand = v) } }
-            // Упругость — на виду: «слишком прыгает» правится одним нажатием
-            ElasticityItem(Pos.Middle, s, Tile.Teal)
             GroupItem(Pos.Last, Icons.Rounded.AutoAwesome, tr("Эффекты", "Effects"), effectsSummary(s),
                 color = Tile.Purple, onClick = { open(Screen.EFFECTS) }) { Arrow() }
         }
@@ -172,83 +149,55 @@ private fun ElasticityItem(pos: Pos, s: IslandSettings, color: Color) {
     }
 }
 
-/** Пока двигают ползунок размера, на острове пример активности — сразу видно, какой она будет. */
-private fun previewActivity() {
-    IslandBus.widthPreviewUntil.value = SystemClock.elapsedRealtime() + 2_500
-}
-
 /** «Размер с активностью»: насколько капсула с навигатором, фонариком или музыкой толще и шире спокойной. */
 @Composable
 fun LookScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
-    Page(tr("Размеры", "Sizes"), onBack) {
-        IslandPreview()
-        SectionHeader(tr("С активностью", "With activity"))
-        Group {
-            GroupSlider(
-                Pos.First, Icons.Rounded.LineWeight, tr("Толщина", "Thickness"),
-                value = s.activeExtra.toFloat(), range = 0f..14f, label = "+${s.activeExtra} dp", steps = 13, color = Tile.Purple,
-            ) { v ->
-                previewActivity()
-                SettingsRepo.update { copy(activeExtra = v.toInt()) }
+    var card by rememberSaveable { mutableStateOf(false) }
+    var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
+    Page(tr("Размер и форма", "Size and shape"), onBack, preview = { SettingsPreview(card, scene, onScene = { scene = it }) }) {
+        ChoiceStrip(listOf(false, true), card, { if (it) tr("Карточка", "Card") else tr("Капсула", "Capsule") }) { card = it }
+        if (!card) {
+            SectionHeader(tr("Капсула с активностью", "Active capsule"))
+            SettingsHint(tr("Прибавка к размеру пустой капсулы. Положение и базовый размер настраиваются на экране «Положение и размер».",
+                "Extra size while an activity is present. Set the base size and position in Position and size."))
+            Group {
+                GroupSlider(Pos.First, Icons.Rounded.LineWeight, tr("Добавить высоту", "Extra height"), s.activeExtra.toFloat(), 0f..14f, "+${s.activeExtra} dp", color = Tile.Purple) {
+                    v -> SettingsRepo.update { copy(activeExtra = v.toInt()) }
+                }
+                GroupSlider(Pos.Last, Icons.Rounded.SwapHoriz, tr("Добавить ширину", "Extra width"), s.activeWidth.toFloat(), 0f..200f, "+${s.activeWidth} dp", color = Tile.Blue) {
+                    v -> SettingsRepo.update { copy(activeWidth = (v / 5).toInt() * 5) }
+                }
             }
-            GroupSlider(
-                Pos.Last, Icons.Rounded.SwapHoriz, tr("Ширина", "Width"),
-                value = s.activeWidth.toFloat(), range = 0f..200f, steps = 39,
-                label = if (s.activeWidth == 0) tr("Как без неё", "As without it") else "+${s.activeWidth} dp", color = Tile.Blue,
-            ) { v ->
-                // Сразу видно, не налезает ли капсула на значки строки состояния
-                previewActivity()
-                SettingsRepo.update { copy(activeWidth = (v / 5).toInt() * 5) }
+        } else {
+            SectionHeader(tr("Раскрытые карточки и уведомления", "Expanded cards and notifications"))
+            Group {
+                GroupSlider(Pos.First, Icons.Rounded.WidthNormal, tr("Ширина карточки", "Card width"), s.expandedWidthPercent.toFloat(), 60f..100f, "${s.expandedWidthPercent}%", color = Tile.Blue) {
+                    v -> SettingsRepo.update { copy(expandedWidthPercent = (v / 5).toInt() * 5) }
+                }
+                GroupSlider(Pos.Middle, Icons.Rounded.TextIncrease, tr("Размер текста и значков", "Text and icon size"), s.contentScale.toFloat(), 70f..130f, "${s.contentScale}%", color = Tile.Pink) {
+                    v -> SettingsRepo.update { copy(contentScale = (v / 5).toInt() * 5) }
+                }
+                GroupSlider(Pos.Last, Icons.Rounded.Height, tr("Максимальная высота", "Maximum height"), s.expandedMaxHeight.toFloat(), 180f..480f, "${s.expandedMaxHeight} dp", color = Tile.Blue) {
+                    v -> SettingsRepo.update { copy(expandedMaxHeight = (v / 30).roundToInt() * 30) }
+                }
+            }
+            SettingsHint(tr("Ограничивает длинные карточки: внутри появится прокрутка. Короткие карточки не растягиваются.",
+                "Limits long cards, which scroll inside. Short cards are not stretched."))
+        }
+        SectionHeader(tr("Скругление углов", "Rounded corners"))
+        val radius = if (card) s.expandedCornerRadius else s.cornerRadius
+        ChoiceStrip(listOf(true, false), radius < 0, { if (it) tr("Автоматически", "Automatic") else tr("Свой радиус", "Custom radius") }) { auto ->
+            SettingsRepo.update { if (card) copy(expandedCornerRadius = if (auto) -1 else 32) else copy(cornerRadius = if (auto) -1 else height / 2) }
+        }
+        if (radius >= 0) GroupSlider(Pos.Single, Icons.Rounded.RoundedCorner, tr("Радиус углов", "Corner radius"), radius.toFloat(), if (card) 0f..60f else 0f..45f, "$radius dp", color = Tile.Purple) {
+            v -> SettingsRepo.update { if (card) copy(expandedCornerRadius = v.roundToInt()) else copy(cornerRadius = v.roundToInt()) }
+        }
+        if (s.notch) {
+            GroupSlider(Pos.Single, Icons.Rounded.RoundedCorner, tr("Верхние углы выреза", "Notch top corners"), s.notchTopRadius.toFloat(), 0f..30f, "${s.notchTopRadius} dp", color = Tile.Teal) {
+                v -> SettingsRepo.update { copy(notchTopRadius = v.roundToInt()) }
             }
         }
-
-        // Уведомления занимают слишком много места — делаем их уже и мельче, и наоборот
-        SectionHeader(tr("Раскрытый остров и уведомления", "Expanded island and notifications"))
-        Group {
-            GroupSlider(
-                Pos.First, Icons.Rounded.WidthNormal, tr("Ширина", "Width"),
-                value = s.expandedWidthPercent.toFloat(), range = 60f..100f, steps = 7,
-                label = "${s.expandedWidthPercent}%", color = Tile.Indigo,
-            ) { v -> SettingsRepo.update { copy(expandedWidthPercent = (v / 5).toInt() * 5) } }
-            GroupSlider(
-                Pos.Middle, Icons.Rounded.TextIncrease, tr("Размер текста и значков", "Text and icon size"),
-                value = s.contentScale.toFloat(), range = 70f..130f, steps = 11,
-                label = "${s.contentScale}%", color = Tile.Pink,
-            ) { v -> SettingsRepo.update { copy(contentScale = (v / 5).toInt() * 5) } }
-            GroupSlider(Pos.Last, Icons.Rounded.WidthNormal, tr("Максимальная высота", "Maximum height"),
-                value = s.expandedMaxHeight.toFloat(), range = 180f..480f, steps = 9,
-                label = "${s.expandedMaxHeight} dp", color = Tile.Blue,
-            ) { v -> SettingsRepo.update { copy(expandedMaxHeight = (v / 30).roundToInt() * 30) } }
-        }
-        SectionHeader(tr("Скругление", "Corner radius"))
-        Group {
-            GroupToggle(Pos.First, Icons.Rounded.WaterDrop, tr("Автоматическая форма капсулы", "Automatic capsule shape"),
-                tr("Радиус зависит от высоты острова", "Radius follows the island height"),
-                s.cornerRadius < 0, color = Tile.Blue) { v -> SettingsRepo.update { copy(cornerRadius = if (v) -1 else height / 2) } }
-            if (s.cornerRadius >= 0) {
-                GroupSlider(Pos.Middle, Icons.Rounded.WaterDrop, tr("Радиус капсулы", "Capsule radius"),
-                    s.cornerRadius.toFloat(), 0f..45f, "${s.cornerRadius} dp", color = Tile.Blue,
-                ) { v -> SettingsRepo.update { copy(cornerRadius = v.roundToInt()) } }
-            }
-            if (s.notch) {
-                GroupSlider(Pos.Middle, Icons.Rounded.WaterDrop, tr("Верхние углы выреза", "Notch top corners"),
-                    s.notchTopRadius.toFloat(), 0f..30f, "${s.notchTopRadius} dp", color = Tile.Teal,
-                ) { v -> SettingsRepo.update { copy(notchTopRadius = v.roundToInt()) } }
-            }
-            GroupToggle(Pos.Middle, Icons.Rounded.WaterDrop, tr("Автоматическая форма карточки", "Automatic card shape"),
-                tr("Прежнее скругление раскрытого острова", "Use the original expanded card radius"),
-                s.expandedCornerRadius < 0, color = Tile.Purple) { v -> SettingsRepo.update { copy(expandedCornerRadius = if (v) -1 else 32) } }
-            if (s.expandedCornerRadius >= 0) {
-                GroupSlider(Pos.Last, Icons.Rounded.WaterDrop, tr("Радиус карточки", "Card radius"),
-                    s.expandedCornerRadius.toFloat(), 0f..60f, "${s.expandedCornerRadius} dp", color = Tile.Purple,
-                ) { v -> SettingsRepo.update { copy(expandedCornerRadius = v.roundToInt()) } }
-            }
-        }
-        Text(
-            tr("Проверьте на примерах: «Главная → Проверка».", "See it on the examples: Home → Try it."),
-            color = Ui.Sub, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 8.dp),
-        )
     }
 }
 
@@ -257,10 +206,16 @@ fun LookScreen(onBack: () -> Unit) {
 fun AnimScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
     var styleDialog by remember { mutableStateOf(false) }
+    var previewOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(s.expandStyle, s.durationPercent, s.elasticity, s.liquidExpand, s.reduceEffects) {
+        previewOpen = false
+        kotlinx.coroutines.delay(500)
+        previewOpen = true
+    }
 
     Page(tr("Раскрытие острова", "Island expansion"), onBack, action = {
         Text(tr("Сброс", "Reset"), color = Ui.Sub, fontSize = 16.sp, modifier = Modifier.clickable { SettingsRepo.resetAnimations() })
-    }) {
+    }, preview = { SettingsPreview(previewOpen, onExpand = { previewOpen = !previewOpen }) }) {
         Group {
             GroupItem(Pos.First, Icons.Rounded.Animation, tr("Стиль раскрытия", "Expansion style"), s.expandStyle.title, color = Tile.Purple,
                 onClick = { styleDialog = true })
@@ -268,18 +223,11 @@ fun AnimScreen(onBack: () -> Unit) {
                 Pos.Middle, Icons.Rounded.Speed, tr("Длительность", "Duration"),
                 value = s.durationPercent.toFloat(), range = 0f..100f, label = "${s.durationPercent}%", color = Tile.Indigo,
             ) { v -> SettingsRepo.update { copy(durationPercent = v.toInt()) } }
-            // Сколько видно событие; плашки, которым нужно больше времени (сообщение с кнопками, оплата), — от него же
-            GroupSlider(
-                Pos.Middle, Icons.Rounded.Schedule, tr("Показ событий", "Event display"),
-                value = s.noticeDurationMs / 1000f, range = 1.5f..10f, label = tr("%.1f с", "%.1f s").format(s.noticeDurationMs / 1000f), color = Tile.Orange,
-            ) { v -> SettingsRepo.update { copy(noticeDurationMs = (v * 2).roundToInt() * 500) } }
-            // Остров показывает событие не сразу, а через столько секунд
-            GroupSlider(
-                Pos.Middle, Icons.Rounded.HourglassTop, tr("Задержка появления", "Delay before showing"),
-                value = s.noticeDelayMs / 1000f, range = 0f..3f,
-                label = if (s.noticeDelayMs == 0) tr("Сразу", "Right away") else tr("%.1f с", "%.1f s").format(s.noticeDelayMs / 1000f),
-                color = Tile.Yellow,
-            ) { v -> SettingsRepo.update { copy(noticeDelayMs = (v * 10).roundToInt() * 100) } }
+            ElasticityItem(Pos.Middle, s, Tile.Teal)
+            GroupToggle(Pos.Middle, Icons.Rounded.BubbleChart, tr("Жидкое раскрытие", "Liquid expansion"),
+                tr("Содержимое растёт вместе с островом", "Content grows with the island"), s.liquidExpand, color = Tile.Indigo) {
+                v -> SettingsRepo.update { copy(liquidExpand = v) }
+            }
             GroupToggle(Pos.Last, Icons.Rounded.BlurOn, tr("Уменьшить эффекты", "Reduce effects"),
                 tr("Может быть полезно для не самых производительных устройств", "Can help on less powerful devices"),
                 s.reduceEffects, color = Tile.Gray) { v -> SettingsRepo.update { copy(reduceEffects = v) } }
@@ -312,8 +260,7 @@ fun EffectsScreen(onBack: () -> Unit) {
     var rateDialog by remember { mutableStateOf(false) }
     Page(tr("Эффекты", "Effects"), onBack, action = {
         Text(tr("Сброс", "Reset"), color = Ui.Sub, fontSize = 16.sp, modifier = Modifier.clickable { SettingsRepo.resetEffects() })
-    }) {
-        IslandPreview()
+    }, preview = { SettingsPreview(scene = PreviewScene.MUSIC) }) {
         if (s.reduceEffects) {
             Text(
                 tr("Сейчас включено «Уменьшить эффекты» в «Раскрытии острова» — пока оно включено, эффектов нет",
@@ -406,8 +353,7 @@ fun FontScreen(onBack: () -> Unit) {
         }
     }
 
-    Page(tr("Шрифт острова", "Island font"), onBack) {
-        FontSample()
+    Page(tr("Шрифт острова", "Island font"), onBack, preview = { SettingsPreview(card = true, scene = PreviewScene.MESSAGE) }) {
         SectionHeader(tr("Шрифт", "Font"))
         Group {
             IslandFont.entries.forEachIndexed { i, f ->
@@ -440,21 +386,6 @@ fun FontScreen(onBack: () -> Unit) {
                     onClick = { SettingsRepo.update { copy(fontWeightShift = w) } },
                 ) { if (s.fontWeightShift == w) Icon(Icons.Rounded.Check, null, tint = Ui.Primary) }
             }
-        }
-    }
-}
-
-/** Пример текста острова выбранным шрифтом: время, имя и сообщение. */
-@Composable
-private fun FontSample() {
-    IslandTheme {
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Color.Black).padding(horizontal = 22.dp, vertical = 18.dp),
-        ) {
-            Text("12:31", color = Color.White, fontSize = 34.sp, style = Digits)
-            Spacer(Modifier.height(6.dp))
-            Text(tr("Анна", "Anna"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold.island)
-            Text(tr("Привет! Во сколько встречаемся?", "Hi! What time are we meeting?"), color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
         }
     }
 }

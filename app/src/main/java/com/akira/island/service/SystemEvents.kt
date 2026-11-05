@@ -59,8 +59,18 @@ class SystemEvents(private val context: Context) {
             if (IslandBus.battery.value.charging) main.postDelayed(this, 15_000)
         }
     }
-    private val vpnNetworks = HashSet<Network>()
-    private var debugState: Pair<Boolean, Boolean>? = null
+    private var vpnState: Boolean? = null
+    private var debugState: Pair<Boolean?, Boolean?>? = null
+    private val connectionSample = object : Runnable {
+        override fun run() {
+            if (!active) return
+            if (IslandBus.screenOn.value) {
+                if (s.evVpn) readVpn(announce = true)
+                if (s.evDebugging) readDebugging(announce = true)
+            }
+            main.postDelayed(this, 2000)
+        }
+    }
     private var hotspotState: Boolean? = null
     private val s get() = SettingsRepo.current
 
@@ -78,6 +88,11 @@ class SystemEvents(private val context: Context) {
 
     private fun notice(enabled: Boolean, n: Notice) {
         if (active && enabled && !warmingUp) IslandBus.post(n)
+    }
+
+    // These sources have an explicit baseline; do not lose genuine changes during startup warmup.
+    private fun connectionNotice(enabled: Boolean, n: Notice) {
+        if (active && enabled) IslandBus.post(n)
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -103,22 +118,25 @@ class SystemEvents(private val context: Context) {
     }
 
     private val vpnCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            main.post {
-                if (!active) return@post
-                val wasEmpty = vpnNetworks.isEmpty()
-                vpnNetworks += network
-                if (wasEmpty) notice(s.evVpn, Notice("VPN", tr("Подключён", "Connected"), ic(R.drawable.ios_hardware_chip), Tints.Teal))
-            }
+        override fun onAvailable(network: Network) { main.post { if (active) readVpn(announce = true) } }
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            main.post { if (active) readVpn(announce = true) }
         }
-        override fun onLost(network: Network) {
-            main.post {
-                if (!active) return@post
-                if (vpnNetworks.remove(network) && vpnNetworks.isEmpty()) {
-                    notice(s.evVpn, Notice("VPN", tr("Отключён", "Disconnected"), ic(R.drawable.ios_hardware_chip), Tints.Gray))
-                }
+        override fun onLost(network: Network) { main.post { if (active) readVpn(announce = true) } }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readVpn(announce: Boolean) {
+        val next = runCatching {
+            val manager = connectivity ?: return@runCatching null
+            manager.allNetworks.any { network ->
+                manager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
             }
-        }
+        }.getOrNull()
+        val previous = vpnState
+        vpnState = next
+        SystemEventObservation.state.value = SystemEventObservation.state.value.copy(vpn = next)
+        if (announce && eventChanged(previous, next)) connectionNotice(s.evVpn, ConnectionEvent.VPN.notice(next == true))
     }
 
     private val debuggingObserver = object : ContentObserver(main) {
@@ -148,6 +166,7 @@ class SystemEvents(private val context: Context) {
     fun start() {
         if (active) return
         active = true
+        SystemEventObservation.state.value = SystemEventReadings(observing = true)
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(Intent.ACTION_POWER_CONNECTED)
@@ -185,14 +204,23 @@ class SystemEvents(private val context: Context) {
                 Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE), false, brightnessObserver,
             )
         }
+        readVpn(announce = false)
         readDebugging(announce = false)
+        main.postDelayed(connectionSample, 2000)
         listOf(Settings.Global.ADB_ENABLED, WIRELESS_DEBUGGING).forEach { key ->
             runCatching { context.contentResolver.registerContentObserver(Settings.Global.getUriFor(key), false, debuggingObserver) }
         }
         runCatching {
             connectivity?.registerNetworkCallback(
-                NetworkRequest.Builder().removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                    .addTransportType(NetworkCapabilities.TRANSPORT_VPN).build(), vpnCallback,
+                // Defaults also require TRUSTED and NOT_RESTRICTED, excluding some VPNs.
+                NetworkRequest.Builder().apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) clearCapabilities()
+                    else {
+                        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                        removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
+                        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                    }
+                }.addTransportType(NetworkCapabilities.TRANSPORT_VPN).build(), vpnCallback,
             )
         }
 
@@ -206,6 +234,8 @@ class SystemEvents(private val context: Context) {
 
     fun stop() {
         active = false
+        SystemEventObservation.state.value = SystemEventObservation.state.value.copy(observing = false)
+        main.removeCallbacks(connectionSample)
         main.removeCallbacks(batterySample)
         runCatching { context.unregisterReceiver(receiver) }
         runCatching { context.contentResolver.unregisterContentObserver(brightnessObserver) }
@@ -222,9 +252,9 @@ class SystemEvents(private val context: Context) {
                 val enabled = when (state) { 13 -> true; 11 -> false; else -> return }
                 val old = hotspotState
                 hotspotState = enabled
+                SystemEventObservation.state.value = SystemEventObservation.state.value.copy(hotspot = enabled)
                 if (!initialSticky && old != enabled) {
-                    notice(s.evHotspot, Notice(tr("Точка доступа", "Hotspot"), if (enabled) tr("Вкл", "On") else tr("Выкл", "Off"),
-                        ic(R.drawable.ios_wifi), if (enabled) Tints.Blue else Tints.Gray))
+                    notice(s.evHotspot, ConnectionEvent.HOTSPOT.notice(enabled))
                 }
             }
             Intent.ACTION_BATTERY_CHANGED -> {
@@ -405,15 +435,15 @@ class SystemEvents(private val context: Context) {
     }
 
     private fun readDebugging(announce: Boolean) {
-        fun read(key: String) = runCatching { Settings.Global.getInt(context.contentResolver, key, 0) != 0 }.getOrDefault(false)
+        // A missing/denied setting is unknown. A default false hid unsupported readings.
+        fun read(key: String): Boolean? = runCatching { Settings.Global.getInt(context.contentResolver, key) != 0 }.getOrNull()
         val next = read(Settings.Global.ADB_ENABLED) to read(WIRELESS_DEBUGGING)
         val old = debugState
         debugState = next
+        SystemEventObservation.state.value = SystemEventObservation.state.value.copy(usbDebug = next.first, wirelessDebug = next.second)
         if (!announce || old == null) return
-        listOf(Triple(old.first, next.first, "USB"), Triple(old.second, next.second, "Wi-Fi")).forEach { (before, after, kind) ->
-            if (before != after) notice(s.evDebugging, Notice(tr("Отладка", "Debugging") + " · " + kind,
-                if (after) tr("Вкл", "On") else tr("Выкл", "Off"), ic(R.drawable.ios_hardware_chip), Tints.Teal))
-        }
+        if (eventChanged(old.first, next.first)) connectionNotice(s.evDebugging, ConnectionEvent.USB_DEBUG.notice(next.first == true))
+        if (eventChanged(old.second, next.second)) connectionNotice(s.evDebugging, ConnectionEvent.WIRELESS_DEBUG.notice(next.second == true))
     }
 
     private fun scheduleBatterySample() {

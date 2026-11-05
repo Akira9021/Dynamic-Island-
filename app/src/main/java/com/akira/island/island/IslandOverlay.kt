@@ -104,6 +104,7 @@ import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
 import com.akira.island.core.trf
+import com.akira.island.data.usesCardSurface
 import com.akira.island.data.BubbleSide
 import com.akira.island.data.Elasticity
 import com.akira.island.data.MessageStyle
@@ -385,7 +386,7 @@ fun IslandOverlay(
 }
 
 @Composable
-private fun IslandRow(
+internal fun IslandRow(
     slot: State<Dp>,
     s: IslandSettings,
     primary: Act,
@@ -459,7 +460,7 @@ private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSe
 }
 
 @Composable
-private fun IslandBody(
+internal fun IslandBody(
     primary: Act,
     expanded: Boolean,
     s: IslandSettings,
@@ -468,6 +469,7 @@ private fun IslandBody(
     calibrating: Boolean,
     onBounds: (Rect) -> Unit,
 ) {
+    val preview = LocalIslandPreview.current
     val context = LocalContext.current
     val haptic = rememberHaptic()
     val activities by rememberUpdatedState(LocalActivities.current)
@@ -494,8 +496,9 @@ private fun IslandBody(
         primary is Act.Idle -> h / 2
         else -> activeHeight(s) / 2
     }
-    val detail by IslandBus.messageDetail.collectAsState()
-    val large = expanded || primary is Act.NoticeA && (s.messageStyle == MessageStyle.CARD || detail)
+    val realDetail by IslandBus.messageDetail.collectAsState()
+    val detail = realDetail && !preview
+    val large = s.usesCardSurface(expanded, (primary as? Act.NoticeA)?.n?.style, detail)
     val radius = if (large) s.expandedCornerRadius else s.cornerRadius
     val cornerTarget = if (radius >= 0) radius.dp else cornerDefault
     // Скругление читается при рисовании: кадр раскрытия перерисовывает рамку и стекло, а не пересобирает остров
@@ -509,20 +512,6 @@ private fun IslandBody(
         is Act.CallA -> Tints.Green
         else -> null
     }
-    val borderColor = if (large && s.expandedOutlineWidth >= 0) s.expandedOutlineColor else s.outlineColor
-    val opacity = if (large && s.expandedOutlineWidth >= 0) s.expandedOutlineOpacity else s.outlineOpacity
-    val outlineColor = (if (s.outlineFromArt && accent != null) accent else Color(borderColor)).let {
-        it.copy(alpha = it.alpha * opacity.coerceIn(0, 100) / 100f)
-    }
-    val outlineWidth = if (large && s.expandedOutlineWidth >= 0) s.expandedOutlineWidth else s.outlineWidth
-    val ownExpandedOutline = large && s.expandedOutlineWidth >= 0
-    val edgeWidths = if (ownExpandedOutline) listOf(s.expandedOutlineTopWidth, s.expandedOutlineRightWidth,
-        s.expandedOutlineBottomWidth, s.expandedOutlineLeftWidth)
-    else listOf(s.outlineTopWidth, s.outlineRightWidth, s.outlineBottomWidth, s.outlineLeftWidth)
-    val edges = edgeWidths.map { (if (it < 0) outlineWidth else it).coerceIn(0f, 12f).dp }
-    val surface = if (large && s.expandedColorEnabled) Color(s.expandedColor).let {
-        it.copy(alpha = it.alpha * s.islandOpacity / 100f)
-    } else islandFill(s)
 
     // Свечение цвета обложки, пока играет музыка («Эффекты»): с треком цвет плавно меняется, с паузой гаснет
     val playingArt = (primary as? Act.MediaA)?.m?.takeIf { it.playing }?.accent
@@ -579,46 +568,24 @@ private fun IslandBody(
     val current by rememberUpdatedState(primary)
     val isExpanded by rememberUpdatedState(expanded)
     val settings by rememberUpdatedState(s)
-    val egg by IslandBus.egg.collectAsState()
+    val realEgg by IslandBus.egg.collectAsState()
+    val egg = realEgg && !preview
 
     Box(
         Modifier
             .onGloballyPositioned { onBounds(it.boundsInWindow()) }
             .graphicsLayer {
                 // Пасхалка: остров подпрыгивает в такт песни; оплата прошла — на миг подрастает
-                val bump = Egg.bump() * PayFx.pop.floatValue
+                val bump = if (preview) 1f else Egg.bump() * PayFx.pop.floatValue
                 scaleX = jellyX.value * (1f + 0.03f * pull.value) * bump
                 scaleY = jellyY.value * (1f + 0.08f * pull.value) * bump
                 translationX = shake.value.dp.toPx()
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
-            // Тень и обрезка по форме — одним слоем; форма на каждом кадре берётся из анимации скругления
-            .graphicsLayer {
-                this.shape = islandShape(corner.value, s)
-                clip = true
-                when {
-                    s.liquidGlass && !calibrating && !s.reduceEffects -> {
-                        shadowElevation = 10.dp.toPx()
-                        ambientShadowColor = Color.Black.copy(alpha = 0.5f)
-                        spotShadowColor = Color.Black.copy(alpha = 0.6f)
-                    }
-                    s.shadow && !s.reduceEffects -> shadowElevation = 10.dp.toPx()
-                }
-            }
             .then(
-                if (s.liquidGlass && !calibrating) {
-                    Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value }) { sheen.value }
-                } else {
-                    Modifier.background(if (calibrating) CalibrationRed else surface)
-                },
-            )
-            .then(
-                when {
-                    calibrating -> Modifier.border(2.dp, Color.White, shape)
-                    s.outline || ownExpandedOutline -> Modifier.islandEdgeOutline(shape, outlineColor, edges[0], edges[1], edges[2], edges[3])
-                    else -> Modifier
-                },
+                if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
+                else Modifier.islandSurface(s, large, shape, accent, tilt = { tilt.value }, sheen = { sheen.value }),
             )
             .then(
                 if (egg && !calibrating) {
@@ -630,9 +597,7 @@ private fun IslandBody(
                     Modifier
                 },
             )
-            .then(if (s.bottomGradient > 0 && !calibrating) Modifier.background(Brush.verticalGradient(
-                listOf(Color.Transparent, Color.Black.copy(alpha = s.bottomGradient.coerceIn(0, 100) / 100f)),
-            )) else Modifier)
+            .then(if (preview) Modifier else Modifier
             // Любое касание — раскрытый остров не свернётся сам из-под пальца
             .pointerInput(Unit) {
                 awaitPointerEventScope {
@@ -722,7 +687,7 @@ private fun IslandBody(
                         }
                     },
                 )
-            },
+            }),
     ) {
         // Смена содержимого: с «Жидким раскрытием» новое вырастает из прежнего вместе с формой острова,
         // без него — прежнее перетекание. Форма в обоих случаях меняется пружиной из «Раскрытия острова»

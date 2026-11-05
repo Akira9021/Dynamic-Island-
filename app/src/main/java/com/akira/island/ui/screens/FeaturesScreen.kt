@@ -1,5 +1,8 @@
 package com.akira.island.ui.screens
 
+import com.akira.island.data.*
+import com.akira.island.island.PreviewScene
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -186,54 +189,42 @@ fun BehaviorScreen(onBack: () -> Unit) {
     var collapseDialog by remember { mutableStateOf(false) }
     var landscapeDialog by remember { mutableStateOf(false) }
     var lockDialog by remember { mutableStateOf(false) }
+    var emptyDialog by remember { mutableStateOf(false) }
+    var sourceDialog by remember { mutableStateOf(false) }
     var sideDialog by remember { mutableStateOf(false) }
 
-    Page(tr("Поведение", "Behavior"), onBack) {
+    if (sourceDialog) ChoiceDialog(tr("Когда открыто приложение", "When its app is open"), SourceVisibility.entries, s.sourceVisibility, ::sourceLabel,
+        { mode -> SettingsRepo.update { withSourceVisibility(mode) } }) { sourceDialog = false }
+    var previewScene by remember { mutableStateOf(PreviewScene.IDLE) }
+    if (emptyDialog) ChoiceDialog(tr("Когда нет активностей", "When no activities are active"), EmptyCapsule.entries, s.emptyCapsule, ::emptyLabel,
+        { mode -> SettingsRepo.update { withEmptyCapsule(mode) } }) { emptyDialog = false }
+    Page(tr("Поведение", "Behavior"), onBack, preview = {
+        SettingsPreview(scene = previewScene, onScene = { previewScene = it }, twoActivities = true, respectVisibility = true)
+    }) {
         SectionHeader(tr("Когда показывать", "When to show"))
         Group {
-            GroupToggle(Pos.First, Icons.Rounded.VisibilityOff, tr("Скрывать пустую капсулу", "Hide the empty capsule"),
-                tr("Показывать капсулу, только когда в ней что-то есть", "Show the capsule only when it has something in it"),
-                s.hideIdle, color = Tile.Gray) { v -> SettingsRepo.update { copy(hideIdle = v) } }
+            GroupItem(Pos.First, Icons.Rounded.Schedule, tr("Когда нет активностей", "When no activities are active"),
+                emptyLabel(s.emptyCapsule), color = Tile.Blue, onClick = { previewScene = PreviewScene.IDLE; emptyDialog = true })
             // В играх и видео: спрятать, оставить над камерой (как на iPhone) или посередине сверху
             GroupItem(Pos.Middle, Icons.Rounded.ScreenRotation, tr("В альбомной ориентации", "In landscape"),
                 "${s.landscape.title} — ${s.landscape.hint}", color = Tile.Gray, onClick = { landscapeDialog = true })
             GroupItem(Pos.Middle, Icons.Rounded.ScreenLockPortrait, tr("На экране блокировки", "On the lock screen"),
                 s.lockScreen.title, color = Tile.Indigo, onClick = { lockDialog = true })
-            GroupToggle(Pos.Last, Icons.Rounded.Apps, tr("Прятать плеер в его приложении", "Hide the player in its own app"),
-                tr("Карточка музыки не показывается, пока открыт сам плеер", "The music card hides while the player itself is open"),
-                s.hideWhenPlayerOpen, color = Tile.Blue) { v -> SettingsRepo.update { copy(hideWhenPlayerOpen = v) } }
+            GroupItem(Pos.Last, Icons.Rounded.Apps, tr("Когда открыто приложение", "When its app is open"),
+                sourceLabel(s.sourceVisibility), color = Tile.Blue, onClick = { sourceDialog = true })
         }
 
-        SectionHeader(tr("Дополнительное поведение", "Additional behavior"))
+        SectionHeader(tr("Карточки и экран", "Cards and screen"))
         Group {
-            GroupToggle(Pos.First, Icons.Rounded.Schedule, tr("Часы и заряд в капсуле", "Clock and battery in the capsule"),
-                tr("Постоянно показывать время и процент заряда, когда нет другой активности", "Show time and battery percentage when no activity is active"),
-                s.idleClockBattery, color = Tile.Blue) { v -> SettingsRepo.update { copy(idleClockBattery = v) } }
-            GroupToggle(Pos.Middle, Icons.Rounded.LibraryMusic, tr("Приоритет музыки", "Prefer music"),
+            GroupToggle(Pos.First, Icons.Rounded.LibraryMusic, tr("Приоритет музыки", "Prefer music"),
                 tr("Играющая музыка выше фоновых таймеров и событий; звонки и сигналы важнее", "Playing music takes priority over background timers and events; calls and alarms still come first"),
-                s.preferMusic, color = Tile.Pink) { v -> SettingsRepo.update { copy(preferMusic = v) } }
-            GroupToggle(Pos.Middle, Icons.Rounded.Gesture, tr("Листать активности свайпом", "Swipe between activities"),
-                tr("Горизонтальный свайп выбирает карточку вместо переключения трека", "Horizontal swipes select a card instead of changing tracks"),
-                s.swipeActivities, color = Tile.Purple) { v -> SettingsRepo.update { copy(swipeActivities = v) } }
-            GroupToggle(Pos.Middle, Icons.Rounded.Smartphone, tr("Прятать активность в её приложении", "Hide activity in its own app"),
-                tr("Активность возвращается после выхода из приложения", "The activity returns after leaving its app"),
-                s.hideWhenSourceOpen, color = Tile.Blue) { v -> SettingsRepo.update { copy(hideWhenSourceOpen = v) } }
+                s.preferMusic, color = Tile.Pink) { v -> previewScene = PreviewScene.MUSIC; SettingsRepo.update { copy(preferMusic = v) } }
             GroupToggle(Pos.Middle, Icons.Rounded.VisibilityOff, tr("Скрывать на AOD", "Hide on AOD"),
                 tr("Не показывать остров, пока экран в режиме ожидания", "Hide the island while the display is in ambient mode"),
                 s.hideOnAod, color = Tile.Gray) { v -> SettingsRepo.update { copy(hideOnAod = v) } }
             GroupToggle(Pos.Last, Icons.Rounded.NotificationsOff, tr("Сворачивать под шторкой", "Collapse under the notification shade"),
                 tr("Оставлять пустую капсулу при открытой шторке уведомлений или быстрых настройках", "Keep the capsule empty while the notification shade or quick settings are open"),
                 s.collapseOnShade, color = Tile.Indigo) { v -> SettingsRepo.update { copy(collapseOnShade = v) } }
-        }
-
-        SectionHeader(tr("Дополнительные события", "Additional events"))
-        Group {
-            GroupToggle(Pos.First, Icons.Rounded.Smartphone, "VPN", tr("Подключение и отключение VPN", "VPN connection and disconnection"),
-                s.evVpn, color = Tile.Blue) { v -> SettingsRepo.update { copy(evVpn = v) } }
-            GroupToggle(Pos.Middle, Icons.Rounded.Smartphone, tr("Точка доступа", "Hotspot"), tr("Изменение состояния точки доступа", "Hotspot state changes"),
-                s.evHotspot, color = Tile.Teal) { v -> SettingsRepo.update { copy(evHotspot = v) } }
-            GroupToggle(Pos.Last, Icons.Rounded.Smartphone, tr("Отладка USB и Wi-Fi", "USB and wireless debugging"), tr("Изменение доступных системе настроек отладки", "Changes to debugging settings exposed by Android"),
-                s.evDebugging, color = Tile.Gray) { v -> SettingsRepo.update { copy(evDebugging = v) } }
         }
 
         // Например, только днём: с 10:00 до 23:00; можно и через полночь — с 22:00 до 7:00
@@ -261,11 +252,12 @@ fun BehaviorScreen(onBack: () -> Unit) {
                 tr("Когда активностей две, вторая — кружком рядом с капсулой, как на iPhone",
                     "With two activities, the second one is a small circle next to the capsule, like on iPhone"),
                 s.bubble, color = Tile.Purple) { v ->
+                previewScene = PreviewScene.MUSIC
                 SettingsRepo.update { copy(bubble = v) }
             }
             if (s.bubble) {
                 GroupItem(Pos.Last, if (s.bubbleSide == BubbleSide.LEFT) Icons.Rounded.AlignHorizontalLeft else Icons.Rounded.AlignHorizontalRight,
-                    tr("Сторона кружка", "Circle side"), s.bubbleSide.title, color = Tile.Purple, onClick = { sideDialog = true })
+                    tr("Сторона кружка", "Circle side"), s.bubbleSide.title, color = Tile.Purple, onClick = { previewScene = PreviewScene.MUSIC; sideDialog = true })
             }
         }
 
@@ -349,7 +341,9 @@ fun NotificationsScreen(onBack: () -> Unit, open: (Screen) -> Unit) {
     var historyDialog by remember { mutableStateOf(false) }
     var iconDialog by remember { mutableStateOf(false) }
 
-    Page(tr("Уведомления", "Notifications"), onBack) {
+    Page(tr("Уведомления", "Notifications"), onBack, preview = {
+        SettingsPreview(card = s.messageStyle == MessageStyle.CARD, scene = PreviewScene.MESSAGE, notificationStyle = true)
+    }) {
         Group {
             GroupToggle(Pos.First, Icons.Rounded.ChatBubble, tr("Уведомления приложений", "App notifications"),
                 tr("Сообщения из Telegram, WhatsApp, почты и других приложений — карточкой в острове, как на iPhone",
@@ -407,7 +401,6 @@ fun NotificationsScreen(onBack: () -> Unit, open: (Screen) -> Unit) {
         }
 
         SectionHeader(tr("Цвет кнопок", "Button color"))
-        AccentPreview(s)
         GroupItem(Pos.Single, Icons.Rounded.Palette, tr("Цвет кнопок", "Button color"), "${s.accentMode.title} — ${s.accentMode.hint}",
             onClick = { accentDialog = true }, color = Tile.Orange)
         if (s.accentMode == AccentMode.CUSTOM) {
@@ -453,34 +446,6 @@ private fun historyLabel(min: Int) = when {
 }
 
 /** Как выглядят «Ответить», «Пометить прочитанным» и кнопка отправки с выбранным цветом. */
-@Composable
-private fun AccentPreview(s: IslandSettings) {
-    val context = LocalContext.current
-    // В режиме «Из аватара» цвет зависит от самого уведомления — в примере берём оранжевый
-    val accent = resolveAccent(context, s, Tints.Orange)
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Color.Black).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        PreviewTile(tr("Ответить", "Reply"), accent, Modifier.weight(1f))
-        PreviewTile(tr("Пометить прочитанным", "Mark as read"), accent, Modifier.weight(2f))
-        Box(Modifier.size(40.dp).clip(CircleShape).background(accent), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.ArrowUpward, null, tint = onAccent(accent), modifier = Modifier.size(22.dp))
-        }
-    }
-}
-
-@Composable
-private fun PreviewTile(title: String, accent: Color, modifier: Modifier) {
-    Box(
-        modifier.height(40.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.12f)).padding(horizontal = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        FitText(title, accent, 14.sp, 10.sp, FontWeight.SemiBold)
-    }
-}
-
 private val QuickAction.settingsIcon: ImageVector
     get() = when (this) {
         QuickAction.TIMER -> Icons.Rounded.HourglassBottom
@@ -505,3 +470,15 @@ private val QuickAction.hint: String?
             "Turns Do Not Disturb on and off. The first time, Android asks for access")
         else -> null
     }
+
+private fun sourceLabel(mode: SourceVisibility): String = when (mode) {
+    SourceVisibility.SHOW -> tr("Показывать карточки", "Show cards")
+    SourceVisibility.HIDE_MUSIC -> tr("Прятать только плеер", "Hide only the player")
+    SourceVisibility.HIDE_ALL -> tr("Прятать карточку открытого приложения", "Hide the open app's card")
+}
+
+private fun emptyLabel(mode: EmptyCapsule): String = when (mode) {
+    EmptyCapsule.HIDDEN -> tr("Скрывать", "Hide")
+    EmptyCapsule.PLAIN -> tr("Пустая капсула", "Empty capsule")
+    EmptyCapsule.CLOCK -> tr("Часы и заряд", "Clock and battery")
+}

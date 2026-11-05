@@ -151,7 +151,8 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
         // Пустая капсула: при желании часы слева от камеры, актуальный заряд справа.
         is Act.Idle -> {
             val keyguard by IslandBus.keyguard.collectAsState()
-            val battery by IslandBus.battery.collectAsState()
+            val realBattery by IslandBus.battery.collectAsState()
+            val battery = if (LocalIslandPreview.current) com.akira.island.core.BatteryInfo(72) else realBattery
             if (s.idleClockBattery) {
                 val now = rememberWallNow(1000)
                 val context = LocalContext.current
@@ -393,12 +394,14 @@ private fun MediaCompact(m: MediaInfo, s: IslandSettings) {
  */
 @Composable
 private fun NoticeCompact(n: Notice, s: IslandSettings, wideWidth: Dp) {
-    val detail by IslandBus.messageDetail.collectAsState()
+    val requestedDetail by IslandBus.messageDetail.collectAsState()
+    val preview = LocalIslandPreview.current
+    val detail = requestedDetail && !preview
     when {
-        n.message != null && detail -> MessageCard(n, n.message, s, wideWidth, detail = true)
+        n.message != null && detail -> MessageCard(n, n.message, s, wideWidth, detail = true, preview = preview)
         n.style == NoticeStyle.MESSAGE && n.message != null && s.messageStyle == MessageStyle.ICON -> MessageIcon(n.message, s)
         n.style == NoticeStyle.MESSAGE && n.message != null && s.messageStyle == MessageStyle.PILL -> MessagePill(n, n.message, s)
-        n.style == NoticeStyle.MESSAGE && n.message != null -> MessageCard(n, n.message, s, wideWidth)
+        n.style == NoticeStyle.MESSAGE && n.message != null -> MessageCard(n, n.message, s, wideWidth, preview = preview)
         n.style == NoticeStyle.PAY_DONE -> PayDone(n, s, wideWidth)
         n.style == NoticeStyle.LIVE && n.live != null -> LiveBanner(n, n.live, s, wideWidth)
         n.style == NoticeStyle.ALARM && n.alarm != null -> AlarmBanner(n, n.alarm, s, wideWidth)
@@ -498,7 +501,7 @@ private fun PillNotice(n: Notice, s: IslandSettings) {
  * Все размеры в sp растут вместе с размером шрифта Android, ширина и отступы — с настройками острова.
  */
 @Composable
-private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("UNUSED_PARAMETER") wideWidth: Dp, detail: Boolean = false) {
+internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("UNUSED_PARAMETER") wideWidth: Dp, detail: Boolean = false, preview: Boolean = false) {
     val context = LocalContext.current
     val haptic = rememberHaptic()
     val iconSize = 40.dp
@@ -513,12 +516,12 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
 
     // Пока отвечают или листают переписку, плашка не уходит по таймеру
     DisposableEffect(open, replyAction != null, detail) {
-        IslandBus.noticeHold.value = open || replyAction != null || detail
-        onDispose { IslandBus.noticeHold.value = false }
+        if (!preview) IslandBus.noticeHold.value = open || replyAction != null || detail
+        onDispose { if (!preview) IslandBus.noticeHold.value = false }
     }
     // Плашка ушла — ввод закрывается, окну возвращается «неактивный» режим
     DisposableEffect(n.id) {
-        onDispose { if (IslandBus.reply.value?.noticeId == n.id) IslandBus.reply.value = null }
+        onDispose { if (!preview && IslandBus.reply.value?.noticeId == n.id) IslandBus.reply.value = null }
     }
 
     Column(
@@ -629,6 +632,11 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
                                 Toast.makeText(context, tr("Не удалось отправить ответ", "Couldn't send the reply"), Toast.LENGTH_SHORT).show()
                             }
                         }
+                    }
+                } else if (preview && s.msgActions) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        TextAction(tr("Ответить", "Reply"), accent) {}
+                        TextAction(tr("Пометить прочитанным", "Mark as read"), accent) {}
                     }
                 } else if (m.actions.isNotEmpty() && !locked) {
                     // Кнопки стоят под текстом, на одной линии с ним, как в шторке

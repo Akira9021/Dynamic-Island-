@@ -89,12 +89,13 @@ fun Page(
     onBack: (() -> Unit)? = null,
     subtitle: String? = null,
     action: (@Composable () -> Unit)? = null,
+    preview: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val scroll = rememberScrollState()
     Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize()
+            .then(if (preview == null) Modifier.verticalScroll(scroll) else Modifier)
             .padding(horizontal = 16.dp),
     ) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
@@ -134,9 +135,19 @@ fun Page(
             )
         }
         Spacer(Modifier.height(18.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-        Spacer(Modifier.height(130.dp))
-        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        if (preview != null) {
+            preview()
+            Spacer(Modifier.height(12.dp))
+            Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                content()
+                Spacer(Modifier.height(130.dp))
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+            Spacer(Modifier.height(130.dp))
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        }
     }
 }
 

@@ -1,147 +1,161 @@
-@file:OptIn(ExperimentalLayoutApi::class)
-
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.akira.island.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BorderStyle
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.LineWeight
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.tr
-import com.akira.island.data.SettingsRepo
-import com.akira.island.ui.Group
-import com.akira.island.ui.GroupSlider
-import com.akira.island.ui.GroupToggle
-import com.akira.island.ui.Page
-import com.akira.island.ui.Pos
-import com.akira.island.ui.SectionHeader
-import com.akira.island.ui.Tile
-import com.akira.island.ui.Ui
+import com.akira.island.data.*
+import com.akira.island.island.PreviewScene
+import com.akira.island.ui.*
 
-private val capsuleColors = listOf(
-    0xFF000000, 0xFF111114, 0xFF1C1C22, 0xFF26233A, 0xFF1A2238, 0xFF102A2A,
-    0xFF2B1730, 0xFF3A1A1A, 0xFF2E2A1A, 0xFF3D3D45, 0xFFF2F2F7, 0xFFC6C3F7,
-)
-
-private val outlineColors = listOf(
-    0xFF3A3A40, 0xFF8E8E93, 0xFFFFFFFF, 0xFFC6C3F7, 0xFF0A84FF, 0xFF64D2FF,
-    0xFF34C759, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF2D92, 0xFFBF5AF2,
-)
+private val fillColors = listOf(0xFF000000, 0xFF111114, 0xFF1C1C22, 0xFF26233A, 0xFF1A2238, 0xFF102A2A,
+    0xFF2B1730, 0xFF3A1A1A, 0xFF2E2A1A, 0xFF3D3D45, 0xFFF2F2F7, 0xFFC6C3F7)
+private val lineColors = listOf(0xFF3A3A40, 0xFF8E8E93, 0xFFFFFFFF, 0xFFC6C3F7, 0xFF0A84FF, 0xFF64D2FF,
+    0xFF34C759, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF2D92, 0xFFBF5AF2)
 
 @Composable
 fun ColorsScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
-    Page(tr("Цвет капсулы", "Capsule color"), onBack) {
-        IslandPreview()
+    var card by rememberSaveable { mutableStateOf(false) }
+    var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
+    Page(tr("Цвет и рамка", "Color and border"), onBack, preview = {
+        SettingsPreview(card, scene, onScene = { scene = it })
+    }) {
+        ChoiceStrip(listOf(false, true), card, { if (it) tr("Карточка", "Card") else tr("Капсула", "Capsule") }) { card = it }
+        SettingsHint(if (card) tr("Карточка появляется при раскрытии острова и в уведомлениях.", "The card appears when the island expands and in notifications.")
+            else tr("Капсула — небольшой остров вокруг камеры.", "The capsule is the small island around the camera."))
 
-        SectionHeader(tr("Цвет", "Color"))
-        Swatches(capsuleColors, s.color) { c -> SettingsRepo.update { copy(color = c) } }
+        SectionHeader(tr("Заливка", "Fill"))
+        if (card) ChoiceStrip(listOf(false, true), s.expandedColorEnabled,
+            { if (it) tr("Свой цвет", "Custom color") else tr("Как у капсулы", "Same as capsule") }) {
+            SettingsRepo.update { copy(expandedColorEnabled = it) }
+        }
+        if (!card || s.expandedColorEnabled) Swatches(fillColors, if (card) s.expandedColor else s.color) { color ->
+            SettingsRepo.update { if (card) copy(expandedColor = color) else copy(color = color) }
+        } else SettingsHint(tr("Используется цвет капсулы. Чтобы изменить только карточку, выберите «Свой цвет».", "Uses the capsule color. Choose Custom color to change only the card."))
 
-        SectionHeader(tr("Контур", "Outline"))
-        Group {
-            GroupToggle(Pos.First, Icons.Rounded.BorderStyle, tr("Контур", "Outline"),
-                tr("Тонкая обводка вокруг капсулы", "A thin line around the capsule"),
-                s.outline, color = Tile.Gray) { v ->
-                SettingsRepo.update { copy(outline = v) }
+        SectionHeader(tr("Рамка", "Border"))
+        ChoiceStrip(if (card) BorderMode.entries else listOf(BorderMode.NONE, BorderMode.CUSTOM), s.borderMode(card), {
+            when (it) {
+                BorderMode.INHERIT -> tr("Как у капсулы", "Same as capsule")
+                BorderMode.NONE -> tr("Без рамки", "No border")
+                BorderMode.CUSTOM -> tr("Своя рамка", "Custom border")
             }
-            GroupToggle(Pos.Middle, Icons.Rounded.Image, tr("Цвет из обложки", "Color from artwork"),
-                tr("Пока играет музыка, контур окрашивается в цвет обложки", "While music plays, the outline takes the artwork's color"),
-                s.outlineFromArt, color = Tile.Pink) { v -> SettingsRepo.update { copy(outlineFromArt = v, outline = outline || v) } }
-            GroupSlider(Pos.Last, Icons.Rounded.LineWeight, tr("Толщина", "Thickness"), s.outlineWidth, 0.5f..4f,
-                "%.1f dp".format(s.outlineWidth), color = Tile.Gray) { v ->
-                SettingsRepo.update { copy(outlineWidth = (v * 2).toInt() / 2f) }
+        }) { mode -> SettingsRepo.update { withBorderMode(card, mode) } }
+        if (s.borderMode(card) == BorderMode.INHERIT) SettingsHint(tr("Цвет, прозрачность и толщина рамки повторяют капсулу. Если у капсулы рамка выключена, у карточки её тоже нет.",
+            "Color, opacity and widths follow the capsule. If the capsule has no border, neither does the card."))
+        if (s.borderMode(card) == BorderMode.CUSTOM) {
+            if (!card) {
+                ChoiceStrip(listOf(false, true), s.outlineFromArt, { if (it) tr("Цвет активности", "Activity color") else tr("Свой цвет", "Custom color") }) {
+                    SettingsRepo.update { copy(outlineFromArt = it) }
+                }
+            }
+            if (card || !s.outlineFromArt) Swatches(lineColors, if (card) s.expandedOutlineColor else s.outlineColor) { color ->
+                SettingsRepo.update { if (card) copy(expandedOutlineColor = color) else copy(outlineColor = color) }
+            }
+            else SettingsHint(tr("В примере показан цвет выбранной активности; при музыке он берётся из обложки.", "The preview uses the selected activity color; music uses its artwork color."))
+            ChoiceStrip(BorderWidths.entries, s.borderWidths(card), { if (it == BorderWidths.UNIFORM) tr("Одинаковая толщина", "Uniform width") else tr("По сторонам", "Per edge") }) {
+                mode -> SettingsRepo.update { withBorderWidths(card, mode) }
+            }
+            if (s.borderWidths(card) == BorderWidths.UNIFORM) {
+                val value = if (card) s.expandedOutlineWidth else s.outlineWidth
+                GroupSlider(Pos.Single, Icons.Rounded.LineWeight, tr("Толщина рамки", "Border width"), value.coerceIn(0.5f, 6f), 0.5f..6f, "%.1f dp".format(value), color = Tile.Blue) {
+                    value -> SettingsRepo.update { if (card) copy(expandedOutlineWidth = half(value)) else copy(outlineWidth = half(value)) }
+                }
+            } else {
+                val edges = if (card) listOf(s.expandedOutlineTopWidth, s.expandedOutlineRightWidth, s.expandedOutlineBottomWidth, s.expandedOutlineLeftWidth)
+                    else listOf(s.outlineTopWidth, s.outlineRightWidth, s.outlineBottomWidth, s.outlineLeftWidth)
+                val labels = listOf(tr("Сверху", "Top"), tr("Справа", "Right"), tr("Снизу", "Bottom"), tr("Слева", "Left"))
+                val icons = listOf(Icons.Rounded.BorderTop, Icons.Rounded.BorderRight, Icons.Rounded.BorderBottom, Icons.Rounded.BorderLeft)
+                Group {
+                    edges.forEachIndexed { index, width ->
+                        val value = width.takeIf { it >= 0f } ?: if (card) s.expandedOutlineWidth else s.outlineWidth
+                        GroupSlider(posOf(index, 4), icons[index], labels[index], value, 0f..6f, "%.1f dp".format(value), color = Tile.Blue) { v ->
+                            SettingsRepo.update { edge(card, index, half(v)) }
+                        }
+                    }
+                }
+                SettingsHint(tr("Ноль скрывает выбранную сторону. Общий ползунок толщины в этом режиме не используется.", "Zero hides that edge. Uniform width is not used in this mode."))
+            }
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Непрозрачность рамки", "Border opacity"),
+                (if (card) s.expandedOutlineOpacity else s.outlineOpacity).toFloat(), 0f..100f,
+                "${if (card) s.expandedOutlineOpacity else s.outlineOpacity}%", color = Tile.Gray) { v ->
+                SettingsRepo.update { if (card) copy(expandedOutlineOpacity = v.toInt()) else copy(outlineOpacity = v.toInt()) }
             }
         }
-        Swatches(outlineColors, s.outlineColor) { c -> SettingsRepo.update { copy(outlineColor = c, outline = true) } }
-        GroupSlider(Pos.Single, Icons.Rounded.Layers, tr("Непрозрачность контура", "Outline opacity"),
-            s.outlineOpacity.toFloat(), 0f..100f, "${s.outlineOpacity}%", color = Tile.Gray,
-        ) { v -> SettingsRepo.update { copy(outlineOpacity = v.toInt()) } }
 
-        EdgeWidthControls(s, expanded = false)
-
-        SectionHeader(tr("Раскрытые карточки", "Expanded cards"))
-        Group {
-            GroupToggle(Pos.First, Icons.Rounded.Layers, tr("Отдельный цвет карточки", "Separate card color"),
-                tr("Выключено — цвет как у капсулы", "Off uses the capsule color"),
-                s.expandedColorEnabled, color = Tile.Purple) { v -> SettingsRepo.update { copy(expandedColorEnabled = v) } }
-            GroupToggle(Pos.Last, Icons.Rounded.BorderStyle, tr("Отдельный контур карточки", "Separate card outline"),
-                tr("Свой цвет и толщина; выключено — контур как у капсулы", "Choose its color and width; off uses the capsule outline"),
-                s.expandedOutlineWidth >= 0, color = Tile.Blue) { v -> SettingsRepo.update {
-                    if (v) copy(expandedOutlineWidth = 1f)
-                    else copy(expandedOutlineWidth = -1f, expandedOutlineTopWidth = -1f, expandedOutlineRightWidth = -1f,
-                        expandedOutlineBottomWidth = -1f, expandedOutlineLeftWidth = -1f)
-                } }
+        SectionHeader(tr("Материал и эффекты", "Material and effects"))
+        SettingsHint(tr("Общие для капсулы и карточек. Пример сверху показывает выбранный вид.", "Shared by the capsule and cards. The preview above shows the selected appearance."))
+        ChoiceStrip(listOf(false, true), s.liquidGlass, { if (it) tr("Стекло", "Glass") else tr("Обычная заливка", "Plain fill") }) {
+            SettingsRepo.update { copy(liquidGlass = it) }
         }
-        if (s.expandedColorEnabled) {
-            Swatches(capsuleColors, s.expandedColor) { c -> SettingsRepo.update { copy(expandedColor = c) } }
+        GroupSlider(Pos.Single, Icons.Rounded.Opacity, if (s.liquidGlass) tr("Плотность стекла", "Glass density") else tr("Непрозрачность заливки", "Fill opacity"),
+            (if (s.liquidGlass) s.glassOpacity else s.islandOpacity).toFloat(), if (s.liquidGlass) 40f..100f else 20f..100f,
+            "${if (s.liquidGlass) s.glassOpacity else s.islandOpacity}%", color = Tile.Teal) { v ->
+            SettingsRepo.update { if (liquidGlass) copy(glassOpacity = v.toInt()) else copy(islandOpacity = v.toInt()) }
         }
-        if (s.expandedOutlineWidth >= 0) {
-            Group {
-                GroupSlider(Pos.First, Icons.Rounded.LineWeight, tr("Толщина контура карточки", "Card outline width"),
-                    s.expandedOutlineWidth, 0f..6f, "%.1f dp".format(s.expandedOutlineWidth), color = Tile.Blue,
-                ) { v -> SettingsRepo.update { copy(expandedOutlineWidth = (v * 2).toInt() / 2f) } }
-                GroupSlider(Pos.Last, Icons.Rounded.Layers, tr("Непрозрачность контура карточки", "Card outline opacity"),
-                    s.expandedOutlineOpacity.toFloat(), 0f..100f, "${s.expandedOutlineOpacity}%", color = Tile.Gray,
-                ) { v -> SettingsRepo.update { copy(expandedOutlineOpacity = v.toInt()) } }
-            }
-            Swatches(outlineColors, s.expandedOutlineColor) { c -> SettingsRepo.update { copy(expandedOutlineColor = c) } }
+        GroupSlider(Pos.Single, Icons.Rounded.Gradient, tr("Затемнение снизу", "Bottom shading"), s.bottomGradient.toFloat(), 0f..80f, "${s.bottomGradient}%", color = Tile.Indigo) {
+            v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
         }
-        EdgeWidthControls(s, expanded = true)
-
-        SectionHeader(tr("Градиент", "Gradient"))
-        GroupSlider(Pos.Single, Icons.Rounded.Layers, tr("Затемнение снизу", "Bottom shading"),
-            s.bottomGradient.toFloat(), 0f..80f, "${s.bottomGradient}%", color = Tile.Indigo,
-        ) { v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) } }
-
+        SettingsHint(tr("Затемнение видно на светлой заливке. На чёрном цвете разницы не будет.", "Bottom shading is visible on light fills. It has no visible effect on black."))
+        GroupToggle(Pos.Single, Icons.Rounded.Tonality, tr("Тень", "Shadow"), tr("Заметна на светлом фоне; режим «Уменьшить эффекты» отключает её.", "Visible on light backgrounds; Reduce effects disables it."), s.shadow, color = Tile.Gray) {
+            v -> SettingsRepo.update { copy(shadow = v) }
+        }
 
         SectionHeader(tr("Основные кнопки", "Main controls"))
-        GroupToggle(Pos.Single, Icons.Rounded.Layers, tr("Свой цвет кнопок", "Custom control color"),
-            tr("Таймер, секундомер и основные действия; цвета звонков и предупреждений сохраняются", "Timer, stopwatch and main actions; call and warning colors stay unchanged"),
-            s.actionColorEnabled, color = Tile.Purple) { v -> SettingsRepo.update { copy(actionColorEnabled = v) } }
-        if (s.actionColorEnabled) {
-            Swatches(outlineColors.drop(2), s.actionColor) { c -> SettingsRepo.update { copy(actionColor = c) } }
+        ChoiceStrip(listOf(false, true), s.actionColorEnabled, { if (it) tr("Свой цвет", "Custom color") else tr("Стандартные цвета", "Default colors") }) {
+            enabled -> card = true; scene = PreviewScene.TIMER; SettingsRepo.update { copy(actionColorEnabled = enabled) }
         }
-
-        SectionHeader(tr("Тень", "Shadow"))
-        GroupToggle(Pos.Single, Icons.Rounded.Layers, tr("Тень", "Shadow"),
-            tr("Мягкая тень под капсулой — заметна на светлых экранах", "A soft shadow under the capsule — visible on light screens"),
-            s.shadow, color = Tile.Indigo) { v ->
-            SettingsRepo.update { copy(shadow = v) }
+        if (s.actionColorEnabled) Swatches(lineColors.drop(2), s.actionColor) { color ->
+            card = true; scene = PreviewScene.TIMER; SettingsRepo.update { copy(actionColor = color) }
         }
-
-        Text(
-            tr("Цвет кнопок «Ответить» и «Пометить прочитанным» — в «Функции» → «Уведомления».",
-                "The color of the Reply and Mark as read buttons is in Features → Notifications."),
-            color = Ui.Sub, fontSize = 13.sp, lineHeight = 17.sp, modifier = Modifier.padding(horizontal = 8.dp),
-        )
+        SettingsHint(tr("Показаны кнопки таймера. Цвета ответа на сообщения настраиваются в «Уведомлениях»; красный и зелёный у звонков сохраняются.",
+            "The preview shows timer controls. Reply colors are set in Notifications; red and green call controls keep their meaning."))
     }
 }
 
+@Composable
+fun <T> ChoiceStrip(values: List<T>, selected: T, title: (T) -> String, onSelect: (T) -> Unit) {
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        values.forEach { value ->
+            Text(title(value), color = if (selected == value) Ui.OnPrimary else Ui.Text, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (selected == value) Ui.Primary else Ui.Card)
+                    .selectable(selected = selected == value, role = Role.RadioButton, onClick = { onSelect(value) })
+                    .padding(horizontal = 14.dp, vertical = 12.dp))
+        }
+    }
+}
+
+@Composable
+fun SettingsHint(text: String) { Text(text, color = Ui.Sub, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(horizontal = 6.dp)) }
+
+private fun half(value: Float) = kotlin.math.round(value * 2) / 2f
+private fun IslandSettings.edge(card: Boolean, index: Int, value: Float): IslandSettings = if (card) when (index) {
+    0 -> copy(expandedOutlineTopWidth = value); 1 -> copy(expandedOutlineRightWidth = value)
+    2 -> copy(expandedOutlineBottomWidth = value); else -> copy(expandedOutlineLeftWidth = value)
+} else when (index) {
+    0 -> copy(outlineTopWidth = value); 1 -> copy(outlineRightWidth = value)
+    2 -> copy(outlineBottomWidth = value); else -> copy(outlineLeftWidth = value)
+}
 /** Кружки цветов в карточке: выбранный — с галочкой. */
 @Composable
 fun Swatches(colors: List<Long>, selected: Long, onPick: (Long) -> Unit) {
@@ -167,56 +181,6 @@ fun Swatches(colors: List<Long>, selected: Long, onPick: (Long) -> Unit) {
             ) {
                 if (c == selected) {
                     Icon(Icons.Rounded.Check, null, tint = if (color.luminance() > 0.5f) Color.Black else Color.White)
-                }
-            }
-        }
-    }
-}
-
-
-/** Independent edges are optional; switching them off restores the inherited uniform outline. */
-@Composable
-private fun EdgeWidthControls(s: com.akira.island.data.IslandSettings, expanded: Boolean) {
-    val values = if (expanded) listOf(s.expandedOutlineTopWidth, s.expandedOutlineRightWidth, s.expandedOutlineBottomWidth, s.expandedOutlineLeftWidth)
-        else listOf(s.outlineTopWidth, s.outlineRightWidth, s.outlineBottomWidth, s.outlineLeftWidth)
-    val enabled = values.any { it >= 0f }
-    val inherited = if (expanded && s.expandedOutlineWidth >= 0f) s.expandedOutlineWidth else s.outlineWidth
-    Group {
-        GroupToggle(if (enabled) Pos.First else Pos.Single, Icons.Rounded.BorderStyle,
-            if (expanded) tr("Стороны контура карточки", "Card outline edges") else tr("Стороны контура капсулы", "Capsule outline edges"),
-            tr("Отдельная толщина сверху, справа, снизу и слева", "Separate widths at the top, right, bottom and left"),
-            enabled, color = Tile.Purple,
-        ) { on ->
-            val width = if (on) inherited.coerceIn(0f, 6f) else -1f
-            SettingsRepo.update {
-                if (expanded) copy(expandedOutlineTopWidth = width, expandedOutlineRightWidth = width,
-                    expandedOutlineBottomWidth = width, expandedOutlineLeftWidth = width,
-                    expandedOutlineWidth = if (on) inherited else expandedOutlineWidth)
-                else copy(outlineTopWidth = width, outlineRightWidth = width,
-                    outlineBottomWidth = width, outlineLeftWidth = width, outline = outline || on)
-            }
-        }
-        if (enabled) {
-            val labels = listOf(tr("Сверху", "Top"), tr("Справа", "Right"), tr("Снизу", "Bottom"), tr("Слева", "Left"))
-            labels.forEachIndexed { index, label ->
-                val value = values[index].takeIf { it >= 0f } ?: inherited
-                GroupSlider(if (index == 3) Pos.Last else Pos.Middle, Icons.Rounded.LineWeight, label,
-                    value, 0f..6f, "%.1f dp".format(value), color = Tile.Gray,
-                ) { v ->
-                    val width = (v * 2).toInt() / 2f
-                    SettingsRepo.update {
-                        if (expanded) when (index) {
-                            0 -> copy(expandedOutlineTopWidth = width)
-                            1 -> copy(expandedOutlineRightWidth = width)
-                            2 -> copy(expandedOutlineBottomWidth = width)
-                            else -> copy(expandedOutlineLeftWidth = width)
-                        } else when (index) {
-                            0 -> copy(outlineTopWidth = width)
-                            1 -> copy(outlineRightWidth = width)
-                            2 -> copy(outlineBottomWidth = width)
-                            else -> copy(outlineLeftWidth = width)
-                        }
-                    }
                 }
             }
         }

@@ -46,7 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -171,7 +171,7 @@ fun rememberFxClock(active: Boolean): State<Long> {
             val fps = SettingsRepo.current.fxRate.fps
             val step = if (fps > 0) 1000L / fps else 0L
             // Кадр экрана раньше срока пропускаем: на 120 Гц при 60 кадрах рисуется каждый второй
-            withFrameMillis { t ->
+            withInfiniteAnimationFrameMillis { t ->
                 if (t - last >= step - 3) {
                     time.longValue = t
                     last = t
@@ -446,7 +446,7 @@ fun Modifier.glassSurface(
         val t = tilt().coerceIn(-1f, 1f)
 
         // Тело стекла
-        drawRect(base.copy(alpha = a * 0.8f))
+        drawRect(base.copy(alpha = a))
         drawRect(veil)
         drawRect(shade)
 

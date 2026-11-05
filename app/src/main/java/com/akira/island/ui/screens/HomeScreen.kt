@@ -488,43 +488,5 @@ fun Arrow() {
 /** Живой пример капсулы с текущими настройками: толщина, боковые части, цвет и контур. */
 @Composable
 fun IslandPreview(expanded: Boolean = false) {
-    val s by SettingsRepo.state.collectAsState()
-    // Шрифт острова — тот же, что в самом острове
-    val context = LocalContext.current
-    LaunchedEffect(s) { IslandType.apply(context, s) }
-    val demo = remember {
-        MediaInfo(
-            key = "demo", pkg = "", title = tr("Демо", "Demo"), artist = "", album = null, art = null,
-            accent = Tints.Lavender, durationMs = 0, positionMs = 0, positionTime = SystemClock.elapsedRealtime(),
-            speed = 1f, playing = true, canSeek = false,
-        )
-    }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(140.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF3B3860), Color(0xFF1F1E27)))),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        val act = if (expanded) Act.Idle else Act.MediaA(demo)
-        val corner = (if (expanded) s.height.dp else activeHeight(s)) / 2
-        val shape = islandShape(corner, s)
-        Box(
-            Modifier
-                // «Как вырез» — капсула от самого верха, как на экране
-                .padding(top = if (s.notch) 0.dp else 18.dp)
-                // «Свечение обложки» видно и на примере
-                .then(if (!expanded && s.fxGlow && !s.reduceEffects) Modifier.drawBehind { islandGlow(demo.accent, 1f, corner.toPx(), s.notch) } else Modifier)
-                .clip(shape)
-                .then(
-                    if (s.liquidGlass) Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f)
-                    else Modifier.background(islandFill(s)),
-                )
-                .then(if (s.outline) Modifier.border(s.outlineWidth.dp, if (s.outlineFromArt) Tints.Lavender else Color(s.outlineColor), shape) else Modifier)
-                .animateContentSize(),
-        ) {
-            IslandTheme { CompactContent(act, s, 400.dp) }
-        }
-    }
+    SettingsPreview(card = expanded)
 }

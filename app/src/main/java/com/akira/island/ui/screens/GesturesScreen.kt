@@ -12,7 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.akira.island.core.tr
-import com.akira.island.data.SettingsRepo
+import com.akira.island.data.*
 import com.akira.island.data.TapAction
 import com.akira.island.ui.ChoiceDialog
 import com.akira.island.ui.Group
@@ -28,6 +28,7 @@ private enum class Which { TAP, DOUBLE, LONG }
 @Composable
 fun GesturesScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
+    var swipeDialog by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<Which?>(null) }
 
     Page(tr("Жесты", "Gestures"), onBack,
@@ -49,14 +50,13 @@ fun GesturesScreen(onBack: () -> Unit) {
                 s.swipeExpand, color = Tile.Teal) { v ->
                 SettingsRepo.update { copy(swipeExpand = v) }
             }
-            GroupToggle(Pos.Last, Icons.Rounded.SwapHoriz, tr("Толкнуть вбок", "Push sideways"),
-                tr("Влево — следующий трек, вправо — предыдущий", "Left — next track, right — previous"),
-                s.swipeTracks, color = Tile.Purple) { v ->
-                SettingsRepo.update { copy(swipeTracks = v) }
-            }
+            GroupItem(Pos.Last, Icons.Rounded.SwapHoriz, tr("Горизонтальный свайп", "Horizontal swipe"), swipeLabel(s.sideSwipe),
+                color = Tile.Purple, onClick = { swipeDialog = true })
         }
     }
 
+    if (swipeDialog) ChoiceDialog(tr("Горизонтальный свайп", "Horizontal swipe"), SideSwipe.entries, s.sideSwipe, ::swipeLabel,
+        { mode -> SettingsRepo.update { withSideSwipe(mode) } }) { swipeDialog = false }
     when (dialog) {
         Which.TAP -> ChoiceDialog(tr("Одиночное нажатие", "Single tap"), TapAction.entries, s.tapAction, { it.title },
             { v -> SettingsRepo.update { copy(tapAction = v) } }) { dialog = null }
@@ -66,4 +66,10 @@ fun GesturesScreen(onBack: () -> Unit) {
             { v -> SettingsRepo.update { copy(longPressAction = v) } }) { dialog = null }
         null -> Unit
     }
+}
+
+private fun swipeLabel(mode: SideSwipe): String = when (mode) {
+    SideSwipe.OFF -> tr("Выключен", "Off")
+    SideSwipe.TRACKS -> tr("Переключать треки", "Change tracks")
+    SideSwipe.ACTIVITIES -> tr("Листать карточки", "Switch cards")
 }
