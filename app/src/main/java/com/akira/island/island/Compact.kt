@@ -47,6 +47,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -501,6 +502,7 @@ private fun PillNotice(n: Notice, s: IslandSettings) {
  * Все размеры в sp растут вместе с размером шрифта Android, ширина и отступы — с настройками острова.
  */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("UNUSED_PARAMETER") wideWidth: Dp, detail: Boolean = false, preview: Boolean = false) {
     val context = LocalContext.current
     val haptic = rememberHaptic()
@@ -596,21 +598,9 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
                         NotifIcon(if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
                     }
                 }
-                if (detail && !locked) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TextAction(tr("Открыть", "Open"), accent) {
-                        if (!Controls.send(context, m.intent)) Controls.openApp(context, m.pkg)
-                        IslandBus.notice.value = null
-                    }
-                    if (NotifListener.canDismiss(m.key)) TextAction(tr("Удалить", "Dismiss"), accent) {
-                        if (!NotifListener.dismiss(m.key)) Toast.makeText(context,
-                            tr("Не удалось удалить уведомление", "Couldn't dismiss notification"), Toast.LENGTH_SHORT).show()
-                    }
-                    TextAction(tr("Свернуть", "Collapse"), accent) { IslandBus.messageDetail.value = false }
-                }
                 if (replyAction != null) {
                     // Строка ответа стоит под текстом, как кнопки, — на одной линии с ним
-                    Box(Modifier.padding(start = 16.dp + iconSize + 12.dp, end = 16.dp)) {
+                    Box(Modifier.padding(start = 16.dp + (if (s.messageIconMode == MessageIconMode.NONE || s.messageIconRight) 0.dp else iconSize + 12.dp), end = 16.dp)) {
                         ReplyField(replyAction, accent) { text ->
                             if (text.isBlank()) return@ReplyField
                             if (Controls.sendReply(context, replyAction, text)) {
@@ -639,15 +629,13 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
                         TextAction(tr("Пометить прочитанным", "Mark as read"), accent) {}
                     }
                 } else if (m.actions.isNotEmpty() && !locked) {
-                    // Кнопки стоят под текстом, на одной линии с ним, как в шторке
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 16.dp + iconSize + 12.dp, end = 16.dp, top = 4.dp),
+                    // Полные подписи; при крупном шрифте следующая кнопка переходит на новую строку.
+                    FlowRow(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        m.actions.forEachIndexed { i, a ->
-                            // Последняя кнопка уступает место, если подпись длинная
-                            TextAction(a.title, accent, if (i == m.actions.lastIndex) Modifier.weight(1f, fill = false) else Modifier, size = 14.sp) {
+                        m.actions.forEach { a ->
+                            TextAction(a.title, accent, size = 14.sp) {
                                 if (a.isReply) {
                                     IslandBus.reply.value = ReplyState(n.id, a)
                                 } else {

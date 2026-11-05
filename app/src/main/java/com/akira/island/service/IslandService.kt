@@ -285,6 +285,11 @@ class IslandService : AccessibilityService() {
             }.collect { p -> applySettings(p.s, p.landscape, p.keyguard, p.rotation) }
         }
 
+        scope.launch {
+            IslandBus.chrono.map { items -> items.values.any { it.screenRecording } }
+                .distinctUntilChanged().collect { applyCurrentSettings() }
+        }
+
         // «По расписанию»: проверяем ровно на границах часов и со включением экрана (пока телефон спит, ожидание стоит)
         scope.launch {
             combine(SettingsRepo.state.map { Triple(it.scheduleOn, it.scheduleFrom, it.scheduleTo) }.distinctUntilChanged(), IslandBus.screenOn) { sch, _ -> sch }
@@ -396,7 +401,8 @@ class IslandService : AccessibilityService() {
                 runCatching { serviceInfo = info }
             }
         }
-        visible = s.enabled && !(landscape && s.landscape == LandscapeMode.HIDE) && !IslandBus.offSchedule.value &&
+        visible = s.enabled && !(s.hideWhileRecording && IslandBus.chrono.value.values.any { it.screenRecording }) &&
+            !(landscape && s.landscape == LandscapeMode.HIDE) && !IslandBus.offSchedule.value &&
             !(keyguard && s.lockScreen == LockScreenMode.HIDE) && !(s.hideOnAod && isAmbientDisplay())
         // «У камеры»: в альбомной ориентации остров повёрнут к краю с камерой; иначе — как обычно, сверху
         val turn = if (landscape && s.landscape == LandscapeMode.CAMERA) rotation else 0

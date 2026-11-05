@@ -6,6 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import com.akira.island.data.AppLanguage
 import com.akira.island.data.SettingsRepo
@@ -25,11 +28,13 @@ object Lang {
     val codes = listOf("ru", "en", "id", "pt", "kk", "fr", "es")
 
     private var assets: android.content.res.AssetManager? = null
+    private var resources: Resources? = null
     private val tables = HashMap<String, Map<String, String>>()
 
     /** Таблицы переводов читаются из assets — зовёт приложение при запуске. */
     fun init(context: Context) {
         assets = context.applicationContext.assets
+        resources = context.resources
     }
 
     /** Код текущего языка из [codes]. */
@@ -55,7 +60,7 @@ object Lang {
         }
 
     private fun systemCode(): String {
-        val lang = runCatching { Resources.getSystem().configuration.locales[0].language }.getOrNull() ?: Locale.getDefault().language
+        val lang = runCatching { (resources ?: Resources.getSystem()).configuration.locales[0].language }.getOrNull() ?: Locale.getDefault().language
         // Индонезийский у старых Android — «in»
         val c = if (lang == "in") "id" else lang
         return if (c in codes) c else "en"
@@ -98,8 +103,8 @@ fun trf(ru: String, en: String, vararg args: Any?): String {
  */
 @Composable
 fun LangScope(content: @Composable () -> Unit) {
-    val s by SettingsRepo.state.collectAsState()
+    val language by remember { SettingsRepo.state.map { it.language }.distinctUntilChanged() }.collectAsState(initial = SettingsRepo.current.language)
     // Язык системы меняется вместе с конфигурацией — чтение подписывает на неё
     LocalConfiguration.current
-    key(s.language, Lang.code) { content() }
+    key(language, Lang.code) { content() }
 }

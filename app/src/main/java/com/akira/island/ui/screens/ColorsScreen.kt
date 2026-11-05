@@ -6,12 +6,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -135,12 +139,19 @@ fun ColorsScreen(onBack: () -> Unit) {
 
 @Composable
 fun <T> ChoiceStrip(values: List<T>, selected: T, title: (T) -> String, onSelect: (T) -> Unit) {
-    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        values.forEach { value ->
-            Text(title(value), color = if (selected == value) Ui.OnPrimary else Ui.Text, fontSize = 14.sp,
-                modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (selected == value) Ui.Primary else Ui.Card)
-                    .selectable(selected = selected == value, role = Role.RadioButton, onClick = { onSelect(value) })
-                    .padding(horizontal = 14.dp, vertical = 12.dp))
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Ui.Card).selectableGroup()) {
+        values.forEachIndexed { index, value ->
+            val checked = selected == value
+            Row(Modifier.fillMaxWidth().background(if (checked) Ui.Primary.copy(alpha = 0.08f) else Color.Transparent)
+                .selectable(selected = checked, role = Role.RadioButton, onClick = { onSelect(value) })
+                .heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(checked, onClick = null, modifier = Modifier.size(24.dp),
+                    colors = RadioButtonDefaults.colors(selectedColor = Ui.Primary, unselectedColor = Ui.Sub))
+                Spacer(Modifier.width(12.dp))
+                Text(title(value), color = Ui.Text, fontSize = 15.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
+            }
+            if (index != values.lastIndex) HorizontalDivider(Modifier.padding(start = 52.dp, end = 16.dp), color = Ui.Divider)
         }
     }
 }

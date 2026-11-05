@@ -52,6 +52,7 @@ enum class TapAction(private val ru: String, private val en: String) {
     NEXT_TRACK("Следующий трек", "Next track"),
     SCREENSHOT("Скриншот без острова", "Screenshot without the island"),
     NOTHING("Ничего", "Nothing"),
+    DISMISS_NOTIFICATION("Удалить уведомление", "Dismiss notification"),
     ;
 
     val title: String get() = tr(ru, en)
@@ -394,6 +395,7 @@ data class IslandSettings(
     val hideWhenSourceOpen: Boolean = false,
     val collapseOnShade: Boolean = false,
     val hideOnAod: Boolean = false,
+    val hideWhileRecording: Boolean = false,
     val evVpn: Boolean = false,
     val evHotspot: Boolean = false,
     val evDebugging: Boolean = false,

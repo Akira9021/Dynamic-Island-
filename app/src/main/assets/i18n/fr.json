@@ -786,5 +786,13 @@
   "Empty capsule": "Capsule vide",
   "Clock and battery": "Horloge et batterie",
   "Drag across the glass to move the reflections": "Faites glisser le doigt sur le verre pour déplacer les reflets",
-  "Static glass: Reduce effects is on": "Verre statique : réduction des effets activée"
+  "Static glass: Reduce effects is on": "Verre statique : réduction des effets activée",
+  "Search settings": "Rechercher dans les réglages",
+  "Name or feature": "Nom ou fonction",
+  "Clear search": "Effacer la recherche",
+  "Tap a result to open its settings section.": "Touchez un résultat pour ouvrir sa section de réglages.",
+  "No results": "Aucun résultat",
+  "Hide while recording the screen": "Masquer pendant l’enregistrement de l’écran",
+  "Hide the entire island while Android reports an active screen recording": "Masquer toute l’île lorsqu’Android signale un enregistrement d’écran actif",
+  "Dismiss notification": "Supprimer la notification"
 }

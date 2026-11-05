@@ -191,8 +191,10 @@ object NotificationParser {
             null
         }
         // Диктофон и запись экрана без системного отсчёта: идущая запись с кнопкой «Стоп»
-        val recorder = !ticking && pausedMs == null && runningMs == null && call == null && !isMedia && ongoing &&
-            RecorderApps.isRecording(sbn.packageName, title, n.actions)
+        val recording = classifyRecording(sbn.packageName, title,
+            texts.mapNotNull { ex.getCharSequence(it)?.toString() }.joinToString(" "), ongoing,
+            n.actions?.any { isStopRecordingAction(it.title?.toString().orEmpty()) } == true)
+        val recorder = call == null && !isMedia && recording.recording
         // Неактивный (на паузе) таймер, который остров уже убрал, снова не показываем
         val chrono = call == null && !isMedia && (ticking || pausedMs != null || runningMs != null || recorder) &&
             !ClockControl.wasDismissed(sbn.key, pausedMs)
@@ -207,26 +209,26 @@ object NotificationParser {
                 }
                 val stop = n.actions?.firstOrNull { a ->
                     val t = a.title?.toString()?.lowercase().orEmpty()
-                    StopWords.any { it in t }
-                }?.actionIntent
+                    isStopRecordingAction(t)
+                }?.actionIntent ?: n.contentIntent.takeIf { recording.stopOnTap }
                 val now = System.currentTimeMillis()
                 // Отсчёт: системный — от Notification.when; из текста — от прочитанного времени; у записи без
                 // отсчёта — от времени в тексте или с момента, как появилось уведомление
                 val base = when {
                     runningMs != null -> if (down) now + runningMs else now - runningMs
                     recorder -> texts.firstNotNullOfOrNull { ClockScreenParser.find(ex.getCharSequence(it)) }?.let { now - it }
-                        ?: n.`when`.takeIf { it in 1..now } ?: sbn.postTime
+                        ?: n.`when`.takeIf { it in 1..now } ?: IslandBus.chrono.value[sbn.key]?.takeIf { it.recording }?.base ?: sbn.postTime
                     else -> n.`when`
                 }
                 put(sbn.key, ChronoInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), base, down, sbn.postTime, stop,
                     pausedMs = pausedMs, pause = buttons[ClockAction.PAUSE], resume = buttons[ClockAction.START],
-                    reset = buttons[ClockAction.RESET], recording = recorder))
+                    reset = buttons[ClockAction.RESET], recording = recorder, screenRecording = recording.screen))
             } else {
                 remove(sbn.key)
             }
         }
 
-        val live = if (call == null && !isMedia) LiveParser.parse(context, sbn, title) else null
+        val live = if (call == null && !isMedia && !recorder) LiveParser.parse(context, sbn, title) else null
         val liveWasKnown = sbn.key in IslandBus.live.value
         IslandBus.live.value = IslandBus.live.value.toMutableMap().apply {
             if (live != null) put(sbn.key, live) else remove(sbn.key)
@@ -235,6 +237,7 @@ object NotificationParser {
         if (live != null && !liveWasKnown && !initial && SettingsRepo.current.cardLive && SettingsRepo.current.liveBanner) {
             LiveParser.postBannerLater(context, sbn.key)
         }
+        if (recorder) IslandBus.progress.value = IslandBus.progress.value - sbn.key
         // Навигатор и такси показываются своей карточкой, а не полоской прогресса или таймером
         if (live != null) {
             IslandBus.progress.value = IslandBus.progress.value - sbn.key
@@ -390,51 +393,6 @@ object VoipApps {
 
     fun isVoip(pkg: String) = pkg in known
 }
-
-/**
- * Диктофоны и запись экрана, у которых в уведомлении нет системного отсчёта: идущая запись — постоянное
- * уведомление с кнопкой «Стоп» у известного приложения записи или со словом «запись» в заголовке.
- */
-object RecorderApps {
-    private val known = setOf(
-        "com.miui.screenrecorder",
-        "com.coloros.screenrecorder",
-        "com.oplus.screenrecorder",
-        "com.samsung.android.app.screenrecorder",
-        "com.huawei.screenrecorder",
-        "com.hihonor.screenrecorder",
-        "com.android.soundrecorder",
-        "com.miui.soundrecorder",
-        "com.coloros.soundrecorder",
-        "com.oplus.soundrecorder",
-        "com.sec.android.app.voicenote",
-        "com.google.android.apps.recorder",
-        "com.huawei.soundrecorder",
-        "com.hihonor.soundrecorder",
-        "com.android.bbksoundrecorder",
-        "com.asus.soundrecorder",
-        "com.transsion.soundrecorder",
-    )
-
-    /** Слова «запись» на разных языках — в заголовке уведомления идущей записи */
-    private val words = listOf(
-        "record", "запис", "grava", "grab", "rekam", "aufnahme", "enregistr", "registraz", "nagryw", "kayıt", "đang ghi",
-        "录", "錄", "録", "녹음", "녹화", "жазба", "жазып",
-    )
-
-    fun isRecording(pkg: String, title: String, actions: Array<Notification.Action>?): Boolean {
-        val stop = actions?.any { a -> a.title?.toString()?.lowercase().orEmpty().let { t -> StopWords.any { it in t } } } == true
-        if (!stop) return false
-        val t = title.lowercase()
-        return pkg in known || words.any { it in t }
-    }
-}
-
-/** Подписи кнопки «Стоп» у записи, таймеров и секундомеров на разных языках. */
-private val StopWords = listOf(
-    "стоп", "останов", "заверш", "stop", "finish", "berhenti", "hentikan", "parar", "detener", "тоқтату", "аяқтау", "beenden", "arrêter",
-    "停止", "結束", "終了", "중지",
-)
 
 /** Приложения, чьи постоянные уведомления остров показывает как «живые активности». */
 object LiveApps {

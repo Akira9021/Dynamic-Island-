@@ -15,9 +15,9 @@ class TranslationAssetsTest {
     private val placeholders = Regex("\\{\\d+\\}|%(?:\\d+\\$)?(?:\\.\\d+)?[sdf]")
 
     @Test
-    fun frenchAndSpanishCoverExistingStringsAndPreserveFormatting() {
+    fun translatedTablesCoverExistingStringsAndPreserveFormatting() {
         val baseline = Json.parseToJsonElement(File(assets, "pt.json").readText()).jsonObject.keys
-        for (language in listOf("fr", "es")) {
+        for (language in listOf("id", "fr", "es")) {
             val table = Json.parseToJsonElement(File(assets, "$language.json").readText()).jsonObject
             assertTrue("$language is missing existing strings", table.keys.containsAll(baseline))
             for ((key, value) in table) {

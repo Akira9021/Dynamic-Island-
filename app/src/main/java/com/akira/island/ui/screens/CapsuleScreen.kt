@@ -102,7 +102,7 @@ import com.akira.island.ui.Ui
 @Composable
 fun CapsuleScreen(open: (Screen) -> Unit) {
     val s by SettingsRepo.state.collectAsState()
-    Page(tr("Оформление", "Appearance")) {
+    Page(tr("Оформление", "Appearance"), action = { SettingsSearchAction(open) }) {
         IslandPreview()
 
         SectionHeader(tr("Положение и размер", "Position and size"))

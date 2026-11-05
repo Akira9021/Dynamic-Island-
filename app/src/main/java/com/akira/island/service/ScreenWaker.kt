@@ -16,20 +16,21 @@ object ScreenWaker {
     fun wake(context: Context, scope: CoroutineScope, stillNeeded: () -> Boolean) {
         val power = context.getSystemService(PowerManager::class.java) ?: return
         if (power.isInteractive) return
-        runCatching {
-            @Suppress("DEPRECATION")
-            power.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "DynamicIsland:alert")
-                .acquire(3_000)
-        }
         scope.launch {
-            delay(800)
-            if (power.isInteractive || !stillNeeded()) return@launch
-            runCatching {
-                context.startActivity(
-                    Intent(context, WakeActivity::class.java).addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS,
-                    ),
-                )
+            @Suppress("DEPRECATION")
+            val wakeLock = runCatching {
+                power.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "DynamicIsland:alert")
+                    .apply { acquire(3_000) }
+            }.getOrNull()
+            try {
+                delay(800)
+                if (power.isInteractive || !stillNeeded()) return@launch
+                runCatching {
+                    context.startActivity(Intent(context, WakeActivity::class.java).addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS))
+                }
+            } finally {
+                runCatching { if (wakeLock?.isHeld == true) wakeLock.release() }
             }
         }
     }

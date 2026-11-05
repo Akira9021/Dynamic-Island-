@@ -586,5 +586,13 @@
 "{0}. Also the glowing dot of the flashlight and navigation": "{0}. Сондай-ақ шам мен навигацияның жарқыраған нүктесі",
 "“Battery low” — the Battery channel. Some firmwares don't let you change it": "«Батарея заряды аз» — Батарея арнасы. Кейбір жүйелер оны өзгертуге рұқсат бермейді",
 "“Paid” on screen, but amounts: {0}": "Экранда «Төленді», бірақ сомалар саны: {0}",
-"“Set a timer for 5 minutes” from an assistant or widget can go to the island": "Көмекшіден не виджеттен «5 минутқа таймер қой» аралға келуі мүмкін"
+"“Set a timer for 5 minutes” from an assistant or widget can go to the island": "Көмекшіден не виджеттен «5 минутқа таймер қой» аралға келуі мүмкін",
+"Search settings": "Баптаулардан іздеу",
+"Name or feature": "Атау немесе функция",
+"Clear search": "Іздеуді тазарту",
+"Tap a result to open its settings section.": "Баптаулар бөлімін ашу үшін нәтижені басыңыз.",
+"No results": "Нәтиже табылмады",
+"Hide while recording the screen": "Экран жазылғанда жасыру",
+"Hide the entire island while Android reports an active screen recording": "Android экран жазылып жатқанын хабарлағанда аралды толық жасыру",
+"Dismiss notification": "Хабарландыруды жою"
 }

@@ -1,0 +1,89 @@
+{
+  "date_utc": "2026-11-05",
+  "base_commit": "22cbb4e402cf1171d737abee808472e544076456",
+  "branch": "test-1.7.0",
+  "version_name": "1.7.0",
+  "version_code": 14,
+  "gradle": {
+    "tasks": [
+      "assembleDebug",
+      "assembleDebugAndroidTest",
+      "testDebugUnitTest",
+      "lintDebug",
+      "assembleRelease"
+    ],
+    "result": "passed"
+  },
+  "jvm": {
+    "tests": 70,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 22
+  },
+  "device": {
+    "android_api": 35,
+    "resolution": "720x1600",
+    "density_dpi": 320,
+    "hardware_acceleration": false,
+    "targeted_runs": true,
+    "tests": {
+      "com.akira.island.island.FeedbackRegressionTest#playerTimestampsFitNarrowCardsAndLargeSystemText": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.island.FeedbackRegressionTest#settingsSearchOpensASectionAndKeepsTheQueryOnBack": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.island.FeedbackRegressionTest#idleTimerPickerDoesNotSqueezeItsCounter": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.island.FeedbackRegressionTest#detailedNotificationKeepsReplyAndReadWithoutThreeUtilityButtons": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.service.RecordingRoutingDeviceTest#recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.core.SystemLanguageDeviceTest#systemChoiceHonorsAndroidAppLocaleAndTranslatesNewSettings": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.ui.SettingsExperienceTest#systemEventsHaveOneHomeAndHardwareReadings": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.ui.SettingsExperienceTest#borderChoicesAreExclusiveAndPreviewStaysVisible": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.ui.SettingsExperienceTest#previewDoesNotReleaseOrHoldRealNotifications": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.service.SystemEventsDeviceTest#debuggingSettingIsObservedAndDeliveredAsARealEvent": {
+        "result": "passed",
+        "runner_status": 0
+      },
+      "com.akira.island.service.MediaPauseDeviceTest#aPausedSessionStaysWhileOpenThenHidesAfterClosing": {
+        "result": "passed",
+        "runner_status": 0
+      }
+    }
+  },
+  "local_apk_sha256": {
+    "debug": "bc6c2087b5412678a5cb65f97906f648101263882e6b4d81420a267fdee474b9",
+    "release_unsigned": "ab2e7b9f01e1cf3b4ad848f21c4c5b4cab5377ceea0e93b3cb7e13826d4876ba"
+  },
+  "limitations": [
+    "No hardware FPS or battery percentage claims",
+    "OEM-specific behavior requires physical devices",
+    "Public release must not be created"
+  ]
+}

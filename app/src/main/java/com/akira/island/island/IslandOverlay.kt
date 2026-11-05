@@ -733,6 +733,7 @@ private fun classicChange(s: IslandSettings): ContentTransform {
 @Composable
 private fun AnimatedVisibilityScope.classicFlow(s: IslandSettings): Modifier {
     val m = motionScale(s)
+    val blurCache = remember { BlurEffectCache() }
     val blur = transition.animateFloat(
         transitionSpec = {
             if (targetState == EnterExitState.Visible) tween((300 * m).toInt(), delayMillis = (100 * m).toInt(), easing = ExpoOut)
@@ -747,7 +748,7 @@ private fun AnimatedVisibilityScope.classicFlow(s: IslandSettings): Modifier {
             else -> 0f
         }
     }
-    return Modifier.graphicsLayer { blurLayer(blur.value) }
+    return Modifier.graphicsLayer { blurLayer(blur.value, blurCache) }
 }
 
 /**
@@ -757,6 +758,7 @@ private fun AnimatedVisibilityScope.classicFlow(s: IslandSettings): Modifier {
  */
 @Composable
 private fun AnimatedVisibilityScope.liquidFlow(key: String, frames: Transition<Frame>, widths: HashMap<String, Int>, s: IslandSettings): Modifier {
+    val blurCache = remember { BlurEffectCache() }
     // «Другое» содержимое: для нового — прежнее, для уходящего — новое. Если на полпути направление
     // сменилось (раскрыли и тут же свернули), «другое» остаётся прежним — масштаб идёт дальше без скачка
     val target = frames.targetState.key
@@ -786,17 +788,26 @@ private fun AnimatedVisibilityScope.liquidFlow(key: String, frames: Transition<F
                 }
                 // Размытие сильное в начале и сходит к концу хода, а не тянется до последнего кадра
                 val rest = (1f - p).coerceAtLeast(0f)
-                blurLayer(blurDp * rest * sqrt(rest))
+                blurLayer(blurDp * rest * sqrt(rest), blurCache)
             }
         }
     }
 }
 
 /** Размытие слоя на [dp] — на Android 12+, где оно есть, и только когда заметно. */
-private fun GraphicsLayerScope.blurLayer(dp: Float) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dp > 0.3f) {
-        renderEffect = BlurEffect(dp.dp.toPx(), dp.dp.toPx(), TileMode.Decal)
+private class BlurEffectCache {
+    private val effects = object : LinkedHashMap<Int, BlurEffect>(48, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, BlurEffect>?) = size > 48
     }
+    fun effect(px: Float): BlurEffect {
+        val key = (px * 2f).toInt().coerceAtLeast(1)
+        return effects.getOrPut(key) { BlurEffect(key / 2f, key / 2f, TileMode.Decal) }
+    }
+}
+
+private fun GraphicsLayerScope.blurLayer(dp: Float, cache: BlurEffectCache) {
+    // Graphics layers retain their properties: explicitly clear a previous effect on the final frame.
+    renderEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dp > 0.3f) cache.effect(dp.dp.toPx()) else null
 }
 
 private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettings) {
@@ -810,6 +821,10 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
             if (IslandBus.reply.value != null) return
             // Нажатие на уведомление приложения открывает его, как на iPhone
             if (act.n.message != null) {
+                if (s.tapAction == TapAction.DISMISS_NOTIFICATION) {
+                    perform(context, s.tapAction, act)
+                    return
+                }
                 IslandBus.messageDetail.value = true
                 return
             }
@@ -832,6 +847,22 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
 }
 
 private fun perform(context: Context, action: TapAction, act: Act) {
+    if (act is Act.NoticeA && act.n.message != null) {
+        if (IslandBus.locked.value) return
+        val message = act.n.message
+        when (action) {
+            TapAction.OPEN_APP -> {
+                if (!Controls.send(context, message.intent)) Controls.openApp(context, message.pkg)
+                IslandBus.notice.value = null
+            }
+            TapAction.DISMISS_NOTIFICATION -> {
+                if (!com.akira.island.service.NotifListener.dismiss(message.key)) android.widget.Toast.makeText(context,
+                    tr("Не удалось удалить уведомление", "Couldn't dismiss notification"), android.widget.Toast.LENGTH_SHORT).show()
+            }
+            else -> Unit
+        }
+        return
+    }
     if (act.transient) return
     val hasMedia = IslandBus.media.value != null
     when (action) {
@@ -841,6 +872,7 @@ private fun perform(context: Context, action: TapAction, act: Act) {
         TapAction.NEXT_TRACK -> if (hasMedia) Controls.next() else Controls.expand(act.id)
         TapAction.SCREENSHOT -> Controls.screenshot()
         TapAction.NOTHING -> Unit
+        TapAction.DISMISS_NOTIFICATION -> Unit
     }
 }
 

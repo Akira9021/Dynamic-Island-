@@ -123,7 +123,7 @@ object IslandBus {
                 }
                 // Пока отвечают или листают переписку, карточка остаётся; потом ещё чуть-чуть
                 if (notice.value?.id == n.id && noticeHold.value) {
-                    while (notice.value?.id == n.id && noticeHold.value) delay(200)
+                    combine(notice, noticeHold) { current, holding -> current?.id != n.id || !holding }.first { it }
                     if (notice.value?.id == n.id) withTimeoutOrNull(1500) { notice.first { it?.id != n.id } }
                 }
                 if (notice.value?.id == n.id) notice.value = null

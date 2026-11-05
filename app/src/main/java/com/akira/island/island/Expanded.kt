@@ -53,6 +53,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -72,6 +74,11 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -145,7 +152,7 @@ fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: Batte
                 is Act.TimerA -> TimerExpanded(act.t, s)
                 is Act.StopwatchA -> StopwatchExpanded(act.w)
                 is Act.TorchA -> Unit
-                is Act.ChronoA -> ChronoExpanded(act.c)
+                is Act.ChronoA -> ChronoExpanded(act.c, s)
                 is Act.ProgressA -> ProgressExpanded(act.p)
                 is Act.LiveA -> LiveExpanded(act.l)
                 is Act.CallA -> CallExpanded(act.c)
@@ -244,58 +251,73 @@ private fun ago(ms: Long): String {
 @Composable
 private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
     val context = LocalContext.current
-    val now = rememberNow(100, active = m.playing)
-    val pos = m.positionAt(now)
     Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            PlayerArt(m, s, Modifier.clickable { Controls.openApp(context, m.pkg) })
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
-                    modifier = Modifier.marqueeFade().basicMarquee(iterations = Int.MAX_VALUE))
-                if (m.artist.isNotBlank()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(m.artist, color = Tints.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val narrow = maxWidth < 260.dp
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PlayerArt(m, s, Modifier.size(if (narrow) 44.dp else 60.dp).clickable { Controls.openApp(context, m.pkg) })
+                Spacer(Modifier.width(if (narrow) 8.dp else 14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
+                        modifier = Modifier.marqueeFade().basicMarquee(iterations = Int.MAX_VALUE))
+                    if (m.artist.isNotBlank()) {
+                        Spacer(Modifier.height(3.dp))
+                        Text(m.artist, color = Tints.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
+                Spacer(Modifier.width(if (narrow) 6.dp else 10.dp))
+                val egg by IslandBus.egg.collectAsState()
+                if (egg) SoulHeart(Modifier.size(24.dp)) else Equalizer(m.accent, m.playing, s.liveEqualizer, Modifier.size(if (narrow) 20.dp else 30.dp, 24.dp))
             }
-            Spacer(Modifier.width(10.dp))
-            val egg by IslandBus.egg.collectAsState()
-            if (egg) SoulHeart(Modifier.size(24.dp)) else Equalizer(m.accent, m.playing, s.liveEqualizer, Modifier.size(30.dp, 24.dp))
         }
 
-        val lines = lyrics?.takeIf { it.key == m.key && s.lyricsEnabled && it.lines.isNotEmpty() }
-        val status by IslandBus.lyricsStatus.collectAsState()
-        if (lines != null) {
-            Spacer(Modifier.height(14.dp))
-            KaraokeLine(lines, pos, s)
-        } else if (s.lyricsEnabled && status?.first == m.key) {
-            // Видно, что текст ищется или его нет — а не что функция сломалась
-            Spacer(Modifier.height(12.dp))
-            Text(
-                if (status?.second == LyricsStatus.LOADING) tr("Ищу текст песни…", "Looking for lyrics…") else tr("Текст песни не найден", "No lyrics found"),
-                color = Color.White.copy(alpha = 0.35f), fontSize = 13.sp,
-            )
-        }
-
-        // Время по краям полосы, как на iPhone и в ролике
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(formatDuration(pos), color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island),
-                modifier = Modifier.width(34.dp))
-            SeekBar(
-                fraction = if (m.durationMs > 0) pos.toFloat() / m.durationMs else 0f,
-                color = Color.White,
-                enabled = m.canSeek && m.durationMs > 0,
-                onSeek = { f -> Controls.seekTo((f * m.durationMs).toLong()) },
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                if (m.durationMs > 0) "-" + formatDuration(m.durationMs - pos) else "",
-                color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), textAlign = TextAlign.End,
-                modifier = Modifier.width(38.dp),
-            )
-        }
+        MediaTimeline(m, s, lyrics)
         MediaControls(m.like, m.dislike, m.playing)
+    }
+}
+
+/** Only the lyric/timeline subtree ticks; artwork, title and playback controls stay outside it. */
+@Composable
+private fun MediaTimeline(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
+    val clock = rememberNowState(if (s.reduceEffects) 1_000 else 100, active = m.playing)
+    MediaLyrics(m, s, lyrics, clock)
+    MediaSeek(m, clock)
+}
+
+@Composable
+private fun MediaLyrics(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, clock: State<Long>) {
+    val lines = lyrics?.takeIf { it.key == m.key && s.lyricsEnabled && it.lines.isNotEmpty() }
+    val status by IslandBus.lyricsStatus.collectAsState()
+    if (lines != null) {
+        Spacer(Modifier.height(14.dp))
+        KaraokeLine(lines, m.positionAt(clock.value), s)
+    } else if (s.lyricsEnabled && status?.first == m.key) {
+        Spacer(Modifier.height(12.dp))
+        Text(if (status?.second == LyricsStatus.LOADING) tr("Ищу текст песни…", "Looking for lyrics…") else tr("Текст песни не найден", "No lyrics found"),
+            color = Color.White.copy(alpha = 0.35f), fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun MediaSeek(m: MediaInfo, clock: State<Long>) {
+    val pos = m.positionAt(rememberNow(1_000, active = m.playing))
+    // Время по краям полосы, как на iPhone и в ролике
+    Spacer(Modifier.height(14.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(formatDuration(pos), color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island),
+            maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 34.dp))
+        SeekBar(
+            fraction = { if (m.durationMs > 0) m.positionAt(clock.value).toFloat() / m.durationMs else 0f },
+            color = Color.White,
+            enabled = m.canSeek && m.durationMs > 0,
+            onSeek = { f -> Controls.seekTo((f * m.durationMs).toLong()) },
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            if (m.durationMs > 0) "-" + formatDuration(m.durationMs - pos) else "",
+            color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), textAlign = TextAlign.End,
+            maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 38.dp),
+        )
     }
 }
 
@@ -306,30 +328,36 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
 @Composable
 private fun MediaControls(like: PlayerAction?, dislike: PlayerAction?, playing: Boolean) {
     val context = LocalContext.current
-    // Значки 28, 32 и 28, кнопки чуть больше значков — под палец
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        // «Нравится» и «Не нравится», если плеер их даёт (Яндекс Музыка и др.)
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            like?.let { a ->
-                RoundButton(if (a.on) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, size = 30.dp, bg = Color.Transparent,
-                    fg = if (a.on) Tints.Red else Dim, iconScale = 0.66f) { Controls.playerAction(a.action) }
-            }
-            dislike?.let { a ->
-                RoundButton(Icons.Rounded.HeartBroken, size = 30.dp, bg = Color.Transparent, fg = Dim, iconScale = 0.62f) {
-                    Controls.playerAction(a.action)
-                }
+    val ratings: @Composable () -> Unit = {
+        like?.let { a ->
+            RoundButton(if (a.on) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, size = 30.dp, bg = Color.Transparent,
+                fg = if (a.on) Tints.Red else Dim, iconScale = 0.66f) { Controls.playerAction(a.action) }
+        }
+        dislike?.let { a ->
+            RoundButton(Icons.Rounded.HeartBroken, size = 30.dp, bg = Color.Transparent, fg = Dim, iconScale = 0.62f) { Controls.playerAction(a.action) }
+        }
+    }
+    val output: @Composable () -> Unit = {
+        RoundButton(Ios.airplay, size = 36.dp, bg = Color.Transparent, fg = Dim, iconScale = 0.6f) { Controls.openOutput(context) }
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val narrow = maxWidth < 260.dp
+        val transport: @Composable () -> Unit = {
+            Row(horizontalArrangement = Arrangement.spacedBy(if (narrow) 8.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                RoundButton(Ios.back, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.prev() }
+                RoundButton(if (playing) Ios.pause else Ios.play, size = if (narrow) 44.dp else 48.dp, bg = Color.Transparent, iconScale = 0.667f) { Controls.playPause() }
+                RoundButton(Ios.forward, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.next() }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            RoundButton(Ios.back, size = 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.prev() }
-            RoundButton(if (playing) Ios.pause else Ios.play, size = 48.dp, bg = Color.Transparent, iconScale = 0.667f) {
-                Controls.playPause()
+        if (narrow) Column(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                ratings(); Spacer(Modifier.weight(1f)); output()
             }
-            RoundButton(Ios.forward, size = 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.next() }
-        }
-        // Вывод звука — как кнопка AirPlay
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            RoundButton(Ios.airplay, size = 36.dp, bg = Color.Transparent, fg = Dim, iconScale = 0.6f) { Controls.openOutput(context) }
+        } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) { ratings() }
+            transport()
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { output() }
         }
     }
 }
@@ -401,7 +429,7 @@ private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
 
 @Composable
 private fun SeekBar(
-    fraction: Float,
+    fraction: () -> Float,
     color: Color,
     enabled: Boolean,
     onSeek: (Float) -> Unit,
@@ -409,8 +437,8 @@ private fun SeekBar(
 ) {
     var drag by remember { mutableStateOf<Float?>(null) }
     val seek by rememberUpdatedState(onSeek)
-    val thick by animateDpAsState(if (drag != null) 9.dp else 5.dp, label = "thick")
-    val shown = (drag ?: fraction).coerceIn(0f, 1f)
+    val dragging by remember { derivedStateOf { drag != null } }
+    val thick by animateDpAsState(if (dragging) 9.dp else 5.dp, label = "thick")
     Box(
         modifier
             .fillMaxWidth()
@@ -435,22 +463,20 @@ private fun SeekBar(
             },
         contentAlignment = Alignment.CenterStart,
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(thick)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.2f)),
-        ) {
-            Box(Modifier.fillMaxWidth(shown).fillMaxHeight().background(if (enabled) color else color.copy(alpha = 0.6f)))
-        }
+        Box(Modifier.fillMaxWidth().height(thick).drawBehind {
+            val radius = CornerRadius(size.height / 2)
+            drawRoundRect(Color.White.copy(alpha = 0.2f), cornerRadius = radius)
+            val shown = (drag ?: fraction()).coerceIn(0f, 1f)
+            if (shown > 0f) drawRoundRect(if (enabled) color else color.copy(alpha = 0.6f),
+                size = Size(size.width * shown, size.height), cornerRadius = radius)
+        })
     }
 }
 
 /** Таймер как на iPhone: слева оранжевая «пауза» и серый крестик, справа «Таймер» и крупное время. */
 @Composable
 private fun TimerExpanded(t: TimerState, s: IslandSettings) {
-    val now = rememberNow(200)
+    val now = rememberNow(1_000, active = t.pausedLeft == null && !t.ringing)
     if (t.ringing) {
         val wobble = rememberInfiniteTransition(label = "bell")
         val angle = if (s.reduceEffects || !s.fxShake) null
@@ -471,17 +497,28 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
     }
     val left = t.left(now)
     val color = if (left <= 10_000 && !t.paused) Tints.Red else Tints.Orange
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RoundButton(if (t.paused) Ios.play else Ios.pause, size = 50.dp,
-            bg = color.copy(alpha = 0.25f), fg = color, iconScale = 0.5f) {
-            if (t.paused) Controls.resumeTimer() else Controls.pauseTimer()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val buttons: @Composable () -> Unit = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RoundButton(if (t.paused) Ios.play else Ios.pause, size = 50.dp,
+                    bg = color.copy(alpha = 0.25f), fg = color, iconScale = 0.5f) {
+                    if (t.paused) Controls.resumeTimer() else Controls.pauseTimer()
+                }
+                Spacer(Modifier.width(12.dp))
+                RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.cancelTimer() }
+            }
         }
-        Spacer(Modifier.width(12.dp))
-        RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.cancelTimer() }
-        Spacer(Modifier.weight(1f))
-        Text(if (t.paused) tr("Пауза", "Paused") else tr("Таймер", "Timer"), color = color, fontSize = 15.sp, modifier = Modifier.padding(top = 14.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(formatDuration(left + 999), color = color, fontSize = 44.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1)
+        if (maxWidth < 260.dp) Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(if (t.paused) tr("Пауза", "Paused") else tr("Таймер", "Timer"), color = color, fontSize = 15.sp)
+            FitText(formatDuration(left + 999), color, 40.sp, 24.sp, FontWeight.Normal.island, Modifier.fillMaxWidth())
+            buttons()
+        } else Row(verticalAlignment = Alignment.CenterVertically) {
+            buttons()
+            Spacer(Modifier.weight(1f))
+            Text(if (t.paused) tr("Пауза", "Paused") else tr("Таймер", "Timer"), color = color, fontSize = 15.sp, modifier = Modifier.padding(top = 14.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(formatDuration(left + 999), color = color, fontSize = 44.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1, softWrap = false)
+        }
     }
 }
 
@@ -586,12 +623,12 @@ private fun TorchCard(t: TorchState, s: IslandSettings) {
 
 /** Таймер или секундомер из Часов, звонок по VoIP и запись экрана или звука — запись красной волной и кнопкой «стоп». */
 @Composable
-private fun ChronoExpanded(c: ChronoInfo) {
+private fun ChronoExpanded(c: ChronoInfo, s: IslandSettings) {
     val context = LocalContext.current
-    val now = rememberWallNow(500)
     if (c.isRecording) {
+        val now = rememberWallNow(1_000, active = c.pausedMs == null)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RecordingWave(Modifier.weight(1f).height(22.dp))
+            RecordingWave(Modifier.weight(1f).height(22.dp), !s.reduceEffects && c.pausedMs == null)
             Spacer(Modifier.width(14.dp))
             Text(formatDuration(c.elapsed(now)), color = Tints.Red, fontSize = 22.sp, style = Digits)
             Spacer(Modifier.width(14.dp))
@@ -614,6 +651,7 @@ private fun ChronoExpanded(c: ChronoInfo) {
         ClockChrono(c)
         return
     }
+    val now = rememberWallNow(1_000, active = c.pausedMs == null)
     Row(Modifier.clickable { Controls.openApp(context, c.pkg) }, verticalAlignment = Alignment.CenterVertically) {
         AppIcon(c.icon, 46.dp, Ios.timer, Tints.Orange)
         Spacer(Modifier.width(14.dp))
@@ -633,7 +671,7 @@ private fun ChronoExpanded(c: ChronoInfo) {
 private fun ClockChrono(c: ChronoInfo) {
     val context = LocalContext.current
     val paused = c.pausedMs != null
-    val now = rememberWallNow(if (paused) 1_000 else if (c.countDown) 250 else 100)
+    val now = rememberWallNow(if (c.countDown) 250 else 100, active = !paused)
     val value = c.elapsed(now)
     val color = if (c.countDown && !paused && value <= 10_000) Tints.Red else Tints.Orange
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -661,9 +699,8 @@ private fun ClockChrono(c: ChronoInfo) {
 
 /** Волна записи: слева идут красные столбики, справа ждёт пунктир — как у диктофона в острове. */
 @Composable
-private fun RecordingWave(modifier: Modifier) {
-    val t = rememberInfiniteTransition(label = "rec")
-    val phase by t.animateFloat(0f, 1f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "ph")
+private fun RecordingWave(modifier: Modifier, animate: Boolean) {
+    val clock = rememberFxClock(animate)
     Canvas(modifier) {
         val step = 4.dp.toPx()
         val n = (size.width / step).toInt()
@@ -671,7 +708,7 @@ private fun RecordingWave(modifier: Modifier) {
         for (i in 0 until n) {
             val x = i * step + step / 2
             if (i < active) {
-                val k = 0.25f + 0.75f * abs(sin((i * 0.7f + phase * 6.28f).toDouble())).toFloat()
+                val k = 0.25f + 0.75f * abs(sin((i * 0.7f + (if (animate) clock.value % 900 / 900f else 0f) * 6.28f).toDouble())).toFloat()
                 val h = size.height * k
                 drawLine(Tints.Red, Offset(x, (size.height - h) / 2), Offset(x, (size.height + h) / 2),
                     strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
@@ -813,32 +850,47 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
         Spacer(Modifier.height(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Таймер от 1 до 99 минут
-            if (QuickAction.TIMER in actions) Row(
-                Modifier.fillMaxWidth().clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RoundButton(Ios.remove, size = 38.dp, iconScale = 0.44f) {
-                    SettingsRepo.update { copy(timerMinutes = (timerMinutes - 1).coerceAtLeast(1)) }
-                }
-                Text(
-                    trf("{0} мин", "{0} min", s.timerMinutes), color = Color.White, fontSize = 16.sp, style = Digits,
-                    textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
-                )
-                RoundButton(Ios.add, size = 38.dp, iconScale = 0.44f) {
-                    SettingsRepo.update { copy(timerMinutes = (timerMinutes + 1).coerceAtMost(99)) }
-                }
-                Spacer(Modifier.width(8.dp))
-                PillButton(Ios.play, tr("Таймер", "Timer"), bg = Tints.Orange, fg = Color.Black) {
-                    Controls.startTimer(s.timerMinutes)
-                    Controls.expand("timer")
-                }
-            }
+            if (QuickAction.TIMER in actions) IdleTimerPicker(s)
             // Остальные кнопки — по две в ряд, в порядке из настроек
             actions.filter { it != QuickAction.TIMER }.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { QuickButton(it, context, Modifier.weight(1f)) }
                 }
             }
+        }
+    }
+}
+
+/** Narrow cards put the start button below the stepper instead of squeezing its text away. */
+@Composable
+internal fun IdleTimerPicker(s: IslandSettings) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val stacked = maxWidth < 280.dp
+        val stepper: @Composable (Modifier) -> Unit = { modifier ->
+            Row(modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).padding(6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                RoundButton(Ios.remove, size = 38.dp, iconScale = 0.44f) {
+                    SettingsRepo.update { copy(timerMinutes = (timerMinutes - 1).coerceAtLeast(1)) }
+                }
+                Text(trf("{0} мин", "{0} min", s.timerMinutes), color = Color.White, fontSize = 16.sp, style = Digits,
+                    maxLines = 1, softWrap = false, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                RoundButton(Ios.add, size = 38.dp, iconScale = 0.44f) {
+                    SettingsRepo.update { copy(timerMinutes = (timerMinutes + 1).coerceAtMost(99)) }
+                }
+            }
+        }
+        val start: @Composable (Modifier) -> Unit = { modifier ->
+            PillButton(Ios.play, tr("Таймер", "Timer"), modifier = modifier, bg = Tints.Orange, fg = Color.Black) {
+                Controls.startTimer(s.timerMinutes)
+                Controls.expand("timer")
+            }
+        }
+        if (stacked) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            stepper(Modifier.fillMaxWidth())
+            start(Modifier.fillMaxWidth())
+        } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            stepper(Modifier.weight(1.4f))
+            start(Modifier.weight(1f))
         }
     }
 }

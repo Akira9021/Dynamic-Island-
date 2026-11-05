@@ -76,12 +76,7 @@ object Messages {
         val ranking = NotificationListenerService.Ranking()
         val ranked = runCatching { service.currentRanking?.getRanking(sbn.key, ranking) == true }.getOrDefault(false)
         if (ranked) {
-            val least = when {
-                rule == AppRule.ALWAYS -> NotificationManager.IMPORTANCE_MIN
-                s.msgQuiet -> NotificationManager.IMPORTANCE_LOW
-                else -> NotificationManager.IMPORTANCE_DEFAULT
-            }
-            if (ranking.importance < least) {
+            if (!allowsMessageImportance(ranking.importance, s.msgQuiet, rule == AppRule.ALWAYS)) {
                 return NotifDebug.add(pkg, tr("Тихое уведомление — включите «Тихие уведомления» или «Всегда» для приложения",
                     "Silent notification — turn on Silent notifications or Always for this app"))
             }

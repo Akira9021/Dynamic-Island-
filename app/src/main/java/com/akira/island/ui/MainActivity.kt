@@ -65,6 +65,7 @@ import com.akira.island.core.LangScope
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
 import com.akira.island.ui.screens.AnimScreen
+import com.akira.island.ui.screens.SearchScreen
 import com.akira.island.ui.screens.AppInfoScreen
 import com.akira.island.ui.screens.BannersScreen
 import com.akira.island.ui.screens.BanksScreen
@@ -96,7 +97,7 @@ import com.akira.island.update.UpdateChecker
 
 enum class Screen {
     CARDS, EVENTS, GESTURES, LYRICS, SIZE, COLORS, INSTRUCTION, ABOUT, DIAG, LOOK, ANIM, EFFECTS, BANNERS,
-    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT, EXTRAS,
+    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT, EXTRAS, SEARCH,
 }
 
 class MainActivity : ComponentActivity() {
@@ -122,6 +123,7 @@ private fun AppRoot() {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var stack by remember { mutableStateOf(listOf<Screen>()) }
     var forward by remember { mutableStateOf(true) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     val open: (Screen) -> Unit = {
         forward = true
         stack = stack + it
@@ -155,6 +157,7 @@ private fun AppRoot() {
                 label = "nav",
             ) { k ->
                 when (k) {
+                    Screen.SEARCH.name -> SearchScreen(searchQuery, { searchQuery = it }, back, open)
                     "tab0" -> HomeScreen(open)
                     "tab1" -> FeaturesScreen(open)
                     "tab2" -> CapsuleScreen(open)

@@ -91,6 +91,7 @@ data class ChronoInfo(
     val reset: PendingIntent? = null,
     /** Идёт запись (диктофон, запись экрана) — узнали по приложению и кнопке «Стоп» */
     val recording: Boolean = false,
+    val screenRecording: Boolean = false,
 ) {
     fun elapsed(nowWall: Long): Long = pausedMs ?: if (countDown) (base - nowWall).coerceAtLeast(0) else nowWall - base
 

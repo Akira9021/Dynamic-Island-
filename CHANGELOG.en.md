@@ -8,6 +8,15 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Test build improvements — 2026-11-05
+- Restored concise notifications without Open, Dismiss and Collapse buttons. Reply and Mark as read remain, long actions wrap, and dismissal is available as a configurable gesture.
+- Single-line player timestamps and a timer picker that fits narrow cards. An expanded paused player stays available until closed.
+- Screen recording takes precedence over navigation, retains its start time and uses an explicit stop intent. Added an option to hide the island while screen recording.
+- Refined choice groups for the new settings and added settings search, keeping the live previews.
+- Completed missing Indonesian strings, honored Android's app language and included minimized channels when silent notifications are enabled.
+- Removed screen-off polling, isolated player progress updates, cached and cleared blur effects, and released wake-locks on cancellation.
+- Tested scenarios, all 30 open Issues and remaining limitations: [feedback audit](docs/feedback-1.7.0/README.md). This update does not publish a public release.
+
 ### Test branch additions
 - Expand messages inside the island, dismiss actual system notifications, and use icon-only banners.
 - Optional idle clock/battery, music priority, activity swipes and a stable summary of concurrent downloads.

@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -217,6 +218,11 @@ class MediaMonitor(private val context: Context) {
                 pendingHideKey = key
                 hideJob = scope.launch {
                     delay(PAUSE_KEEP_MS)
+                    // Never remove a paused player while the user is reading/using its expanded card.
+                    while (IslandBus.expanded.value && IslandBus.focus.value == "media") {
+                        combine(IslandBus.expanded, IslandBus.focus) { expanded, focus -> !expanded || focus != "media" }.first { it }
+                        delay(PAUSE_KEEP_MS)
+                    }
                     hiddenKey = key
                     publish(null)
                 }

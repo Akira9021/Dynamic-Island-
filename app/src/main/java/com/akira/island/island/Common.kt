@@ -140,12 +140,16 @@ fun animDurationMs(s: IslandSettings): Int = 160 + s.durationPercent.coerceIn(0,
 
 /** Текущее время (elapsedRealtime) с обновлением раз в [periodMs]; пока экран погашен — не обновляется. */
 @Composable
-fun rememberNow(periodMs: Long, active: Boolean = true): Long {
-    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+fun rememberNow(periodMs: Long, active: Boolean = true): Long = rememberNowState(periodMs, active).value
+
+/** Can be read in DrawScope, so progress does not recompose or remeasure the player. */
+@Composable
+fun rememberNowState(periodMs: Long, active: Boolean = true): State<Long> {
+    val now = remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(periodMs, active) {
         while (active) {
             if (!IslandBus.screenOn.value) IslandBus.screenOn.first { it }
-            now = SystemClock.elapsedRealtime()
+            now.longValue = SystemClock.elapsedRealtime()
             delay(periodMs)
         }
     }
@@ -192,10 +196,10 @@ fun pingPong(t: Long, halfMs: Int): Float {
 
 /** То же для настенных часов (System.currentTimeMillis). */
 @Composable
-fun rememberWallNow(periodMs: Long): Long {
+fun rememberWallNow(periodMs: Long, active: Boolean = true): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(periodMs) {
-        while (true) {
+    LaunchedEffect(periodMs, active) {
+        while (active) {
             if (!IslandBus.screenOn.value) IslandBus.screenOn.first { it }
             now = System.currentTimeMillis()
             delay(periodMs)

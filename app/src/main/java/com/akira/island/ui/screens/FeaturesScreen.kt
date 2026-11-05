@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.VideocamOff
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -114,7 +115,7 @@ fun FeaturesScreen(open: (Screen) -> Unit) {
     var confirmReset by remember { mutableStateOf(false) }
     var languageDialog by remember { mutableStateOf(false) }
 
-    Page(tr("Функции", "Features")) {
+    Page(tr("Функции", "Features"), action = { SettingsSearchAction(open) }) {
         SectionHeader(tr("Что показывает остров", "What the island shows"))
         Group {
             GroupItem(Pos.First, Icons.Rounded.Dashboard, tr("Динамические карточки", "Dynamic cards"),
@@ -222,9 +223,13 @@ fun BehaviorScreen(onBack: () -> Unit) {
             GroupToggle(Pos.Middle, Icons.Rounded.VisibilityOff, tr("Скрывать на AOD", "Hide on AOD"),
                 tr("Не показывать остров, пока экран в режиме ожидания", "Hide the island while the display is in ambient mode"),
                 s.hideOnAod, color = Tile.Gray) { v -> SettingsRepo.update { copy(hideOnAod = v) } }
-            GroupToggle(Pos.Last, Icons.Rounded.NotificationsOff, tr("Сворачивать под шторкой", "Collapse under the notification shade"),
+            GroupToggle(Pos.Middle, Icons.Rounded.NotificationsOff, tr("Сворачивать под шторкой", "Collapse under the notification shade"),
                 tr("Оставлять пустую капсулу при открытой шторке уведомлений или быстрых настройках", "Keep the capsule empty while the notification shade or quick settings are open"),
                 s.collapseOnShade, color = Tile.Indigo) { v -> SettingsRepo.update { copy(collapseOnShade = v) } }
+            GroupToggle(Pos.Last, Icons.Rounded.VideocamOff, tr("Скрывать при записи экрана", "Hide while recording the screen"),
+                tr("Скрывать остров целиком, пока Android сообщает об активной записи", "Hide the entire island while Android reports an active screen recording"),
+                s.hideWhileRecording, color = Tile.Red) { value -> SettingsRepo.update { copy(hideWhileRecording = value) } }
+
         }
 
         // Например, только днём: с 10:00 до 23:00; можно и через полночь — с 22:00 до 7:00

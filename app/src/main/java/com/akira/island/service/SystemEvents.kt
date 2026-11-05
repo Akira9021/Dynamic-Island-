@@ -39,6 +39,11 @@ import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Ios
 import kotlin.math.abs
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /** Системные события, которые остров показывает короткими уведомлениями. */
 class SystemEvents(private val context: Context) {
@@ -61,16 +66,7 @@ class SystemEvents(private val context: Context) {
     }
     private var vpnState: Boolean? = null
     private var debugState: Pair<Boolean?, Boolean?>? = null
-    private val connectionSample = object : Runnable {
-        override fun run() {
-            if (!active) return
-            if (IslandBus.screenOn.value) {
-                if (s.evVpn) readVpn(announce = true)
-                if (s.evDebugging) readDebugging(announce = true)
-            }
-            main.postDelayed(this, 2000)
-        }
-    }
+    private var connectionJob: kotlinx.coroutines.Job? = null
     private var hotspotState: Boolean? = null
     private val s get() = SettingsRepo.current
 
@@ -206,7 +202,19 @@ class SystemEvents(private val context: Context) {
         }
         readVpn(announce = false)
         readDebugging(announce = false)
-        main.postDelayed(connectionSample, 2000)
+        connectionJob = IslandBus.scope.launch {
+            combine(SettingsRepo.state, IslandBus.screenOn, IslandBus.powerSave) { settings, screen, saving ->
+                if (screen && (settings.evVpn || settings.evDebugging)) {
+                    if (saving && settings.batterySaver) 10_000L else 2_000L
+                } else 0L
+            }.distinctUntilChanged().collectLatest { interval ->
+                if (interval > 0) while (active) {
+                    if (s.evVpn) readVpn(announce = true)
+                    if (s.evDebugging) readDebugging(announce = true)
+                    delay(interval)
+                }
+            }
+        }
         listOf(Settings.Global.ADB_ENABLED, WIRELESS_DEBUGGING).forEach { key ->
             runCatching { context.contentResolver.registerContentObserver(Settings.Global.getUriFor(key), false, debuggingObserver) }
         }
@@ -235,7 +243,7 @@ class SystemEvents(private val context: Context) {
     fun stop() {
         active = false
         SystemEventObservation.state.value = SystemEventObservation.state.value.copy(observing = false)
-        main.removeCallbacks(connectionSample)
+        connectionJob?.cancel(); connectionJob = null
         main.removeCallbacks(batterySample)
         runCatching { context.unregisterReceiver(receiver) }
         runCatching { context.contentResolver.unregisterContentObserver(brightnessObserver) }

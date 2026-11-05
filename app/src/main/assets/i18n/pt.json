@@ -586,5 +586,13 @@
 "{0}. Also the glowing dot of the flashlight and navigation": "{0}. Também o ponto brilhante da lanterna e da navegação",
 "“Battery low” — the Battery channel. Some firmwares don't let you change it": "“Bateria fraca” — o canal Bateria. Alguns sistemas não deixam mudar",
 "“Paid” on screen, but amounts: {0}": "“Pago” na tela, mas valores: {0}",
-"“Set a timer for 5 minutes” from an assistant or widget can go to the island": "“Defina um timer de 5 minutos” de um assistente ou widget pode ir para a ilha"
+"“Set a timer for 5 minutes” from an assistant or widget can go to the island": "“Defina um timer de 5 minutos” de um assistente ou widget pode ir para a ilha",
+"Search settings": "Pesquisar configurações",
+"Name or feature": "Nome ou recurso",
+"Clear search": "Limpar pesquisa",
+"Tap a result to open its settings section.": "Toque em um resultado para abrir a seção de configurações.",
+"No results": "Nenhum resultado",
+"Hide while recording the screen": "Ocultar durante a gravação da tela",
+"Hide the entire island while Android reports an active screen recording": "Ocultar toda a ilha enquanto o Android indicar uma gravação de tela ativa",
+"Dismiss notification": "Dispensar notificação"
 }

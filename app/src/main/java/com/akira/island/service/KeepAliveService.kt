@@ -10,8 +10,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import android.provider.Settings
 import com.akira.island.core.IslandBus
 import com.akira.island.R
@@ -22,20 +24,11 @@ import com.akira.island.ui.Perms
 /**
  * «Не выгружать остров»: служба на переднем плане с тихим уведомлением. Процесс с такой службой Android
  * не закрывает вместе с приложением, когда его смахивают из недавних, — остров остаётся на экране.
- * Сама служба ничего не делает и заряд не тратит: она только показывает системе, что остров нужен.
+ * Поддерживает foreground-уведомление и проверяет подключение слушателя только при включённом экране.
  */
 class KeepAliveService : Service() {
-    private val handler = Handler(Looper.getMainLooper())
-    private val maintenance = object : Runnable {
-        override fun run() {
-            if (!SettingsRepo.current.keepAlive || !SettingsRepo.current.enabled) return
-            // Public Android rebind only; never toggle accessibility or repeatedly restart a crashing process.
-            if (IslandBus.screenOn.value && Perms.notifications(this@KeepAliveService) && !NotifListener.isConnected) {
-                NotifListener.requestReconnect(this@KeepAliveService)
-            }
-            handler.postDelayed(this, 60_000)
-        }
-    }
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+    private var maintenance: kotlinx.coroutines.Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,13 +47,22 @@ class KeepAliveService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        handler.removeCallbacks(maintenance)
-        handler.post(maintenance)
+        maintenance?.cancel()
+        maintenance = scope.launch {
+            IslandBus.screenOn.collectLatest { screenOn ->
+                if (screenOn) while (SettingsRepo.current.keepAlive && SettingsRepo.current.enabled) {
+                    if (Perms.notifications(this@KeepAliveService) && !NotifListener.isConnected) {
+                        NotifListener.requestReconnect(this@KeepAliveService)
+                    }
+                    delay(60_000)
+                }
+            }
+        }
         return START_STICKY
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(maintenance)
+        scope.cancel()
         super.onDestroy()
     }
 
