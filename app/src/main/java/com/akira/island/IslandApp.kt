@@ -15,6 +15,8 @@ class IslandApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SettingsRepo.init(this)
+        com.akira.island.data.ExtrasRepo.init(this)
+        com.akira.island.service.StepRepo.start(this, IslandBus.scope)
         Lang.init(this)
         // «Таймер от помощника»: выключено — остров не предлагается в списке, когда просят поставить таймер
         IslandBus.scope.launch {

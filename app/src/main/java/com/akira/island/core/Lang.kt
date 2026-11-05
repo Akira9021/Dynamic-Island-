@@ -16,13 +16,13 @@ import java.util.Locale
 
 /**
  * Язык приложения и острова. Русский и английский пишутся парой прямо в коде: tr("Зарядка", "Charging").
- * Остальные языки (индонезийский, португальский, казахский) — таблицы в assets/i18n/<код>.json: английская
+ * Остальные языки — таблицы в assets/i18n/<код>.json: английская
  * строка → перевод. Чего в таблице нет, показывается по-английски. «Как в системе» — язык телефона, если он
  * есть в приложении, иначе английский.
  */
 object Lang {
     /** Языки приложения: код → таблица переводов (у русского и английского таблиц нет) */
-    val codes = listOf("ru", "en", "id", "pt", "kk")
+    val codes = listOf("ru", "en", "id", "pt", "kk", "fr", "es")
 
     private var assets: android.content.res.AssetManager? = null
     private val tables = HashMap<String, Map<String, String>>()
@@ -32,7 +32,7 @@ object Lang {
         assets = context.applicationContext.assets
     }
 
-    /** Код текущего языка: ru, en, id, pt или kk */
+    /** Код текущего языка из [codes]. */
     val code: String
         get() = when (val l = SettingsRepo.current.language) {
             AppLanguage.SYSTEM -> systemCode()
@@ -49,6 +49,8 @@ object Lang {
             "id" -> Locale.forLanguageTag("id")
             "pt" -> Locale.forLanguageTag("pt-BR")
             "kk" -> Locale.forLanguageTag("kk")
+            "fr" -> Locale.FRENCH
+            "es" -> Locale.forLanguageTag("es")
             else -> Locale.ENGLISH
         }
 

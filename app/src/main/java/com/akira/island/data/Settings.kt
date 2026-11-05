@@ -102,6 +102,7 @@ enum class BubbleSide(private val ru: String, private val en: String) {
 enum class MessageStyle(private val ru: String, private val en: String, private val hintRu: String, private val hintEn: String) {
     CARD("Карточка", "Card", "Остров раскрывается сверху: аватар, текст и кнопки", "The island opens from the top: avatar, text and buttons"),
     PILL("Пилюля", "Pill", "Небольшая капсула у камеры: имя и одна строка текста", "A small capsule at the camera: the name and one line of text"),
+    ICON("Только значок", "Icon only", "Значок приложения и число уведомлений; нажатие раскрывает сообщение", "App icon and notification count; tap to read the message"),
     ;
 
     val title: String get() = tr(ru, en)
@@ -147,13 +148,19 @@ enum class LandscapeMode(private val ru: String, private val en: String, private
 @Serializable
 enum class AppRule { ALWAYS, NEVER }
 
+@Serializable
+enum class MessageIconMode(private val ru: String, private val en: String) {
+    DEFAULT("Аватар", "Avatar"), APP("Значок приложения", "App icon"), NONE("Без значка", "No icon");
+    val title: String get() = tr(ru, en)
+}
+
 /**
  * Язык приложения и острова. «Как в системе» — язык телефона, если он есть в приложении, иначе английский.
  * Названия языков — на самих языках, чтобы свой язык нашёлся, даже если сейчас выбран непонятный.
  */
 @Serializable
 enum class AppLanguage(val code: String) {
-    SYSTEM(""), RU("ru"), EN("en"), ID("id"), PT("pt"), KK("kk");
+    SYSTEM(""), RU("ru"), EN("en"), ID("id"), PT("pt"), KK("kk"), FR("fr"), ES("es");
 
     val title: String
         get() = when (this) {
@@ -163,6 +170,8 @@ enum class AppLanguage(val code: String) {
             ID -> "Bahasa Indonesia"
             PT -> "Português (Brasil)"
             KK -> "Қазақ тілі"
+            FR -> "Français"
+            ES -> "Español"
         }
 }
 
@@ -376,6 +385,49 @@ data class IslandSettings(
     val landscape: LandscapeMode = LandscapeMode.HIDE,
     /** Зарядка — только плашка при подключении, без капсулы с процентами всё время зарядки */
     val chargingBrief: Boolean = false,
+
+    // Optional presentation controls. Defaults preserve the existing 1.7 layout.
+    val idleClockBattery: Boolean = false,
+    val preferMusic: Boolean = false,
+    val swipeActivities: Boolean = false,
+    val vinylArt: Boolean = false,
+    val hideWhenSourceOpen: Boolean = false,
+    val collapseOnShade: Boolean = false,
+    val hideOnAod: Boolean = false,
+    val evVpn: Boolean = false,
+    val evHotspot: Boolean = false,
+    val evDebugging: Boolean = false,
+    /** -1 preserves the automatic capsule/card radius. */
+    val cornerRadius: Int = -1,
+    val notchTopRadius: Int = 0,
+    val expandedCornerRadius: Int = -1,
+    /** Scrollable content limit, in dp; constrained to the screen by the renderer. */
+    val expandedMaxHeight: Int = 480,
+    val expandedColorEnabled: Boolean = false,
+    val expandedColor: Long = 0xFF000000,
+    val expandedOutlineColor: Long = 0xFF3A3A40,
+    /** -1 inherits the capsule outline. */
+    val expandedOutlineWidth: Float = -1f,
+    val expandedOutlineOpacity: Int = 100,
+    val outlineOpacity: Int = 100,
+    /** Per-edge widths; negative values inherit the corresponding uniform outline width. */
+    val outlineTopWidth: Float = -1f,
+    val outlineRightWidth: Float = -1f,
+    val outlineBottomWidth: Float = -1f,
+    val outlineLeftWidth: Float = -1f,
+    val expandedOutlineTopWidth: Float = -1f,
+    val expandedOutlineRightWidth: Float = -1f,
+    val expandedOutlineBottomWidth: Float = -1f,
+    val expandedOutlineLeftWidth: Float = -1f,
+
+    val bottomGradient: Int = 0,
+    val messageIconMode: MessageIconMode = MessageIconMode.DEFAULT,
+    val messageIconRight: Boolean = false,
+    val batteryPercentOnly: Boolean = false,
+    val liveBanner: Boolean = true,
+    val actionColorEnabled: Boolean = false,
+    val actionColor: Long = 0xFFC6C3F7,
+
 ) {
     /** С «Экономией заряда» в энергосбережении Android — как с «Уменьшить эффекты» */
     fun forPowerSave(on: Boolean): IslandSettings = if (on && batterySaver && !reduceEffects) copy(reduceEffects = true) else this

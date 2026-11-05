@@ -1,6 +1,7 @@
 package com.akira.island.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.app.KeyguardManager
 import android.content.Context
@@ -91,6 +92,7 @@ class IslandService : AccessibilityService() {
     private var payReader: PayScreenReader? = null
     private var alarmMonitor: AlarmMonitor? = null
     private var screenEvents = false
+    private var connected = false
     private val keyguard by lazy { getSystemService(KeyguardManager::class.java) }
     /** Экран блокировки был на экране — ждём, когда он уйдёт, чтобы сразу показать разблокировку */
     private var keyguardShown = false
@@ -138,7 +140,10 @@ class IslandService : AccessibilityService() {
         override fun onDisplayAdded(displayId: Int) = Unit
         override fun onDisplayRemoved(displayId: Int) = Unit
         override fun onDisplayChanged(displayId: Int) {
-            if (displayId == Display.DEFAULT_DISPLAY) readRotation()
+            if (displayId == Display.DEFAULT_DISPLAY) {
+                readRotation()
+                applyCurrentSettings()
+            }
         }
     }
 
@@ -179,6 +184,12 @@ class IslandService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         SettingsRepo.init(this)
+        // Android may reconnect this same service instance. Do not create duplicate collectors/windows.
+        if (connected) {
+            applyCurrentSettings()
+            return
+        }
+        connected = true
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         IslandBus.landscape.value = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         readRotation()
@@ -188,16 +199,17 @@ class IslandService : AccessibilityService() {
         createWindows()
         KeepAliveService.sync(this)
         IslandTile.refresh(this)
-        events = SystemEvents(this).also { it.start() }
+        events = SystemEvents(this).also { runCatching { it.start() } }
         keyguardShown = keyguard?.isKeyguardLocked == true
-        torch = TorchController(this).also { it.start() }
-        alarm = TimerAlarm(this, scope).also { it.start() }
-        calls = CallMonitor(this, scope).also { it.start() }
+        torch = TorchController(this).also { runCatching { it.start() } }
+        alarm = TimerAlarm(this, scope).also { runCatching { it.start() } }
+        calls = CallMonitor(this, scope).also { runCatching { it.start() } }
         navReader = NavScreenReader(this, scope)
         clockReader = ClockScreenReader(this, scope).also { ClockControl.reader = it }
         payReader = PayScreenReader(this, scope)
-        alarmMonitor = AlarmMonitor(this).also { it.start() }
-        IslandBus.serviceRunning.value = true
+        alarmMonitor = AlarmMonitor(this).also { runCatching { it.start() } }
+        WeatherRepo.start(this, scope)
+        IslandBus.serviceRunning.value = display != null && touch != null
 
         // Входящий смахнули — он скрыт, пока звонит; перестал звонить — следующий входящий снова в острове.
         // Здесь, а не в острове: пока остров спрятан, он не рисуется и ничего бы не сбросил
@@ -234,6 +246,7 @@ class IslandService : AccessibilityService() {
         // Экран погас — дальше будет экран блокировки, ждём его ухода; оплаты телефоном уже не будет
         scope.launch {
             IslandBus.screenOn.collect {
+                applyCurrentSettings()
                 if (!it) {
                     keyguardShown = true
                     PayMonitor.clearReady()
@@ -356,10 +369,27 @@ class IslandService : AccessibilityService() {
         list.isEmpty() || list.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
     }.getOrDefault(true)
 
+    private fun applyCurrentSettings() = applySettings(SettingsRepo.current, IslandBus.landscape.value,
+        IslandBus.keyguard.value, IslandBus.displayRotation.value)
+
+    private fun isAmbientDisplay(): Boolean {
+        val state = runCatching { displays?.getDisplay(Display.DEFAULT_DISPLAY)?.state }.getOrNull()
+        return !IslandBus.screenOn.value || state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND || state == Display.STATE_OFF
+    }
+
     private fun applySettings(s: IslandSettings, landscape: Boolean, keyguard: Boolean, rotation: Int) {
         IslandType.apply(this, s)
+        // Panel IDs are needed only for the opt-in shade behavior, not for reading messages.
+        serviceInfo?.let { info ->
+            val wanted = if (s.collapseOnShade) info.flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                else info.flags and AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS.inv()
+            if (wanted != info.flags) {
+                info.flags = wanted
+                runCatching { serviceInfo = info }
+            }
+        }
         visible = s.enabled && !(landscape && s.landscape == LandscapeMode.HIDE) && !IslandBus.offSchedule.value &&
-            !(keyguard && s.lockScreen == LockScreenMode.HIDE)
+            !(keyguard && s.lockScreen == LockScreenMode.HIDE) && !(s.hideOnAod && isAmbientDisplay())
         // «У камеры»: в альбомной ориентации остров повёрнут к краю с камерой; иначе — как обычно, сверху
         val turn = if (landscape && s.landscape == LandscapeMode.CAMERA) rotation else 0
         IslandBus.contentRotation.value = turn
@@ -536,7 +566,10 @@ class IslandService : AccessibilityService() {
      * Высота окна острова: раскрытый остров, карточка уведомления и список истории помещаются с запасом,
      * а с крупным текстом из «Оформления» — ещё выше.
      */
-    private fun windowBandDp(s: IslandSettings): Int = (WINDOW_BAND_DP * maxOf(1f, s.contentScale / 100f)).toInt()
+    private fun windowBandDp(s: IslandSettings): Int = maxOf(
+        (WINDOW_BAND_DP * maxOf(1f, s.contentScale / 100f)).toInt(),
+        s.expandedMaxHeight.coerceIn(180, 480) + 2 * ISLAND_PAD_DP,
+    )
 
     private fun dp(v: Int): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
@@ -567,9 +600,48 @@ class IslandService : AccessibilityService() {
         runCatching { serviceInfo = info }
     }
 
+    /**
+     * Best effort from the accessible SystemUI tree. Never mistake the lock screen, keyboard or a
+     * generic full-screen system window for the shade; OEMs without exposed panel IDs stay unchanged.
+     */
+    private fun updateShadeState() {
+        if (keyguard?.isKeyguardLocked == true) {
+            IslandBus.shadeOpen.value = false
+            return
+        }
+        val open = runCatching {
+            windows.any { window ->
+                if (window.type != AccessibilityWindowInfo.TYPE_SYSTEM || !window.isActive) return@any false
+                val root = window.root ?: return@any false
+                if (root.packageName?.toString() != "com.android.systemui") return@any false
+                val nodes = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                nodes.add(root)
+                var checked = 0
+                var found = false
+                while (nodes.isNotEmpty() && checked++ < 128) {
+                    val node = nodes.removeFirst()
+                    if (node.isVisibleToUser && ShadeDetection.isPanel(node.viewIdResourceName.orEmpty(), node.className?.toString().orEmpty())) {
+                        found = true
+                        break
+                    }
+                    for (i in 0 until node.childCount) node.getChild(i)?.let(nodes::add)
+                }
+                found
+            }
+        }.getOrDefault(false)
+        if (open != IslandBus.shadeOpen.value) {
+            IslandBus.shadeOpen.value = open
+            if (open && SettingsRepo.current.collapseOnShade) {
+                IslandBus.reply.value = null
+                Controls.collapse()
+            }
+        }
+    }
+
     /** Пока открыт ввод ответа: клавиатуру спрятали («Назад») — ввод закрывается, как в шторке. */
     private fun onWindowsChanged() {
         checkUnlock()
+        updateShadeState()
         if (IslandBus.reply.value == null) return
         if (keyboardShown()) {
             keyboardSeen = true
@@ -598,6 +670,7 @@ class IslandService : AccessibilityService() {
     }
 
     private fun onWindowState(event: AccessibilityEvent) {
+        updateShadeState()
         val pkg = event.packageName?.toString() ?: return
         // Шторка, клавиатура и сам остров не меняют «открытое приложение»
         val cls = event.className?.toString().orEmpty()
@@ -656,6 +729,7 @@ class IslandService : AccessibilityService() {
         IslandBus.egg.value = false
         setTiltEnabled(false)
         IslandBus.serviceRunning.value = false
+        IslandBus.shadeOpen.value = false
         IslandTile.refresh(this)
         events?.stop()
         torch?.stop()

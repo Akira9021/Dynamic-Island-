@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -105,8 +106,13 @@ import com.akira.island.core.Tints
 import com.akira.island.core.formatDuration
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.MessageStyle
+import com.akira.island.data.MessageIconMode
+import com.akira.island.service.NotifListener
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import android.text.format.DateFormat
+import java.util.Date
 import com.akira.island.data.SettingsRepo
-import com.akira.island.service.Messages
 import androidx.compose.runtime.collectAsState
 import com.akira.island.core.tr
 import com.akira.island.core.trf
@@ -142,13 +148,44 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
     val side = sideMax(s)
     val icon = h * 0.5f
     when (act) {
-        // Пустая капсула; на экране блокировки слева от камеры — замок
-        is Act.Idle -> Box(Modifier.size(s.width.dp, s.height.dp), contentAlignment = Alignment.CenterStart) {
+        // Пустая капсула: при желании часы слева от камеры, актуальный заряд справа.
+        is Act.Idle -> {
             val keyguard by IslandBus.keyguard.collectAsState()
-            AnimatedVisibility(s.evLock && keyguard, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
-                Icon(Ios.lock, null, tint = Color.White, modifier = Modifier.padding(start = s.height.dp * 0.38f).size(s.height.dp * 0.46f))
+            val battery by IslandBus.battery.collectAsState()
+            if (s.idleClockBattery) {
+                val now = rememberWallNow(1000)
+                val context = LocalContext.current
+                CompactRow(s.height.dp, gap, side,
+                    left = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (s.evLock && keyguard) {
+                                Icon(Ios.lock, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                Spacer(Modifier.width(4.dp))
+                            }
+                            Text(DateFormat.getTimeFormat(context).format(Date(now)), color = Color.White, fontSize = 13.sp, style = Digits)
+                        }
+                    },
+                    right = {
+                        if (battery.level >= 0) Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${battery.level}%", color = if (battery.level <= 15) Tints.Red else Color.White, fontSize = 12.sp, style = Digits)
+                            if (!s.batteryPercentOnly) {
+                                Spacer(Modifier.width(4.dp))
+                                BatteryGlyph(battery.level, if (battery.charging) Tints.Green else Color.White, Modifier.size(22.dp, 11.dp))
+                            }
+                        }
+                    },
+                )
+            } else Box(Modifier.size(s.width.dp, s.height.dp), contentAlignment = Alignment.CenterStart) {
+                AnimatedVisibility(s.evLock && keyguard, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
+                    Icon(Ios.lock, null, tint = Color.White, modifier = Modifier.padding(start = s.height.dp * 0.38f).size(s.height.dp * 0.46f))
+                }
             }
         }
+
+        is Act.WeatherA -> CompactRow(h, gap, side,
+            left = { Icon(Icons.Rounded.WbSunny, null, tint = Tints.Yellow, modifier = Modifier.size(icon)) },
+            right = { Text("${act.weather.temperature.toInt()}°", color = Color.White, fontSize = 17.sp, style = Digits) },
+        )
 
         is Act.MediaA -> MediaCompact(act.m, s)
 
@@ -242,7 +279,7 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TimeText("${act.b.level}%", Tints.Green, 15)
                     Spacer(Modifier.width(5.dp))
-                    BatteryGlyph(act.b.level, Tints.Green, Modifier.size(h * 0.6f, h * 0.3f))
+                    if (!s.batteryPercentOnly) BatteryGlyph(act.b.level, Tints.Green, Modifier.size(h * 0.6f, h * 0.3f))
                 }
             },
         )
@@ -356,7 +393,10 @@ private fun MediaCompact(m: MediaInfo, s: IslandSettings) {
  */
 @Composable
 private fun NoticeCompact(n: Notice, s: IslandSettings, wideWidth: Dp) {
+    val detail by IslandBus.messageDetail.collectAsState()
     when {
+        n.message != null && detail -> MessageCard(n, n.message, s, wideWidth, detail = true)
+        n.style == NoticeStyle.MESSAGE && n.message != null && s.messageStyle == MessageStyle.ICON -> MessageIcon(n.message, s)
         n.style == NoticeStyle.MESSAGE && n.message != null && s.messageStyle == MessageStyle.PILL -> MessagePill(n, n.message, s)
         n.style == NoticeStyle.MESSAGE && n.message != null -> MessageCard(n, n.message, s, wideWidth)
         n.style == NoticeStyle.PAY_DONE -> PayDone(n, s, wideWidth)
@@ -458,7 +498,7 @@ private fun PillNotice(n: Notice, s: IslandSettings) {
  * Все размеры в sp растут вместе с размером шрифта Android, ширина и отступы — с настройками острова.
  */
 @Composable
-private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("UNUSED_PARAMETER") wideWidth: Dp) {
+private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("UNUSED_PARAMETER") wideWidth: Dp, detail: Boolean = false) {
     val context = LocalContext.current
     val haptic = rememberHaptic()
     val iconSize = 40.dp
@@ -472,8 +512,8 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
     val dim = Color.White.copy(alpha = 0.55f)
 
     // Пока отвечают или листают переписку, плашка не уходит по таймеру
-    DisposableEffect(open, replyAction != null) {
-        IslandBus.noticeHold.value = open || replyAction != null
+    DisposableEffect(open, replyAction != null, detail) {
+        IslandBus.noticeHold.value = open || replyAction != null || detail
         onDispose { IslandBus.noticeHold.value = false }
     }
     // Плашка ушла — ввод закрывается, окну возвращается «неактивный» режим
@@ -485,6 +525,8 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
         Modifier
             .animateContentSize(islandSpec(s))
             .width(messageWidth(s))
+            .heightIn(max = s.expandedMaxHeight.dp)
+            .then(if (detail) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(bottom = 12.dp),
     ) {
         // Шапка на уровне камеры: слева приложение, справа время — как боковые части острова iPhone
@@ -493,7 +535,7 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                if (m.appIcon != null) {
+                if (m.appIcon != null && s.messageIconMode != MessageIconMode.NONE) {
                     Image(m.appIcon, null, Modifier.size(15.dp).clip(RoundedCornerShape(4.dp)))
                     Spacer(Modifier.width(6.dp))
                 }
@@ -503,7 +545,7 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 Text(tr("сейчас", "now"), color = dim, fontSize = 12.sp, maxLines = 1, softWrap = false)
                 Spacer(Modifier.width(4.dp))
-                Icon(Ios.bell, null, tint = dim, modifier = Modifier.size(12.dp))
+                if (s.messageIconMode != MessageIconMode.NONE) Icon(Ios.bell, null, tint = dim, modifier = Modifier.size(12.dp))
             }
         }
         Spacer(Modifier.height((messageTop(s) - s.height.dp).coerceAtLeast(4.dp)))
@@ -511,13 +553,15 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
         Scaled(s.contentScale) {
             Column {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
-                    NotifIcon(if (hidden) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
-                    Spacer(Modifier.width(12.dp))
+                    if (s.messageIconMode != MessageIconMode.NONE && !s.messageIconRight) {
+                        NotifIcon(if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
+                        Spacer(Modifier.width(12.dp))
+                    }
                     Column(Modifier.weight(1f)) {
                         Row(Modifier.fillMaxWidth().heightIn(min = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 if (hidden) m.appName else n.title, color = Color.White, fontSize = 15.sp, lineHeight = 20.sp,
-                                fontWeight = FontWeight.SemiBold.island, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                                fontWeight = FontWeight.SemiBold.island, maxLines = if (detail) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                             )
                             if (m.history.size > 1 && !hidden) {
                                 Spacer(Modifier.width(8.dp))
@@ -529,21 +573,37 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
                         }
                         if (hidden) {
                             Text(tr("Содержимое скрыто", "Content hidden"), color = dim, fontSize = 14.sp, lineHeight = 19.sp, maxLines = 1)
-                        } else if (open && m.history.size > 1) {
+                        } else if ((open || detail) && m.history.size > 1) {
                             m.history.forEachIndexed { i, line ->
                                 Text(
                                     line, color = Color.White.copy(alpha = if (i == m.history.lastIndex) 0.9f else 0.6f),
-                                    fontSize = 14.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    fontSize = 14.sp, lineHeight = 19.sp, maxLines = if (detail) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(bottom = 2.dp),
                                 )
                             }
                         } else if (m.text.isNotEmpty()) {
                             Text(
-                                m.text, color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 19.sp, maxLines = s.msgLines.coerceIn(1, 8),
+                                m.text, color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 19.sp, maxLines = if (detail) Int.MAX_VALUE else s.msgLines.coerceIn(1, 8),
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
+                    if (s.messageIconMode != MessageIconMode.NONE && s.messageIconRight) {
+                        Spacer(Modifier.width(12.dp))
+                        NotifIcon(if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
+                    }
+                }
+                if (detail && !locked) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextAction(tr("Открыть", "Open"), accent) {
+                        if (!Controls.send(context, m.intent)) Controls.openApp(context, m.pkg)
+                        IslandBus.notice.value = null
+                    }
+                    if (NotifListener.canDismiss(m.key)) TextAction(tr("Удалить", "Dismiss"), accent) {
+                        if (!NotifListener.dismiss(m.key)) Toast.makeText(context,
+                            tr("Не удалось удалить уведомление", "Couldn't dismiss notification"), Toast.LENGTH_SHORT).show()
+                    }
+                    TextAction(tr("Свернуть", "Collapse"), accent) { IslandBus.messageDetail.value = false }
                 }
                 if (replyAction != null) {
                     // Строка ответа стоит под текстом, как кнопки, — на одной линии с ним
@@ -551,7 +611,6 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
                         ReplyField(replyAction, accent) { text ->
                             if (text.isBlank()) return@ReplyField
                             if (Controls.sendReply(context, replyAction, text)) {
-                                Messages.onReplied(m.key)
                                 IslandBus.reply.value = null
                                 IslandBus.notice.value = null
                                 // Как в ролике: на миг «Отправлено» с галочкой и кому
@@ -598,7 +657,7 @@ private fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress("
 
 /**
  * Уведомление пилюлей («Вид уведомлений → Пилюля»): у камеры слева аватар и кто пишет, справа приложение,
- * под ними одна строка текста. Занимает меньше места, чем карточка; нажатие открывает приложение.
+ * под ними одна строка текста. Занимает меньше места, чем карточка; нажатие раскрывает сообщение внутри острова.
  */
 @Composable
 private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
@@ -611,8 +670,8 @@ private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                val face = if (hidden) m.appIcon else m.avatar ?: m.appIcon
-                if (face != null) {
+                val face = if (hidden || s.messageIconMode == MessageIconMode.APP) m.appIcon else m.avatar ?: m.appIcon
+                if (face != null && s.messageIconMode != MessageIconMode.NONE && !s.messageIconRight) {
                     Image(face, null, Modifier.size(20.dp).clip(CircleShape), contentScale = ContentScale.Crop)
                     Spacer(Modifier.width(6.dp))
                 }
@@ -625,9 +684,12 @@ private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 Text(m.appName, color = dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false))
-                if (m.appIcon != null) {
-                    Spacer(Modifier.width(5.dp))
-                    Image(m.appIcon, null, Modifier.size(14.dp).clip(RoundedCornerShape(4.dp)))
+                if (s.messageIconMode != MessageIconMode.NONE && s.messageIconRight) {
+                    val icon = if (hidden || s.messageIconMode == MessageIconMode.APP) m.appIcon else m.avatar ?: m.appIcon
+                    if (icon != null) {
+                        Spacer(Modifier.width(5.dp))
+                        Image(icon, null, Modifier.size(18.dp).clip(CircleShape))
+                    }
                 }
             }
         }
@@ -996,4 +1058,15 @@ private fun IncomingCall(c: CallInfo, s: IslandSettings, wideWidth: Dp) {
             Controls.answerCall(context, c)
         }
     }
+}
+
+
+/** Small notification indicator: text stays hidden until the user opens the card. */
+@Composable
+private fun MessageIcon(m: AppMessage, s: IslandSettings) {
+    val h = activeHeight(s)
+    CompactRow(h, compactGap(s), sideMax(s),
+        left = { AppIcon(m.appIcon, h * 0.55f, Ios.chatbubble, Tints.Blue) },
+        right = { Text(m.history.size.coerceAtLeast(1).toString(), color = Color.White, fontSize = 15.sp, style = Digits) },
+    )
 }

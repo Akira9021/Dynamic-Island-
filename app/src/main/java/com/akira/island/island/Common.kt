@@ -1,6 +1,12 @@
 package com.akira.island.island
 
 import android.os.SystemClock
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.content.Context
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -47,12 +53,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.StrokeJoin
@@ -198,8 +209,32 @@ fun rememberWallNow(periodMs: Long): Long {
 @Composable
 fun rememberHaptic(): () -> Unit {
     val view = LocalView.current
-    return remember(view) {
-        { if (SettingsRepo.current.haptics) view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
+    val context = LocalContext.current
+    return remember(view, context) {
+        {
+            if (SettingsRepo.current.haptics) {
+                val performed = view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                val systemHaptics = !performed && runCatching {
+                    Settings.System.getInt(context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0
+                }.getOrDefault(false)
+                if (!performed && systemHaptics) {
+                    // Some overlay windows cannot request view haptics; use the public vibrator API as a fallback.
+                    runCatching {
+                        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+                        } else {
+                            @Suppress("DEPRECATION")
+                            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                        }
+                        if (vibrator?.hasVibrator() == true) {
+                            vibrator.vibrate(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                                VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+                            else VibrationEffect.createOneShot(12, VibrationEffect.DEFAULT_AMPLITUDE))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -307,6 +342,13 @@ fun AppIcon(icon: ImageBitmap?, size: Dp, fallback: ImageVector, tint: Color, mo
     }
 }
 
+/** Optional main-action accent; red and green retain their call/warning meanings. */
+private fun controlTint(color: Color): Color {
+    val accent = IslandType.actionAccent ?: return color
+    val rgb = color.copy(alpha = 1f)
+    return if (rgb == Tints.Orange || rgb == Tints.Lavender || rgb == Tints.Blue) accent.copy(alpha = color.alpha) else color
+}
+
 @Composable
 fun RoundButton(
     icon: ImageVector,
@@ -331,11 +373,11 @@ fun RoundButton(
                 scaleY = scale
             }
             .clip(CircleShape)
-            .background(bg)
+            .background(controlTint(bg))
             .clickable(interaction, indication = null) { haptic(); onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = fg, modifier = Modifier.size(size * iconScale).graphicsLayer { rotationZ = iconRotation })
+        Icon(icon, null, tint = controlTint(fg), modifier = Modifier.size(size * iconScale).graphicsLayer { rotationZ = iconRotation })
     }
 }
 
@@ -352,15 +394,15 @@ fun PillButton(
     Row(
         modifier
             .clip(CircleShape)
-            .background(bg)
+            .background(controlTint(bg))
             .clickable { haptic(); onClick() }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = fg, modifier = Modifier.size(20.dp))
+        Icon(icon, null, tint = controlTint(fg), modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(6.dp))
         // Длинная подпись («Не беспокоить», «Без звука») чуть уменьшается, а не обрезается
-        FitText(text, fg, 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false))
+        FitText(text, controlTint(fg), 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false))
     }
 }
 
@@ -384,7 +426,7 @@ fun Modifier.glassSurface(
 ): Modifier = drawWithCache {
     val w = size.width
     val h = size.height
-    val a = opacity.coerceIn(0.3f, 0.95f)
+    val a = opacity.coerceIn(0.3f, 1f)
     val outline = shape.createOutline(size, layoutDirection, this)
     val dp = 1.dp.toPx()
     // Всё, что не зависит от наклона, собирается один раз на размер, а кадр только рисует
@@ -615,3 +657,50 @@ fun TurnArrow(turn: Turn, color: Color, modifier: Modifier = Modifier) {
         drawPath(head, color, style = stroke)
     }
 }
+
+
+/**
+ * A clipped outline with independent widths for all four sides. The inside follows the outer rounded
+ * corners with each radius reduced by its adjacent edge width, so corners have no rectangular seams.
+ * Shape state is read at draw time; animated rounding does not rebuild the content.
+ */
+fun Modifier.islandEdgeOutline(shape: Shape, color: Color, top: Dp, right: Dp, bottom: Dp, left: Dp): Modifier =
+    drawWithCache {
+        val t = top.toPx().coerceIn(0f, size.height / 2)
+        val r = right.toPx().coerceIn(0f, size.width / 2)
+        val b = bottom.toPx().coerceIn(0f, size.height / 2)
+        val l = left.toPx().coerceIn(0f, size.width / 2)
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val outer = Path()
+        val inner = Path()
+        val hasInside = size.width > l + r && size.height > t + b
+        when (outline) {
+            is Outline.Rounded -> {
+                val rr = outline.roundRect
+                outer.addRoundRect(rr)
+                if (hasInside) {
+                    fun inset(c: CornerRadius, x: Float, y: Float) = CornerRadius((c.x - x).coerceAtLeast(0f), (c.y - y).coerceAtLeast(0f))
+                    inner.addRoundRect(RoundRect(
+                        l, t, size.width - r, size.height - b,
+                        inset(rr.topLeftCornerRadius, l, t), inset(rr.topRightCornerRadius, r, t),
+                        inset(rr.bottomRightCornerRadius, r, b), inset(rr.bottomLeftCornerRadius, l, b),
+                    ))
+                }
+            }
+            is Outline.Rectangle -> {
+                outer.addRect(outline.rect)
+                if (hasInside) inner.addRect(Rect(l, t, size.width - r, size.height - b))
+            }
+            is Outline.Generic -> {
+                outer.addPath(outline.path)
+                if (hasInside) inner.addRect(Rect(l, t, size.width - r, size.height - b))
+            }
+        }
+        onDrawWithContent {
+            drawContent()
+            if (t + r + b + l > 0f && color.alpha > 0f) {
+                if (hasInside) clipPath(inner, clipOp = ClipOp.Difference) { drawPath(outer, color) }
+                else drawPath(outer, color)
+            }
+        }
+    }

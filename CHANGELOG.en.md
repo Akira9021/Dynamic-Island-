@@ -8,6 +8,16 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Test branch additions
+- Expand messages inside the island, dismiss actual system notifications, and use icon-only banners.
+- Optional idle clock/battery, music priority, activity swipes and a stable summary of concurrent downloads.
+- Shape, per-edge outlines, button/card colors, vinyl artwork and opaque glass.
+- French and Spanish; optional app/contact shortcuts, volume, brightness, analog clock, steps and city-based weather.
+- Fixes for repeated messages, LRC introductions/offsets, media session recovery, payment identity and stale battery readings.
+- AOD/shade behavior and supported system events, bounded notification-listener recovery, regression tests.
+- See [1.7.0 test coverage and limitations](docs/TESTING-1.7.0.md).
+
+
 ### 🎛️ More settings — as you asked
 - 🔔 **Notifications**: a Card or Pill style; how long to show them — up to 30 seconds or "Until you swipe it away"; **Notification history** — unread ones wait in the island as app icons and as a list when expanded; **Skip repeats**; **Silent notifications** (Snapchat, Instagram and many others) and **rules for each app** — always or never; **Why it didn't show** — what the island decided about recent notifications.
 - 🎨 **Appearance**: island **opacity**; the **width** of the expanded island and notifications and **text and icon size**; the **font** — Inter, the system font or your own .ttf/.otf file — and its **weight**; a **delay before showing** and events shown for up to 10 seconds; capsule width up to 400 dp, height up to 90 dp, width with activity up to +200 dp.

@@ -95,7 +95,7 @@ object LiveParser {
 
     /** Показать широкую плашку, но не чаще раза в минуту для одного приложения. */
     fun postBanner(context: Context, l: LiveInfo) {
-        if (!SettingsRepo.current.cardLive) return
+        if (!SettingsRepo.current.cardLive || !SettingsRepo.current.liveBanner) return
         val now = SystemClock.elapsedRealtime()
         if (now - (lastBanner[l.pkg] ?: -120_000L) < 60_000) return
         lastBanner[l.pkg] = now

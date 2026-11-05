@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dynamic Island</string>
+    <string name="a11y_label">Dynamic Island</string>
+    <string name="tile_label">Isla</string>
+    <string name="a11y_desc">Muestra una cápsula al estilo Dynamic Island sobre la cámara: música, temporizadores, descargas, linterna y eventos del sistema. El servicio identifica la aplicación abierta para ocultar el reproductor y mostrar pagos. Solo lee las pantallas de las aplicaciones de navegación, Reloj y pagos mientras están abiertas: distancia al siguiente giro, calle, llegada y dirección en navegación; temporizador y cronómetro en Reloj; pantalla de pago e importe para mostrar «Acerca al terminal» y después «Pagado». Los datos leídos permanecen en el teléfono. Para buscar la letra se envían el título, el artista, el álbum y la duración de la canción. Si se activa el tiempo, la ciudad elegida y sus coordenadas se envían a Open-Meteo, sin pedir permiso de ubicación.</string>
+</resources>

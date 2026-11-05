@@ -5,6 +5,10 @@ import android.app.PendingIntent
 import android.app.Person
 import android.os.Build
 import android.content.Context
+import android.content.ComponentName
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.compose.ui.graphics.ImageBitmap
@@ -23,15 +27,25 @@ import com.akira.island.data.SettingsRepo
  */
 class NotifListener : NotificationListenerService() {
     private var media: MediaMonitor? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var reconnectAttempts = 0
+    private val reconnect = Runnable {
+        requestReconnect(this)
+    }
 
     override fun onListenerConnected() {
         SettingsRepo.init(this)
+        handler.removeCallbacks(reconnect)
+        reconnectAttempts = 0
+        connected = this
+        media?.stop()
         media = MediaMonitor(applicationContext).also { it.start() }
         // Уже висящие уведомления разбираем без показа сообщений — они не новые
-        runCatching { activeNotifications?.forEach { NotificationParser.onPosted(this, it, initial = true) } }
+        runCatching { activeNotifications }.getOrNull()?.forEach { postSafely(it, initial = true) }
     }
 
     override fun onListenerDisconnected() {
+        if (connected === this) connected = null
         media?.stop()
         media = null
         IslandBus.progress.value = emptyMap()
@@ -39,14 +53,78 @@ class NotifListener : NotificationListenerService() {
         IslandBus.calls.value = emptyMap()
         IslandBus.live.value = emptyMap()
         IslandBus.ringingAlarms.value = emptySet()
+        // The platform may unbind the listener after pressure or a package update. Rebind without
+        // revoking access or asking the user to reinstall; cap retries to avoid a restart loop.
+        if (reconnectAttempts < 3) {
+            reconnectAttempts++
+            handler.postDelayed(reconnect, reconnectAttempts * 2_000L)
+        }
+    }
+
+    override fun onDestroy() {
+        if (connected === this) connected = null
+        handler.removeCallbacksAndMessages(null)
+        media?.stop()
+        media = null
+        super.onDestroy()
+    }
+
+    companion object {
+        @Volatile private var connected: NotifListener? = null
+        private var lastReconnectAt = -30_000L
+
+        val isConnected: Boolean get() = connected != null
+
+        /** Called by keep-alive/on-resume only while notification access is already granted. */
+        @Synchronized
+        fun requestReconnect(context: Context): Boolean {
+            if (isConnected) return false
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastReconnectAt < 30_000L) return false
+            lastReconnectAt = now
+            return runCatching {
+                requestRebind(ComponentName(context, NotifListener::class.java))
+                true
+            }.getOrDefault(false)
+        }
+
+        /** Never offer cancellation for foreground services, calls, or other non-clearable entries. */
+        fun canDismiss(key: String): Boolean = runCatching {
+            connected?.getActiveNotifications(arrayOf(key))?.any { it.key == key && it.isClearable } == true
+        }.getOrDefault(false)
+
+        private val actions = NotificationActions(
+            isClearable = ::canDismiss,
+            cancel = { key ->
+                val service = connected ?: error("Notification listener is disconnected")
+                service.cancelNotification(key)
+                IslandBus.removeMessage(key)
+                Inbox.remove(key)
+            },
+        )
+
+        /** Android remains the authority: cancellation may be refused by system policy. */
+        fun dismiss(key: String): Boolean = actions.dismiss(key)
+
+        fun dismissAll(keys: List<String>): Int = actions.dismissAll(keys)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        NotificationParser.onPosted(this, sbn)
+        postSafely(sbn)
+    }
+
+    private fun postSafely(sbn: StatusBarNotification, initial: Boolean = false) {
+        // Third-party extras/icons can be malformed. One bad notification must not take down
+        // the notification listener and the accessibility overlay sharing this process.
+        runCatching { media?.onNotificationPosted(sbn) }
+        runCatching { NotificationParser.onPosted(this, sbn, initial) }.onFailure {
+            NotifDebug.add(sbn.packageName, com.akira.island.core.tr("Не удалось прочитать уведомление", "Could not read notification"))
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        NotificationParser.onRemoved(sbn.key)
+        runCatching { media?.onNotificationRemoved(sbn.key) }
+        runCatching { NotificationParser.onRemoved(sbn.key) }
     }
 }
 
@@ -154,7 +232,7 @@ object NotificationParser {
             if (live != null) put(sbn.key, live) else remove(sbn.key)
         }
         // Новая «живая активность» сначала показывается широкой плашкой, потом сворачивается в капсулу
-        if (live != null && !liveWasKnown && !initial && SettingsRepo.current.cardLive) {
+        if (live != null && !liveWasKnown && !initial && SettingsRepo.current.cardLive && SettingsRepo.current.liveBanner) {
             LiveParser.postBannerLater(context, sbn.key)
         }
         // Навигатор и такси показываются своей карточкой, а не полоской прогресса или таймером
@@ -193,15 +271,15 @@ object NotificationParser {
         val incoming = !ongoing && answer != null
         if (!incoming && !ongoing) return null
 
-        val person = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val (name, personIcon) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             @Suppress("DEPRECATION")
-            runCatching { ex.getParcelable<Person>(Notification.EXTRA_CALL_PERSON) }.getOrNull()
+            val person = runCatching { ex.getParcelable<Person>(Notification.EXTRA_CALL_PERSON) }.getOrNull()
+            (person?.name?.toString()?.takeIf { it.isNotBlank() } ?: title) to person?.icon
         } else {
-            null
+            title to null
         }
-        val name = person?.name?.toString()?.takeIf { it.isNotBlank() } ?: title
         val avatar = runCatching {
-            val icon = person?.icon ?: n.getLargeIcon()
+            val icon = personIcon ?: n.getLargeIcon()
             icon?.loadDrawable(context)?.toBitmap(128, 128)?.asImageBitmap()
         }.getOrNull()
         return CallInfo(

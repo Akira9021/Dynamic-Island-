@@ -40,18 +40,7 @@ import com.akira.island.island.Ios
  * WhatsApp, почта и т. п. Показываются только те, что система и так показала бы всплывающими.
  */
 object Messages {
-    /** Последний показанный текст для каждого уведомления — чтобы не повторять одно и то же */
-    private val shown = object : LinkedHashMap<String, String>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 100
-    }
-
-    /** Куда только что ответили из острова: обновление этого уведомления с нашим же ответом не показываем */
-    private val repliedAt = HashMap<String, Long>()
-
-    /** Когда показывали сообщение (по приложению и тексту и по одному тексту) — для «Убирать повторы» */
-    private val recent = object : LinkedHashMap<String, Long>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 200
-    }
+    private val deduplicator = MessageDeduplicator()
 
     private val skipCategories = setOf(
         Notification.CATEGORY_TRANSPORT,
@@ -60,9 +49,10 @@ object Messages {
         Notification.CATEGORY_SERVICE,
         Notification.CATEGORY_SYSTEM,
         Notification.CATEGORY_STATUS,
-        Notification.CATEGORY_NAVIGATION,
-        Notification.CATEGORY_STOPWATCH,
-        Notification.CATEGORY_LOCATION_SHARING,
+        // Wire category names are plain strings and can also be supplied by apps on Android 8.
+        "navigation",
+        "stopwatch",
+        "location_sharing",
     )
 
     fun maybeShow(service: NotificationListenerService, sbn: StatusBarNotification, appName: String) {
@@ -75,8 +65,8 @@ object Messages {
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0) return
         NotifApps.seen(service, pkg, appName)
-        if (n.category in skipCategories) return NotifDebug.add(pkg, trf("Служебное: {0}", "Service notification: {0}", n.category))
         val rule = s.msgAppRules[pkg]
+        if (rule != AppRule.ALWAYS && n.category in skipCategories) return NotifDebug.add(pkg, trf("Служебное: {0}", "Service notification: {0}", n.category))
         if (rule == AppRule.NEVER) return NotifDebug.add(pkg, tr("Выключено для приложения", "Turned off for this app"))
         // Пока открыто само приложение, оно и так показывает сообщение — если не попросили показывать и тогда
         if (!s.msgInApp && IslandBus.foregroundPackage.value == pkg) return NotifDebug.add(pkg, tr("Приложение открыто", "The app is open"))
@@ -104,8 +94,9 @@ object Messages {
         if (locked && !Lockscreen.showsNotifications(service)) {
             return NotifDebug.add(pkg, tr("На экране блокировки уведомления выключены", "Notifications are off on the lock screen"))
         }
-        val visibility = if (ranked && ranking.lockscreenVisibilityOverride != NotificationListenerService.Ranking.VISIBILITY_NO_OVERRIDE) {
-            ranking.lockscreenVisibilityOverride
+        val visibility = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ranked) {
+            val override = ranking.lockscreenVisibilityOverride
+            if (override != NotificationListenerService.Ranking.VISIBILITY_NO_OVERRIDE) override else n.visibility
         } else {
             n.visibility
         }
@@ -117,31 +108,29 @@ object Messages {
         val ex = n.extras ?: return
         // Мессенджер дописал в уведомление ваш же ответ — это не новое сообщение
         if (ownLastMessage(ex)) return NotifDebug.add(pkg, tr("Ваше же сообщение", "Your own message"))
-        val replied = repliedAt[sbn.key]
-        if (replied != null && SystemClock.elapsedRealtime() - replied < 5_000) return
         val title = (ex.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)
             ?: ex.getCharSequence(Notification.EXTRA_TITLE))?.toString()?.trim().orEmpty()
         val text = lastMessage(ex)
-            ?: (ex.getCharSequence(Notification.EXTRA_TEXT) ?: ex.getCharSequence(Notification.EXTRA_BIG_TEXT))?.toString()?.trim()
+            ?: (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString()?.trim()
             ?: ""
         if (title.isEmpty() && text.isEmpty()) return NotifDebug.add(pkg, tr("Без текста", "No text"))
 
-        val signature = "$title\n$text"
-        // Тот же текст — не повторяем. Новое сообщение в той же переписке показываем, даже если мессенджер
-        // обновляет уведомление с флагом «не звенеть повторно» (WhatsApp ставит его на каждое следующее)
-        if (shown[sbn.key] == signature) return
-        shown[sbn.key] = signature
-        // «Убирать повторы»: то же сообщение того же приложения ещё раз (другим уведомлением, пересланное,
-        // из двух аккаунтов) за последние две минуты, и одинаковый текст из разных приложений за 10 секунд
-        if (s.msgDedupe) {
-            val now = SystemClock.elapsedRealtime()
-            val same = recent["$pkg\n$signature"]
-            val anyApp = recent[signature]
-            recent["$pkg\n$signature"] = now
-            recent[signature] = now
-            if (same != null && now - same < 120_000 || anyApp != null && now - anyApp < 10_000) {
-                return NotifDebug.add(pkg, tr("Повтор", "Repeat"))
-            }
+        @Suppress("DEPRECATION")
+        val messages = ex.getParcelableArray(Notification.EXTRA_MESSAGES)
+        val last = messages?.lastOrNull() as? Bundle
+        @Suppress("DEPRECATION")
+        val senderIdentity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val person = runCatching { last?.getParcelable<Person>("sender_person") }.getOrNull()
+            person?.key ?: person?.name?.toString()
+        } else null
+        val identity = MessageIdentity(
+            title, text,
+            senderIdentity ?: last?.getCharSequence("sender")?.toString().orEmpty(),
+            last?.getLong("time", 0L)?.takeIf { it > 0 } ?: n.`when`.takeIf { it > 0 } ?: sbn.postTime,
+            messages?.size ?: n.number,
+        )
+        if (!deduplicator.shouldShow(sbn.key, pkg, identity, s.msgDedupe, SystemClock.elapsedRealtime())) {
+            return NotifDebug.add(pkg, tr("Повтор", "Repeat"))
         }
 
         val avatar = runCatching {
@@ -204,14 +193,15 @@ object Messages {
     private fun history(ex: Bundle): List<String> {
         @Suppress("DEPRECATION")
         val arr: Array<Parcelable> = ex.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return emptyList()
-        val group = ex.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+        // Read the MessagingStyle wire extra on older Android too; no newer platform API is invoked.
+        val group = ex.getBoolean("android.isGroupConversation", false)
         return arr.mapNotNull { p ->
             val b = p as? Bundle ?: return@mapNotNull null
             val text = b.getCharSequence("text")?.toString()?.trim().orEmpty()
             if (text.isEmpty()) return@mapNotNull null
             val sender = b.getCharSequence("sender")?.toString()
             if (group && !sender.isNullOrBlank()) "$sender: $text" else text
-        }.takeLast(6)
+        }.takeLast(25)
     }
 
     /** Яркий цвет аватара или значка приложения — читается на чёрном и подходит для кнопок. */
@@ -233,20 +223,20 @@ object Messages {
         val arr: Array<Parcelable>? = ex.getParcelableArray(Notification.EXTRA_MESSAGES)
         val last = arr?.lastOrNull() as? Bundle ?: return null
         val text = last.getCharSequence("text")?.toString()?.trim() ?: return null
-        val group = ex.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+        // Read the MessagingStyle wire extra on older Android too; no newer platform API is invoked.
+        val group = ex.getBoolean("android.isGroupConversation", false)
         val sender = last.getCharSequence("sender")?.toString()
         return if (group && !sender.isNullOrBlank()) "$sender: $text" else text
     }
 
     /**
-     * Последнее сообщение переписки написали вы: в MessagingStyle у своих сообщений нет отправителя
-     * или отправитель — сам пользователь (EXTRA_MESSAGING_PERSON).
+     * Own messages are identified positively by the user's MessagingStyle person. Missing sender
+     * metadata is also used by third-party incoming notifications, so absence alone is not evidence.
      */
     private fun ownLastMessage(ex: Bundle): Boolean {
         @Suppress("DEPRECATION")
         val arr: Array<Parcelable> = ex.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return false
         val last = arr.lastOrNull() as? Bundle ?: return false
-        if (!last.containsKey("sender") && !last.containsKey("sender_person") && !last.containsKey("person")) return true
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && sentByMe(last, ex)
     }
 
@@ -257,19 +247,13 @@ object Messages {
         val sender = runCatching { message.getParcelable<Person>("sender_person") }.getOrNull()
         @Suppress("DEPRECATION")
         val me = runCatching { ex.getParcelable<Person>(Notification.EXTRA_MESSAGING_PERSON) }.getOrNull() ?: return false
-        if (me.key != null && sender?.key == me.key) return true
+        if (me.key != null && sender?.key != null) return sender.key == me.key
         val name = (sender?.name ?: message.getCharSequence("sender"))?.toString()
         return !name.isNullOrBlank() && name == me.name?.toString()
     }
 
-    /** Ответ ушёл из острова: ближайшее обновление этого уведомления — наш же ответ, его не показываем. */
-    fun onReplied(key: String) {
-        repliedAt[key] = SystemClock.elapsedRealtime()
-    }
-
     fun forget(key: String) {
-        shown.remove(key)
-        repliedAt.remove(key)
+        deduplicator.forget(key)
     }
 
     /**
@@ -277,8 +261,7 @@ object Messages {
      * («Показ уведомлений» больше авто или «пока не смахнёте») — она уходит тоже.
      */
     fun onRemoved(key: String) {
-        val n = IslandBus.notice.value ?: return
-        if (n.message?.key == key && SettingsRepo.current.messageSeconds != 0) IslandBus.notice.value = null
+        IslandBus.removeMessage(key)
     }
 }
 

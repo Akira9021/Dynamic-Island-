@@ -133,7 +133,7 @@ fun CapsuleScreen(open: (Screen) -> Unit) {
             if (s.liquidGlass) {
                 GroupSlider(
                     Pos.Last, Icons.Rounded.Opacity, tr("Плотность стекла", "Glass density"),
-                    value = s.glassOpacity.toFloat(), range = 40f..95f, label = "${s.glassOpacity}%", color = Tile.Teal,
+                    value = s.glassOpacity.toFloat(), range = 40f..100f, label = "${s.glassOpacity}%", color = Tile.Teal,
                 ) { v -> SettingsRepo.update { copy(glassOpacity = v.toInt()) } }
             }
         }
@@ -212,10 +212,38 @@ fun LookScreen(onBack: () -> Unit) {
                 label = "${s.expandedWidthPercent}%", color = Tile.Indigo,
             ) { v -> SettingsRepo.update { copy(expandedWidthPercent = (v / 5).toInt() * 5) } }
             GroupSlider(
-                Pos.Last, Icons.Rounded.TextIncrease, tr("Размер текста и значков", "Text and icon size"),
+                Pos.Middle, Icons.Rounded.TextIncrease, tr("Размер текста и значков", "Text and icon size"),
                 value = s.contentScale.toFloat(), range = 70f..130f, steps = 11,
                 label = "${s.contentScale}%", color = Tile.Pink,
             ) { v -> SettingsRepo.update { copy(contentScale = (v / 5).toInt() * 5) } }
+            GroupSlider(Pos.Last, Icons.Rounded.WidthNormal, tr("Максимальная высота", "Maximum height"),
+                value = s.expandedMaxHeight.toFloat(), range = 180f..480f, steps = 9,
+                label = "${s.expandedMaxHeight} dp", color = Tile.Blue,
+            ) { v -> SettingsRepo.update { copy(expandedMaxHeight = (v / 30).roundToInt() * 30) } }
+        }
+        SectionHeader(tr("Скругление", "Corner radius"))
+        Group {
+            GroupToggle(Pos.First, Icons.Rounded.WaterDrop, tr("Автоматическая форма капсулы", "Automatic capsule shape"),
+                tr("Радиус зависит от высоты острова", "Radius follows the island height"),
+                s.cornerRadius < 0, color = Tile.Blue) { v -> SettingsRepo.update { copy(cornerRadius = if (v) -1 else height / 2) } }
+            if (s.cornerRadius >= 0) {
+                GroupSlider(Pos.Middle, Icons.Rounded.WaterDrop, tr("Радиус капсулы", "Capsule radius"),
+                    s.cornerRadius.toFloat(), 0f..45f, "${s.cornerRadius} dp", color = Tile.Blue,
+                ) { v -> SettingsRepo.update { copy(cornerRadius = v.roundToInt()) } }
+            }
+            if (s.notch) {
+                GroupSlider(Pos.Middle, Icons.Rounded.WaterDrop, tr("Верхние углы выреза", "Notch top corners"),
+                    s.notchTopRadius.toFloat(), 0f..30f, "${s.notchTopRadius} dp", color = Tile.Teal,
+                ) { v -> SettingsRepo.update { copy(notchTopRadius = v.roundToInt()) } }
+            }
+            GroupToggle(Pos.Middle, Icons.Rounded.WaterDrop, tr("Автоматическая форма карточки", "Automatic card shape"),
+                tr("Прежнее скругление раскрытого острова", "Use the original expanded card radius"),
+                s.expandedCornerRadius < 0, color = Tile.Purple) { v -> SettingsRepo.update { copy(expandedCornerRadius = if (v) -1 else 32) } }
+            if (s.expandedCornerRadius >= 0) {
+                GroupSlider(Pos.Last, Icons.Rounded.WaterDrop, tr("Радиус карточки", "Card radius"),
+                    s.expandedCornerRadius.toFloat(), 0f..60f, "${s.expandedCornerRadius} dp", color = Tile.Purple,
+                ) { v -> SettingsRepo.update { copy(expandedCornerRadius = v.roundToInt()) } }
+            }
         }
         Text(
             tr("Проверьте на примерах: «Главная → Проверка».", "See it on the examples: Home → Try it."),

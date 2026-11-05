@@ -39,7 +39,7 @@ data class LyricLine(val timeMs: Long, val text: String)
 
 enum class LyricsStatus { LOADING, MISSING, FOUND }
 
-/** [synced] = false — у трека нашёлся только обычный текст, строки разложены по его длине. */
+/** [synced] = false — обычный текст без временных меток; его нельзя показывать как караоке. */
 data class Lyrics(val key: String, val lines: List<LyricLine>, val synced: Boolean = true) {
     /** Индекс строки, которая поётся в момент [pos], или -1 до первой строки. */
     fun indexAt(pos: Long): Int {
@@ -178,7 +178,17 @@ data class StopwatchState(val startedAt: Long?, val accumulated: Long) {
     val running: Boolean get() = startedAt != null
 }
 
-data class BatteryInfo(val level: Int = -1, val charging: Boolean = false)
+data class BatteryInfo(
+    val level: Int = -1,
+    val charging: Boolean = false,
+    /** Ток и напряжение аккумулятора, если устройство отдаёт их через BatteryManager. */
+    val currentMa: Float? = null,
+    val voltageV: Float? = null,
+    /** Измеренная мощность на аккумуляторе, не номинальная мощность зарядного устройства. */
+    val powerWatts: Float? = null,
+    /** Оценка Android до полного заряда; null — система не может её вычислить. */
+    val remainingMs: Long? = null,
+)
 
 /** Как событие выглядит в острове. */
 enum class NoticeStyle {

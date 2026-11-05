@@ -41,6 +41,9 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
             GroupToggle(Pos.First, Icons.Outlined.PlayCircle, tr("Управление проигрывателем", "Player controls"),
                 tr("Когда играет музыка и плеер свёрнут", "When music is playing and the player is in the background"),
                 s.cardMedia, color = Tile.Pink) { set { copy(cardMedia = it) } }
+            GroupToggle(Pos.Middle, Icons.Outlined.PlayCircle, tr("Виниловая обложка", "Vinyl artwork"),
+                tr("Медленно вращать обложку во время воспроизведения", "Slowly rotate artwork while music is playing"),
+                s.vinylArt, color = Tile.Pink) { set { copy(vinylArt = it) } }
             GroupToggle(Pos.Last, Icons.Rounded.Call, tr("Звонки", "Calls"),
                 tr("Входящий вызов с кнопками ответа и время разговора", "Incoming calls with answer buttons, and the call time"),
                 s.cardCall, color = Tile.Green) { set { copy(cardCall = it) } }
@@ -81,6 +84,9 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
                         "A Charging banner for a couple of seconds, without the percentage capsule the whole time"),
                     s.chargingBrief, color = Tile.Green) { set { copy(chargingBrief = it) } }
             }
+            GroupToggle(Pos.Middle, Icons.Rounded.BatteryChargingFull, tr("Только процент заряда", "Battery percentage only"),
+                tr("Без значка батареи в капсуле", "Hide the battery icon in the capsule"),
+                s.batteryPercentOnly, color = Tile.Green) { set { copy(batteryPercentOnly = it) } }
             GroupToggle(Pos.Last, Icons.Rounded.Downloading, tr("Индикатор прогресса", "Progress indicator"),
                 tr("Загрузки и отправка в Google Play, Telegram и других приложениях", "Downloads and uploads in Google Play, Telegram and other apps"),
                 s.cardProgress, color = Tile.Teal) { set { copy(cardProgress = it) } }
@@ -91,6 +97,10 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
             tr("Google и Яндекс Карты, Навигатор, 2ГИС, Яндекс Go, Uber и другие — расстояние и время в капсуле, подробности в раскрытом виде",
                 "Google and Yandex Maps, Navigator, 2GIS, Yandex Go, Uber and others — distance and time in the capsule, details when expanded"),
             s.cardLive, color = Tile.Teal) { set { copy(cardLive = it) } }
+
+        GroupToggle(Pos.Single, Icons.Rounded.AutoAwesome, tr("Показывать плашку новой активности", "Show new activity banner"),
+            tr("Навигация, такси и доставка раскрываются при появлении", "Navigation, taxi and delivery expand when they first appear"),
+            s.liveBanner, color = Tile.Teal) { set { copy(liveBanner = it) } }
 
         SectionHeader(tr("Сюрпризы", "Surprises"))
         GroupToggle(Pos.Single, Icons.Rounded.AutoAwesome, tr("Пасхалки", "Easter eggs"),

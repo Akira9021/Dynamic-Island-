@@ -19,6 +19,7 @@ sealed class Act(val id: String, val transient: Boolean = false) {
     open val pkg: String? get() = null
 
     data object Idle : Act("idle")
+    data class WeatherA(val weather: com.akira.island.service.WeatherInfo) : Act("weather")
     data class NoticeA(val n: Notice) : Act("notice", transient = true)
     data class TimerA(val t: TimerState) : Act("timer")
     data class StopwatchA(val w: StopwatchState) : Act("stopwatch")

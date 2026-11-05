@@ -49,6 +49,8 @@ object IslandBus {
     val timer = MutableStateFlow<TimerState?>(null)
     val stopwatch = MutableStateFlow<StopwatchState?>(null)
     val notice = MutableStateFlow<Notice?>(null)
+    /** User expanded the compact notification to read it inside the island. */
+    val messageDetail = MutableStateFlow(false)
     /** «История уведомлений»: показанные сообщения, которые ещё ждут в острове */
     val inbox = MutableStateFlow<List<InboxItem>>(emptyList())
     /** Идёт ввод ответа на уведомление: окну острова нужен фокус, чтобы показать клавиатуру */
@@ -64,6 +66,8 @@ object IslandBus {
     val ringer = MutableStateFlow(2)
     val dnd = MutableStateFlow(false)
     val foregroundPackage = MutableStateFlow<String?>(null)
+    /** Expanded notification shade/quick settings detected by the accessibility service. */
+    val shadeOpen = MutableStateFlow(false)
     val landscape = MutableStateFlow(false)
     /** Поворот экрана для острова «У камеры»: −90 — камера слева, 90 — справа, 0 — портрет */
     val displayRotation = MutableStateFlow(0)
@@ -87,14 +91,26 @@ object IslandBus {
     @Volatile
     var lastTouch = 0L
 
-    private val queue = Channel<Notice>(capacity = 6, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private data class QueuedNotice(val notice: Notice, val revision: Long)
+    // A burst of messages should not disappear behind a single long-lived card.
+    private val queue = Channel<QueuedNotice>(capacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val messageRevisions = object : LinkedHashMap<String, Long>(128, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 256
+    }
 
     init {
         scope.launch {
-            for (n in queue) {
+            for (queued in queue) {
+                val n = queued.notice
+                val key = n.message?.key
+                fun removed() = key != null && (messageRevisions[key] ?: 0L) != queued.revision
+                if (removed()) continue
                 val s = SettingsRepo.current
                 // «Задержка появления»; подтверждения того, что вы только что сделали (отправлено, оплачено), — сразу
                 if (s.noticeDelayMs > 0 && n.style != NoticeStyle.SENT && n.style != NoticeStyle.PAY_DONE) delay(s.noticeDelayMs.toLong())
+                if (removed()) continue
+                messageDetail.value = false
+                noticeHold.value = false
                 notice.value = n
                 val message = n.style == NoticeStyle.MESSAGE
                 val duration = if (message && s.messageSeconds > 0) s.messageSeconds * 1000L else s.noticeDurationMs + n.extraMs
@@ -121,8 +137,19 @@ object IslandBus {
     private val posted = MutableStateFlow(0)
 
     fun post(n: Notice) {
-        queue.trySend(n)
+        queue.trySend(QueuedNotice(n, n.message?.key?.let { messageRevisions[it] } ?: 0L))
         posted.value++
+    }
+
+    /** Invalidate queued copies too, so a notification dismissed in the shade cannot reappear later. */
+    fun removeMessage(key: String) {
+        messageRevisions[key] = (messageRevisions[key] ?: 0L) + 1L
+        if (notice.value?.message?.key == key) {
+            notice.value = null
+            messageDetail.value = false
+            noticeHold.value = false
+            reply.value = null
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

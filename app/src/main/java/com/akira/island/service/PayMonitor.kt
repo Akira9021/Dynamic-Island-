@@ -48,6 +48,7 @@ object PayMonitor {
         "ru.mts.money", // МТС Банк
         "com.paypal.android.p2pmobile",
         "com.revolut.revolut",
+        "com.belkartpay.belkartpay",
     )
 
     /** Кошельки: показали сумму у себя на экране — значит, это и есть оплата. */
@@ -93,8 +94,10 @@ object PayMonitor {
     private var readyShownAt = 0L
     private var readyShownPkg: String? = null
     private var readyTimeout: Job? = null
-    private var paidKey: String? = null
-    private var paidAt = 0L
+    private var confirmedReadyPkg: String? = null
+    private var readyWallAt = 0L
+    private var paymentSession = 0L
+    private val payments = PaymentDeduplicator()
 
     /** Приложения, которые умеют платить телефоном (объявляют службу эмуляции карты, HCE), — из системы. */
     private var nfcApps: Set<String> = emptySet()
@@ -126,13 +129,21 @@ object PayMonitor {
      * На экране — оплата телефоном: подсказка в острове, пока не заплатите или не уйдёте из приложения.
      * На всякий случай (если о выходе не узнаем) через три минуты она уходит сама.
      */
-    fun onPayScreen(context: Context, pkg: String) {
+    fun onPayScreen(context: Context, pkg: String, confirmed: Boolean = true) {
         val s = SettingsRepo.current
-        if (!s.enabled || !s.evPayReady || IslandBus.payReady.value?.pkg == pkg) return
+        if (!s.enabled) return
+        // Recognition must still work when the visual “Hold near reader” banner is disabled.
+        // Merely opening a bank is never evidence that a later transfer was a phone payment.
+        if (confirmed && (confirmedReadyPkg != pkg || readyShownAt == 0L)) {
+            paymentSession++
+            confirmedReadyPkg = pkg
+            readyShownAt = SystemClock.elapsedRealtime()
+            readyWallAt = System.currentTimeMillis()
+            readyShownPkg = appFor(pkg)
+            PayDebug.add(tr("Экран оплаты", "Payment screen"), pkg)
+        }
         readyPkg = pkg
-        readyShownAt = SystemClock.elapsedRealtime()
-        readyShownPkg = appFor(pkg)
-        PayDebug.add(tr("Экран оплаты", "Payment screen"), pkg)
+        if (!s.evPayReady || IslandBus.payReady.value?.pkg == pkg) return
         IslandBus.payReady.value = PayReady(pkg, NotificationParser.icon(context, appFor(pkg)))
         readyTimeout?.cancel()
         readyTimeout = IslandBus.scope.launch {
@@ -146,7 +157,7 @@ object PayMonitor {
 
     /** Открыли приложение оплаты. С «Подсказкой при открытии» — сразу, как раньше; без неё ждём экран оплаты. */
     fun onAppOpened(context: Context, pkg: String) {
-        if (SettingsRepo.current.payHintOnOpen && isPayApp(context, pkg)) onPayScreen(context, pkg)
+        if (SettingsRepo.current.payHintOnOpen && isPayApp(context, pkg)) onPayScreen(context, pkg, confirmed = false)
     }
 
     /** Открыто другое приложение — ушли, так и не заплатив: подсказка больше не нужна. */
@@ -159,6 +170,7 @@ object PayMonitor {
     /** Убрать подсказку: оплатили, ушли из приложения или погасили экран. */
     fun clearReady() {
         readyPkg = null
+        confirmedReadyPkg = null
         readyTimeout?.cancel()
         readyTimeout = null
         IslandBus.payReady.value = null
@@ -174,9 +186,9 @@ object PayMonitor {
      * («К оплате», «Не забудьте оплатить», «будет списано», «Payment due»).
      */
     private val skip = Regex(
-        "пополн|зачисл|поступил|кэшбэк|кешбэк|cashback|возврат|refund|отклон|отказ|declined|не удал|ошибк|" +
+        "пополн|зачисл|поступил|входящ|получен|вам перев|кэшбэк|кешбэк|cashback|возврат|refund|отклон|отказ|declined|не удал|ошибк|" +
             "не прошл|не выполн|недостаточно|не хватает|не оплач|к оплате|на оплату|оплатит|заплатит|" +
-            "напомина|будет списан|спишем|спишется|предстоящ|due|remind|failed|unsuccessful|insufficient|request|received",
+            "напомина|будет списан|спишем|спишется|предстоящ|ожидает|обработке|pending|scheduled|due|remind|failed|unsuccessful|insufficient|request|received",
         RegexOption.IGNORE_CASE,
     )
 
@@ -186,16 +198,7 @@ object PayMonitor {
      */
     private val transfer = Regex("перевод|transfer|transferred", RegexOption.IGNORE_CASE)
 
-    /** Цифры суммы — чтобы одна оплата с экрана и из уведомления не показалась дважды. */
-    private fun key(sum: String) = sum.filter { it.isDigit() }.trimEnd('0')
-
-    /** Эта сумма уже показана как «Оплачено» за последние три минуты. */
-    private fun alreadyShown(sum: String) = key(sum) == paidKey && SystemClock.elapsedRealtime() - paidAt < PAY_WINDOW_MS
-
     private fun showPaid(context: Context, sum: String, caption: String, pkg: String) {
-        paidKey = key(sum)
-        paidAt = SystemClock.elapsedRealtime()
-        readyShownAt = 0L
         clearReady()
         IslandBus.post(
             Notice(
@@ -215,7 +218,10 @@ object PayMonitor {
     fun onScreenPaid(context: Context, pkg: String, sum: String) {
         val s = SettingsRepo.current
         PayDebug.add(trf("С экрана: оплачено {0}", "From the screen: paid {0}", sum), pkg)
-        if (!s.enabled || !s.evPaySuccess || alreadyShown(sum)) return
+        if (!s.enabled || !s.evPaySuccess) return
+        val now = SystemClock.elapsedRealtime()
+        val session = if (readyShownPkg == appFor(pkg) && now - readyShownAt in 0 until PAY_WINDOW_MS) paymentSession else 0L
+        if (payments.duplicate(sum, "screen:$pkg:$session", session, now)) return
         val app = appFor(pkg)
         showPaid(context, sum, NotificationParser.appLabel(context, app), app)
     }
@@ -248,13 +254,15 @@ object PayMonitor {
         }
         // Кошельки (Google Кошелёк, Samsung Wallet, Mir Pay) пишут только магазин и сумму с картой, без слова «оплата»;
         // сумма сразу после экрана оплаты телефоном — от того же приложения, платёжного или СМС банка — та самая оплата
-        val recent = readyShownAt != 0L && SystemClock.elapsedRealtime() - readyShownAt < PAY_WINDOW_MS &&
-            (pkg == readyShownPkg || sms || isPayApp(context, pkg))
+        val now = SystemClock.elapsedRealtime()
+        val recent = PaymentRules.followsReady(sbn.postTime, readyWallAt, now, readyShownAt, PAY_WINDOW_MS) &&
+            (pkg == readyShownPkg || sms || readyShownPkg == appFor(GMS) && pkg in wallets)
         val paid = !skip.containsMatchIn(all) && (!transfer.containsMatchIn(all) || recent) &&
             (success.containsMatchIn(all) || pkg in wallets || recent)
         PayDebug.add(if (paid) trf("Оплачено {0}", "Paid {0}", sum) else tr("Не похоже на оплату", "Doesn't look like a payment"), pkg, all)
         if (!paid) return false
-        if (alreadyShown(sum)) return true
+        val event = "notification:$pkg:${sbn.key}:${sbn.postTime}"
+        if (payments.duplicate(sum, event, if (recent) paymentSession else 0L, now)) return true
         showPaid(context, sum, if (sms) title else NotificationParser.appLabel(context, pkg), pkg)
         return true
     }

@@ -54,7 +54,7 @@ object PayScreenParser {
     private val paidWords = Regex(
         "оплачено|оплачена|оплата прошла|оплата выполнена|оплата совершена|оплата успешна|успешная оплата|покупка совершена|" +
             "покупка прошла|платёж выполнен|платеж выполнен|платёж прошёл|платеж прошел|payment successful|payment complete|" +
-            "payment approved|\\bpaid\\b|pembayaran berhasil|pago realizado|pagamento aprovado",
+            "payment approved|\\bpaid\\b|аплачана|аплата прайшла|аплата выканана|плацёж выкананы|pembayaran berhasil|pago realizado|pagamento aprovado",
         RegexOption.IGNORE_CASE,
     )
 
@@ -121,6 +121,12 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         // Системное окно поверх приложения оплаты — читаем дальше, когда оно уйдёт
         if (current != null && PayMonitor.overlay(pkg)) return
         if (pkg == current) {
+            if (done && payWindow(cls)) {
+                done = false
+                readyAt = 0L
+                baseline = null
+                lastFresh = null
+            }
             if (payWindow(cls)) markReady(pkg)
             schedule(150)
             return
@@ -146,7 +152,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
     }
 
     fun onContentChanged(event: AccessibilityEvent) {
-        if (done || event.packageName?.toString() != current) return
+        if (event.packageName?.toString() != current) return
         schedule(if (readyAt != 0L) 150 else 400)
     }
 
@@ -177,6 +183,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         if (readyAt == 0L) {
             readyAt = SystemClock.elapsedRealtime()
             screenLogs = 0
+            screenLoggedAt = 0L
             baseline = texts?.toMutableSet() ?: HashSet()
         }
         PayMonitor.onPayScreen(service, pkg)
@@ -194,17 +201,26 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
 
     private fun scan() {
         val pkg = current ?: return
-        if (done) return
         val now = SystemClock.elapsedRealtime()
         lastScan = now
         // Оплату после экрана оплаты ждём не дольше трёх минут — дальше экран не разбираем
-        if (readyAt != 0L && now - readyAt > PayMonitor.PAY_WINDOW_MS) {
+        if (!done && readyAt != 0L && now - readyAt > PayMonitor.PAY_WINDOW_MS) {
             done = true
             return
         }
         val root = rootFor(pkg) ?: return
         val texts = LinkedHashSet<String>()
         collect(root, texts, 0)
+        if (done) {
+            // A second payment in the same wallet must not require closing/reopening the app.
+            if (texts.any { PayScreenParser.ready(it) } && texts.none { PayScreenParser.paid(it) || PayScreenParser.failure(it) }) {
+                done = false
+                readyAt = 0L
+                lastFresh = null
+                markReady(pkg, texts)
+            }
+            return
+        }
 
         // Экран оплаты телефоном — подсказка в острове
         if (readyAt == 0L && texts.any { PayScreenParser.ready(it) }) {
@@ -224,12 +240,12 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
             if (fresh == lastFresh) return
             lastFresh = fresh
             logAfterReady(pkg, fresh, now)
-            if (fresh.any { PayScreenParser.failure(it) }) return
+            if (texts.any { PayScreenParser.failure(it) }) return
             val freshCharges = fresh.flatMap { PayScreenParser.charges(it) }.distinct()
             // У кошелька сумма на экране — это и есть оплата. У банка в нём бывает и история операций,
             // поэтому нужно ещё «Оплачено» или чтобы экран оплаты был на виду
             if (all.size == 1 && freshCharges.size == 1 &&
-                (PayMonitor.isWallet(pkg) || texts.any { PayScreenParser.paid(it) || PayScreenParser.ready(it) })
+                texts.any { PayScreenParser.paid(it) }
             ) {
                 return paid(pkg, freshCharges[0])
             }

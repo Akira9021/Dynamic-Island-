@@ -34,16 +34,8 @@ fun LyricsScreen(onBack: () -> Unit) {
         }
         Text(
             tr(
-                "Текст ищется по названию, исполнителю и длительности трека: сначала на LRCLIB (lrclib.net), " +
-                    "потом на NetEase — там много русской музыки. Если синхронного текста нет нигде, строки обычного текста " +
-                    "раскладываются по длине песни. Пока идёт поиск, в плеере написано «Ищу текст песни…», " +
-                    "если ничего не нашлось — «Текст песни не найден». На сервер уходят только название и исполнитель. " +
-                    "Работает с любым плеером, который показывает уведомление с управлением: Spotify, YouTube Music, Яндекс Музыка, VK и т.д.",
-                "Lyrics are looked up by title, artist and track length: first on LRCLIB (lrclib.net), then on NetEase, " +
-                    "which has a lot of Russian music. If there are no synced lyrics anywhere, plain lyrics are spread over " +
-                    "the length of the song. While searching, the player says “Looking for lyrics…”, and if nothing is found —" +
-                    " “No lyrics found”. Only the title and artist are sent to the server. Works with any player that shows a " +
-                    "notification with controls: Spotify, YouTube Music, Yandex Music, VK and others.",
+                "Текст ищется на LRCLIB, затем на NetEase. Для поиска отправляются название, исполнитель, альбом и длительность трека. Караоке использует только настоящие метки времени; обычный текст можно читать и прокручивать без автоматического перелистывания. Во время инструментального вступления строка не подсвечивается. Нужен плеер с системной медиасессией и доступ к уведомлениям.",
+                "Lyrics are searched on LRCLIB, then NetEase. The title, artist, album and track length are sent for the search. Karaoke uses real timestamps only; plain lyrics can be read and scrolled without automatic progression. No line is highlighted during an instrumental intro. A player with a system media session and notification access is required.",
             ),
             color = Ui.Sub,
             fontSize = 14.sp,

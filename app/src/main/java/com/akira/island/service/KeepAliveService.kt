@@ -10,6 +10,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import com.akira.island.core.IslandBus
 import com.akira.island.R
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
@@ -21,6 +25,18 @@ import com.akira.island.ui.Perms
  * Сама служба ничего не делает и заряд не тратит: она только показывает системе, что остров нужен.
  */
 class KeepAliveService : Service() {
+    private val handler = Handler(Looper.getMainLooper())
+    private val maintenance = object : Runnable {
+        override fun run() {
+            if (!SettingsRepo.current.keepAlive || !SettingsRepo.current.enabled) return
+            // Public Android rebind only; never toggle accessibility or repeatedly restart a crashing process.
+            if (IslandBus.screenOn.value && Perms.notifications(this@KeepAliveService) && !NotifListener.isConnected) {
+                NotifListener.requestReconnect(this@KeepAliveService)
+            }
+            handler.postDelayed(this, 60_000)
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -34,11 +50,18 @@ class KeepAliveService : Service() {
                 startForeground(ID, notification())
             }
         }.isSuccess
-        if (!shown || !SettingsRepo.current.keepAlive) {
+        if (!shown || !SettingsRepo.current.keepAlive || !SettingsRepo.current.enabled) {
             stopSelf()
             return START_NOT_STICKY
         }
+        handler.removeCallbacks(maintenance)
+        handler.post(maintenance)
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacks(maintenance)
+        super.onDestroy()
     }
 
     private fun notification(): Notification {
@@ -52,11 +75,15 @@ class KeepAliveService : Service() {
         // Нажатие открывает настройки острова
         val open = packageManager.getLaunchIntentForPackage(packageName)
             ?.let { PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE) }
+        val restore = PendingIntent.getActivity(this, 1,
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_tab_island)
             .setContentTitle(tr("Остров работает", "The island is running"))
             .setContentText(tr("Уведомление не даёт системе закрыть остров", "This notification keeps the system from closing the island"))
             .setContentIntent(open)
+            .addAction(Notification.Action.Builder(null,
+                tr("Восстановить остров", "Restore island"), restore).build())
             .setOngoing(true)
             .setShowWhen(false)
             .setCategory(Notification.CATEGORY_SERVICE)
@@ -73,7 +100,7 @@ class KeepAliveService : Service() {
          */
         fun sync(context: Context) {
             val intent = Intent(context, KeepAliveService::class.java)
-            if (SettingsRepo.current.keepAlive && Perms.accessibility(context)) {
+            if (SettingsRepo.current.keepAlive && SettingsRepo.current.enabled && Perms.accessibility(context)) {
                 runCatching { context.startForegroundService(intent) }
             } else {
                 context.stopService(intent)

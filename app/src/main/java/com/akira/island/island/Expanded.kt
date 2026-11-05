@@ -16,6 +16,13 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import com.akira.island.service.NotifListener
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
@@ -129,9 +136,11 @@ fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: Batte
     }
     // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал.
     // Само содержимое — крупнее или мельче по «Размеру содержимого»
-    Box(Modifier.width(width).padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
+    Box(Modifier.width(width).heightIn(max = s.expandedMaxHeight.dp).verticalScroll(rememberScrollState())
+        .padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
         Scaled(s.contentScale) {
             when (act) {
+                is Act.WeatherA -> WeatherDetails(act.weather)
                 is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
                 is Act.TimerA -> TimerExpanded(act.t, s)
                 is Act.StopwatchA -> StopwatchExpanded(act.w)
@@ -162,7 +171,7 @@ private fun InboxExpanded(items: List<InboxItem>) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("Уведомления", "Notifications"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold.island,
                 modifier = Modifier.weight(1f))
-            PillButton(Ios.close, tr("Очистить", "Clear")) {
+            PillButton(Ios.close, tr("Очистить историю", "Clear history")) {
                 Inbox.clear()
                 Controls.collapse()
             }
@@ -203,6 +212,9 @@ private fun InboxExpanded(items: List<InboxItem>) {
                         Text(text, color = Dim, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                if (!locked && NotifListener.canDismiss(item.key)) {
+                    RoundButton(Ios.close, size = 32.dp, iconScale = 0.45f) { NotifListener.dismiss(item.key) }
+                }
             }
         }
         if (items.size > INBOX_SHOWN) {
@@ -236,11 +248,11 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
     val pos = m.positionAt(now)
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Art(m.art, 60.dp, 14.4.dp, Modifier.clickable { Controls.openApp(context, m.pkg) })
+            PlayerArt(m, s, Modifier.clickable { Controls.openApp(context, m.pkg) })
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE))
+                    modifier = Modifier.marqueeFade().basicMarquee(iterations = Int.MAX_VALUE))
                 if (m.artist.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
                     Text(m.artist, color = Tints.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -353,6 +365,13 @@ private fun CallExpanded(c: CallInfo) {
  */
 @Composable
 private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
+    if (!lyrics.synced) {
+        Text(tr("Текст без синхронизации", "Unsynced lyrics"), color = Dim, fontSize = 11.sp)
+        Text(lyrics.lines.joinToString("\n") { it.text }, color = Color.White.copy(alpha = 0.8f),
+            fontSize = 14.sp, lineHeight = 19.sp,
+            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).verticalScroll(rememberScrollState()))
+        return
+    }
     val index = lyrics.indexAt(pos)
     AnimatedContent(
         targetState = index,
@@ -363,7 +382,7 @@ private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
         label = "lyrics",
     ) { i ->
         val line = lyrics.lines.getOrNull(i)
-        val text = line?.text?.ifBlank { null } ?: lyrics.lines.getOrNull(i + 1)?.text?.takeIf { i < 0 } ?: "• • •"
+        val text = line?.text?.ifBlank { null } ?: "• • •"
         val start = line?.timeMs ?: 0L
         val end = lyrics.lines.getOrNull(i + 1)?.timeMs ?: (start + 4_000)
         val sung = if (line == null) 0f else ((pos - start).toFloat() / (end - start).coerceAtLeast(1)).coerceIn(0f, 1f)
@@ -769,20 +788,26 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
             }
             if (battery.level >= 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (battery.charging) Ios.batteryCharging else Ios.batteryFull, null,
-                        tint = when {
-                            battery.charging -> Tints.Green
-                            battery.level <= 15 -> Tints.Red
-                            else -> Color.White
-                        },
-                        modifier = Modifier.size(22.dp),
-                    )
+                    if (!s.batteryPercentOnly) BatteryGlyph(battery.level, when {
+                        battery.charging -> Tints.Green
+                        battery.level <= 15 -> Tints.Red
+                        else -> Color.White
+                    }, Modifier.size(26.dp, 13.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("${battery.level}%", color = Color.White, fontSize = 16.sp, style = Digits)
                 }
             }
         }
+        if (battery.charging) {
+            val measurements = listOfNotNull(
+                battery.powerWatts?.let { trf("{0} Вт на батарее", "{0} W at battery", String.format(java.util.Locale.ROOT, "%.1f", it)) },
+                battery.currentMa?.let { trf("{0} мА", "{0} mA", it.toInt()) },
+                battery.remainingMs?.takeIf { it > 0 }?.let { trf("До полного заряда: {0}", "Until full: {0}", formatDuration(it)) },
+            )
+            if (measurements.isNotEmpty()) Text(measurements.joinToString(" · "), color = Dim, fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp))
+        }
+        IdleExtras(s)
         val actions = s.quickActions
         if (actions.isEmpty()) return@Column
         Spacer(Modifier.height(16.dp))
@@ -871,3 +896,23 @@ private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
         }
     }
 }
+
+
+/** Disc rotation uses the shared screen-aware effects clock and stops on pause/reduced effects. */
+@Composable
+private fun PlayerArt(m: MediaInfo, s: IslandSettings, modifier: Modifier = Modifier) {
+    val rotating = s.vinylArt && m.playing && !s.reduceEffects
+    val clock = rememberFxClock(rotating)
+    Box(modifier.size(60.dp), contentAlignment = Alignment.Center) {
+        Art(m.art, 60.dp, if (s.vinylArt) 30.dp else 14.4.dp,
+            Modifier.graphicsLayer { if (s.vinylArt) rotationZ = clock.value % 20_000L / 20_000f * 360f })
+        if (s.vinylArt) Box(Modifier.size(8.dp).clip(CircleShape).background(Color.Black))
+    }
+}
+
+private fun Modifier.marqueeFade(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        drawRect(Brush.horizontalGradient(0f to Color.Transparent, 0.04f to Color.White,
+            0.96f to Color.White, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+    }

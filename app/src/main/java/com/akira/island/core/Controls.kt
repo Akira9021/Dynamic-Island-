@@ -1,5 +1,7 @@
 package com.akira.island.core
 
+import com.akira.island.service.CallMonitor
+
 import android.app.ActivityOptions
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -154,6 +156,11 @@ object Controls {
             return
         }
         if (send(context, call.answer)) return
+        // A VoIP notification must never answer an unrelated cellular call.
+        if (call.key != CallMonitor.KEY && call.pkg != runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull()) {
+            if (!send(context, call.open)) openApp(context, call.pkg)
+            return
+        }
         val ok = runCatching { context.getSystemService(TelecomManager::class.java)!!.acceptRingingCall() }.isSuccess
         if (!ok) showCallScreen(context, call)
     }
@@ -166,6 +173,10 @@ object Controls {
             return
         }
         if (send(context, if (call.incoming) call.decline else call.hangUp)) return
+        if (call.key != CallMonitor.KEY && call.pkg != runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull()) {
+            if (!send(context, call.open)) openApp(context, call.pkg)
+            return
+        }
         val ok = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
             runCatching { context.getSystemService(TelecomManager::class.java)!!.endCall() }.getOrDefault(false)
         if (!ok) showCallScreen(context, call)
@@ -254,6 +265,10 @@ object Controls {
         if (call.key == TEST_CALL) return
         if (send(context, call.open)) return
         val telecom = context.getSystemService(TelecomManager::class.java)
+        if (call.key != CallMonitor.KEY && call.pkg != runCatching { telecom?.defaultDialerPackage }.getOrNull()) {
+            if (call.pkg.isNotEmpty()) openApp(context, call.pkg)
+            return
+        }
         if (runCatching { telecom?.showInCallScreen(false) }.isSuccess && telecom != null) return
         if (call.pkg.isNotEmpty()) openApp(context, call.pkg)
     }

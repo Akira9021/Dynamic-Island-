@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +41,9 @@ object IslandType {
     var shift: Int by mutableIntStateOf(0)
         private set
 
+    var actionAccent: Color? by mutableStateOf(null)
+        private set
+
     private var key: String? = null
 
     /** Применить настройки. Зовут служба острова и экран настроек при каждой их смене — повтор ничего не делает. */
@@ -55,6 +59,7 @@ object IslandType {
             }
         }
         shift = s.fontWeightShift.coerceIn(-1, 2)
+        actionAccent = if (s.actionColorEnabled) Color(s.actionColor) else null
     }
 
     /** Папка своих шрифтов: в личной папке приложения, выбранный файл после копирования не нужен. */

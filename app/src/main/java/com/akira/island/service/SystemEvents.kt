@@ -1,5 +1,7 @@
 package com.akira.island.service
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.bluetooth.BluetoothClass
@@ -16,6 +18,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
@@ -47,6 +50,18 @@ class SystemEvents(private val context: Context) {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val notifications = context.getSystemService(NotificationManager::class.java)
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
+    private val batteryManager = context.getSystemService(BatteryManager::class.java)
+    private var active = false
+    private val batterySample = object : Runnable {
+        override fun run() {
+            if (!active || !IslandBus.screenOn.value) return
+            refreshBattery()
+            if (IslandBus.battery.value.charging) main.postDelayed(this, 15_000)
+        }
+    }
+    private val vpnNetworks = HashSet<Network>()
+    private var debugState: Pair<Boolean, Boolean>? = null
+    private var hotspotState: Boolean? = null
     private val s get() = SettingsRepo.current
 
     private var lowWarned = false
@@ -62,7 +77,7 @@ class SystemEvents(private val context: Context) {
     private val warmingUp get() = SystemClock.elapsedRealtime() - startedAt < 3000
 
     private fun notice(enabled: Boolean, n: Notice) {
-        if (enabled && !warmingUp) IslandBus.post(n)
+        if (active && enabled && !warmingUp) IslandBus.post(n)
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -87,6 +102,29 @@ class SystemEvents(private val context: Context) {
         }
     }
 
+    private val vpnCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            main.post {
+                if (!active) return@post
+                val wasEmpty = vpnNetworks.isEmpty()
+                vpnNetworks += network
+                if (wasEmpty) notice(s.evVpn, Notice("VPN", tr("Подключён", "Connected"), ic(R.drawable.ios_hardware_chip), Tints.Teal))
+            }
+        }
+        override fun onLost(network: Network) {
+            main.post {
+                if (!active) return@post
+                if (vpnNetworks.remove(network) && vpnNetworks.isEmpty()) {
+                    notice(s.evVpn, Notice("VPN", tr("Отключён", "Disconnected"), ic(R.drawable.ios_hardware_chip), Tints.Gray))
+                }
+            }
+        }
+    }
+
+    private val debuggingObserver = object : ContentObserver(main) {
+        override fun onChange(selfChange: Boolean) = readDebugging(announce = true)
+    }
+
     private val brightnessObserver = object : ContentObserver(main) {
         override fun onChange(selfChange: Boolean) {
             val mode = Settings.System.getInt(
@@ -108,6 +146,8 @@ class SystemEvents(private val context: Context) {
     }
 
     fun start() {
+        if (active) return
+        active = true
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(Intent.ACTION_POWER_CONNECTED)
@@ -125,6 +165,8 @@ class SystemEvents(private val context: Context) {
             addAction(USB_STATE)
             addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
             addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            // Optional OEM broadcast: no hidden API calls or control of tethering.
+            addAction(WIFI_AP_STATE_CHANGED)
         }
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
 
@@ -133,13 +175,26 @@ class SystemEvents(private val context: Context) {
         IslandBus.ringer.value = context.getSystemService(AudioManager::class.java)?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
         val power = context.getSystemService(PowerManager::class.java)
         IslandBus.screenOn.value = power?.isInteractive ?: true
+        refreshBattery()
         IslandBus.powerSave.value = power?.isPowerSaveMode == true
         IslandBus.locked.value = isLocked()
         IslandBus.keyguard.value = isKeyguard()
         brightnessMode = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 0)
-        context.contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE), false, brightnessObserver,
-        )
+        runCatching {
+            context.contentResolver.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE), false, brightnessObserver,
+            )
+        }
+        readDebugging(announce = false)
+        listOf(Settings.Global.ADB_ENABLED, WIRELESS_DEBUGGING).forEach { key ->
+            runCatching { context.contentResolver.registerContentObserver(Settings.Global.getUriFor(key), false, debuggingObserver) }
+        }
+        runCatching {
+            connectivity?.registerNetworkCallback(
+                NetworkRequest.Builder().removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    .addTransportType(NetworkCapabilities.TRANSPORT_VPN).build(), vpnCallback,
+            )
+        }
 
         runCatching {
             connectivity?.registerNetworkCallback(
@@ -150,17 +205,36 @@ class SystemEvents(private val context: Context) {
     }
 
     fun stop() {
+        active = false
+        main.removeCallbacks(batterySample)
         runCatching { context.unregisterReceiver(receiver) }
         runCatching { context.contentResolver.unregisterContentObserver(brightnessObserver) }
         runCatching { connectivity?.unregisterNetworkCallback(wifiCallback) }
+        runCatching { connectivity?.unregisterNetworkCallback(vpnCallback) }
+        runCatching { context.contentResolver.unregisterContentObserver(debuggingObserver) }
     }
 
     private fun handle(intent: Intent, initialSticky: Boolean) {
         when (intent.action) {
-            Intent.ACTION_BATTERY_CHANGED -> onBattery(intent)
+            WIFI_AP_STATE_CHANGED -> {
+                val state = intent.getIntExtra("wifi_state", -1)
+                // Enabled/disabled only: intermediate or unknown OEM states are not events.
+                val enabled = when (state) { 13 -> true; 11 -> false; else -> return }
+                val old = hotspotState
+                hotspotState = enabled
+                if (!initialSticky && old != enabled) {
+                    notice(s.evHotspot, Notice(tr("Точка доступа", "Hotspot"), if (enabled) tr("Вкл", "On") else tr("Выкл", "Off"),
+                        ic(R.drawable.ios_wifi), if (enabled) Tints.Blue else Tints.Gray))
+                }
+            }
+            Intent.ACTION_BATTERY_CHANGED -> {
+                onBattery(intent)
+                scheduleBatterySample()
+            }
 
             Intent.ACTION_POWER_CONNECTED -> {
                 lastPowerChange = SystemClock.elapsedRealtime()
+                refreshBattery()
                 val level = IslandBus.battery.value.level
                 notice(
                     s.evChargeStart,
@@ -171,6 +245,7 @@ class SystemEvents(private val context: Context) {
 
             Intent.ACTION_POWER_DISCONNECTED -> {
                 lastPowerChange = SystemClock.elapsedRealtime()
+                refreshBattery()
                 val level = IslandBus.battery.value.level
                 notice(
                     s.evChargeStop,
@@ -183,6 +258,7 @@ class SystemEvents(private val context: Context) {
 
             Intent.ACTION_SCREEN_OFF -> {
                 IslandBus.screenOn.value = false
+                main.removeCallbacks(batterySample)
                 // Блокировка может включиться чуть позже экрана — заранее прячем тексты, если она вообще есть
                 if (keyguard?.isDeviceSecure == true) IslandBus.locked.value = true
                 IslandBus.reply.value = null
@@ -192,7 +268,10 @@ class SystemEvents(private val context: Context) {
             }
 
             Intent.ACTION_SCREEN_ON -> {
+                // Read sticky state before drawing; ACTION_BATTERY_CHANGED can be delayed through doze.
+                refreshBattery()
                 IslandBus.screenOn.value = true
+                scheduleBatterySample()
                 IslandBus.locked.value = isLocked()
                 IslandBus.keyguard.value = isKeyguard()
             }
@@ -236,6 +315,9 @@ class SystemEvents(private val context: Context) {
 
 
             BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+                ) return
                 val device = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                     ?: return
                 // Без разрешения BLUETOOTH_CONNECT имени и класса устройства не узнать
@@ -301,6 +383,7 @@ class SystemEvents(private val context: Context) {
      * зовёт это раньше — как только видит, что экран блокировки ушёл. Второй вызов подряд ничего не делает.
      */
     fun onUnlocked() {
+        refreshBattery()
         IslandBus.locked.value = false
         IslandBus.keyguard.value = false
         val now = SystemClock.elapsedRealtime()
@@ -321,15 +404,42 @@ class SystemEvents(private val context: Context) {
             filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
     }
 
+    private fun readDebugging(announce: Boolean) {
+        fun read(key: String) = runCatching { Settings.Global.getInt(context.contentResolver, key, 0) != 0 }.getOrDefault(false)
+        val next = read(Settings.Global.ADB_ENABLED) to read(WIRELESS_DEBUGGING)
+        val old = debugState
+        debugState = next
+        if (!announce || old == null) return
+        listOf(Triple(old.first, next.first, "USB"), Triple(old.second, next.second, "Wi-Fi")).forEach { (before, after, kind) ->
+            if (before != after) notice(s.evDebugging, Notice(tr("Отладка", "Debugging") + " · " + kind,
+                if (after) tr("Вкл", "On") else tr("Выкл", "Off"), ic(R.drawable.ios_hardware_chip), Tints.Teal))
+        }
+    }
+
+    private fun scheduleBatterySample() {
+        main.removeCallbacks(batterySample)
+        if (active && IslandBus.screenOn.value && IslandBus.battery.value.charging) main.postDelayed(batterySample, 15_000)
+    }
+
+    private fun refreshBattery() {
+        runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()?.let(::onBattery)
+    }
+
     private fun onBattery(intent: Intent) {
-        val raw = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
-        val level = if (raw >= 0) raw * 100 / scale else -1
+        val level = BatteryReadings.percent(intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1), intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100))
         val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
         val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
         val charging = plugged != 0 &&
             (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
-        IslandBus.battery.value = BatteryInfo(level, charging)
+        val current = BatteryReadings.currentMa(runCatching {
+            batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: Int.MIN_VALUE
+        }.getOrDefault(Int.MIN_VALUE), charging)
+        val voltage = BatteryReadings.voltageV(intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1))
+        val remaining = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && charging && level < 100) {
+            BatteryReadings.remainingMs(runCatching { batteryManager?.computeChargeTimeRemaining() ?: -1L }.getOrDefault(-1L), charging)
+        } else null
+        IslandBus.battery.value = BatteryInfo(level, charging, current, voltage,
+            if (current != null && voltage != null) current * voltage / 1000f else null, remaining)
 
         if (charging || level > 5) {
             lowWarned = false
@@ -344,5 +454,7 @@ class SystemEvents(private val context: Context) {
         const val BT_BATTERY_CHANGED = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
         const val EXTRA_BT_BATTERY = "android.bluetooth.device.extra.BATTERY_LEVEL"
         const val USB_STATE = "android.hardware.usb.action.USB_STATE"
+        const val WIFI_AP_STATE_CHANGED = "android.net.wifi.WIFI_AP_STATE_CHANGED"
+        const val WIRELESS_DEBUGGING = "adb_wifi_enabled"
     }
 }

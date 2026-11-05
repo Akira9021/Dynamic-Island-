@@ -12,6 +12,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.GraphicsLayerScope
@@ -57,6 +59,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -99,6 +103,7 @@ import com.akira.island.core.Lyrics
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
+import com.akira.island.core.trf
 import com.akira.island.data.BubbleSide
 import com.akira.island.data.Elasticity
 import com.akira.island.data.MessageStyle
@@ -159,6 +164,9 @@ fun IslandOverlay(
     val egg by IslandBus.egg.collectAsState()
     val payReady by IslandBus.payReady.collectAsState()
     val inbox by IslandBus.inbox.collectAsState()
+    val weather by com.akira.island.service.WeatherRepo.state.collectAsState()
+    val extras by com.akira.island.data.ExtrasRepo.state.collectAsState()
+    val shadeOpen by IslandBus.shadeOpen.collectAsState()
     // Будильник появляется в острове за 12 часов и уходит, когда прозвенел: просыпаемся ровно в эти два момента,
     // а не каждые полминуты. Пока телефон спит, ожидание стоит — поэтому со включением экрана пересчитываем
     val screenOn by IslandBus.screenOn.collectAsState()
@@ -236,7 +244,12 @@ fun IslandOverlay(
     val acts = buildList {
         // Входящий звонок важнее всего, как на iPhone
         if (call != null && call.incoming && !callHidden) add(Act.CallA(call))
-        notice?.let { add(Act.NoticeA(it)) }
+        notice?.let { n ->
+            // Hide only the presentation while its source is in front. Do not cancel the Android
+            // notification or remove history; returning before expiry can show the banner again.
+            val source = n.message?.pkg ?: n.live?.pkg ?: n.openPkg ?: n.alarm?.pkg
+            if (!s.hideWhenSourceOpen || source == null || source != foreground) add(Act.NoticeA(n))
+        }
 
         val persistent = mutableListOf<Act>()
         val t = timer
@@ -250,14 +263,22 @@ fun IslandOverlay(
         stopwatch?.let { persistent += Act.StopwatchA(it) }
         if (s.cardTimer) chronoActive.maxByOrNull { it.postTime }?.let { persistent += Act.ChronoA(it) }
         val m = media
-        if (s.cardMedia && m != null && !(s.hideWhenPlayerOpen && foreground == m.pkg)) persistent += Act.MediaA(m)
-        if (s.cardProgress) progress.values.maxByOrNull { it.postTime }?.let { persistent += Act.ProgressA(it) }
+        if (s.cardMedia && m != null && !(s.hideWhenPlayerOpen && foreground == m.pkg)) {
+            val at = if (s.preferMusic && m.playing) persistent.indexOfFirst {
+                it !is Act.PayA && it !is Act.CallA && !(it is Act.TimerA && it.t.ringing)
+            }.let { if (it < 0) persistent.size else it } else persistent.size
+            persistent.add(at, Act.MediaA(m))
+        }
+        if (s.cardProgress) groupedProgress(progress.values.toList())?.let { persistent += Act.ProgressA(it) }
         // «Только при подключении» — зарядка не занимает остров всё время, пока телефон заряжается
         if (s.cardCharging && battery.charging && !s.chargingBrief) persistent += Act.ChargingA(battery)
         if (s.historyMinutes != 0 && inbox.isNotEmpty()) persistent += Act.InboxA(inbox)
+        if (extras.weatherEnabled) weather?.let { persistent += Act.WeatherA(it) }
         // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь
         val alarm = nextAlarm
         if (s.cardAlarm && alarm != null && alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS) persistent += Act.AlarmA(alarm)
+
+        if (s.hideWhenSourceOpen) persistent.removeAll { it.pkg != null && it.pkg == foreground }
 
         // Выбранная активность выходит вперёд, но звонящий таймер всегда главный
         val ringing = (persistent.firstOrNull() as? Act.TimerA)?.t?.ringing == true || call?.incoming == true
@@ -280,15 +301,15 @@ fun IslandOverlay(
 
     // Во время подгонки размера показываем только пустую красную капсулу
     val primary = when {
-        calibrating -> Act.Idle
+        calibrating || s.collapseOnShade && shadeOpen -> Act.Idle
         previewing -> Act.LiveA(WidthDemo)
         else -> acts.firstOrNull() ?: Act.Idle
     }
     val incoming = (primary as? Act.CallA)?.c?.incoming == true
     // Вторая активность — кружком рядом, если его не выключили в «Поведении»
-    val secondary = if (!s.bubble || primary.transient || incoming || calibrating) null
+    val secondary = if (!s.bubble || primary.transient || incoming || calibrating || s.collapseOnShade && shadeOpen) null
     else acts.drop(1).firstOrNull { !it.transient && it !is Act.AlarmA }
-    val showExpanded = expanded && !primary.transient && !incoming && !calibrating
+    val showExpanded = expanded && !primary.transient && !incoming && !calibrating && !(s.collapseOnShade && shadeOpen)
     val h = s.height.dp
 
     // Пузырь уходит с анимацией, поэтому помним последнюю активность в нём
@@ -352,7 +373,9 @@ fun IslandOverlay(
             enter = if (s.reduceEffects) fadeIn() else scaleIn(islandSpec(s), initialScale = 0.3f, transformOrigin = top) + fadeIn(tween(120)),
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
-            IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble)
+            CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
+                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble)
+            }
         }
         if (eggOn) {
             EggSparks { body.value }
@@ -447,6 +470,7 @@ private fun IslandBody(
 ) {
     val context = LocalContext.current
     val haptic = rememberHaptic()
+    val activities by rememberUpdatedState(LocalActivities.current)
     val scope = rememberCoroutineScope()
     val conf = LocalConfiguration.current
     // Раскрытый остров iPhone — 371 pt при ширине экрана 393 pt, то есть по 11 с каждой стороны;
@@ -455,7 +479,7 @@ private fun IslandBody(
     val h = s.height.dp
 
     // Скругления — как в ролике: плеер и фонарик 46, навигатор 42, обновление 36, уведомление 32
-    val cornerTarget = when {
+    val cornerDefault = when {
         expanded && (primary is Act.MediaA || primary is Act.TorchA) -> 46.dp
         expanded && primary is Act.LiveA -> 42.dp
         expanded -> 44.dp
@@ -470,11 +494,35 @@ private fun IslandBody(
         primary is Act.Idle -> h / 2
         else -> activeHeight(s) / 2
     }
+    val detail by IslandBus.messageDetail.collectAsState()
+    val large = expanded || primary is Act.NoticeA && (s.messageStyle == MessageStyle.CARD || detail)
+    val radius = if (large) s.expandedCornerRadius else s.cornerRadius
+    val cornerTarget = if (radius >= 0) radius.dp else cornerDefault
     // Скругление читается при рисовании: кадр раскрытия перерисовывает рамку и стекло, а не пересобирает остров
     val corner = animateDpAsState(cornerTarget, islandSpec(s), label = "corner")
-    val shape = remember(corner, s.notch) { AnimatedIslandShape(corner, s.notch) }
-    val accent = (primary as? Act.MediaA)?.m?.accent
-    val outlineColor = if (s.outlineFromArt && accent != null) accent else Color(s.outlineColor)
+    val shape = remember(corner, s.notch, s.notchTopRadius) { AnimatedIslandShape(corner, s.notch, s.notchTopRadius) }
+    val accent = when (primary) {
+        is Act.MediaA -> primary.m.accent
+        is Act.NoticeA -> primary.n.message?.accent ?: primary.n.tint
+        is Act.ChargingA -> Tints.Green
+        is Act.TimerA -> Tints.Orange
+        is Act.CallA -> Tints.Green
+        else -> null
+    }
+    val borderColor = if (large && s.expandedOutlineWidth >= 0) s.expandedOutlineColor else s.outlineColor
+    val opacity = if (large && s.expandedOutlineWidth >= 0) s.expandedOutlineOpacity else s.outlineOpacity
+    val outlineColor = (if (s.outlineFromArt && accent != null) accent else Color(borderColor)).let {
+        it.copy(alpha = it.alpha * opacity.coerceIn(0, 100) / 100f)
+    }
+    val outlineWidth = if (large && s.expandedOutlineWidth >= 0) s.expandedOutlineWidth else s.outlineWidth
+    val ownExpandedOutline = large && s.expandedOutlineWidth >= 0
+    val edgeWidths = if (ownExpandedOutline) listOf(s.expandedOutlineTopWidth, s.expandedOutlineRightWidth,
+        s.expandedOutlineBottomWidth, s.expandedOutlineLeftWidth)
+    else listOf(s.outlineTopWidth, s.outlineRightWidth, s.outlineBottomWidth, s.outlineLeftWidth)
+    val edges = edgeWidths.map { (if (it < 0) outlineWidth else it).coerceIn(0f, 12f).dp }
+    val surface = if (large && s.expandedColorEnabled) Color(s.expandedColor).let {
+        it.copy(alpha = it.alpha * s.islandOpacity / 100f)
+    } else islandFill(s)
 
     // Свечение цвета обложки, пока играет музыка («Эффекты»): с треком цвет плавно меняется, с паузой гаснет
     val playingArt = (primary as? Act.MediaA)?.m?.takeIf { it.playing }?.accent
@@ -547,7 +595,7 @@ private fun IslandBody(
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
             // Тень и обрезка по форме — одним слоем; форма на каждом кадре берётся из анимации скругления
             .graphicsLayer {
-                this.shape = islandShape(corner.value, s.notch)
+                this.shape = islandShape(corner.value, s)
                 clip = true
                 when {
                     s.liquidGlass && !calibrating && !s.reduceEffects -> {
@@ -562,13 +610,13 @@ private fun IslandBody(
                 if (s.liquidGlass && !calibrating) {
                     Modifier.glassSurface(shape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value }) { sheen.value }
                 } else {
-                    Modifier.background(if (calibrating) CalibrationRed else islandFill(s))
+                    Modifier.background(if (calibrating) CalibrationRed else surface)
                 },
             )
             .then(
                 when {
                     calibrating -> Modifier.border(2.dp, Color.White, shape)
-                    s.outline -> Modifier.border(s.outlineWidth.dp, outlineColor, shape)
+                    s.outline || ownExpandedOutline -> Modifier.islandEdgeOutline(shape, outlineColor, edges[0], edges[1], edges[2], edges[3])
                     else -> Modifier
                 },
             )
@@ -582,6 +630,9 @@ private fun IslandBody(
                     Modifier
                 },
             )
+            .then(if (s.bottomGradient > 0 && !calibrating) Modifier.background(Brush.verticalGradient(
+                listOf(Color.Transparent, Color.Black.copy(alpha = s.bottomGradient.coerceIn(0, 100) / 100f)),
+            )) else Modifier)
             // Любое касание — раскрытый остров не свернётся сам из-под пальца
             .pointerInput(Unit) {
                 awaitPointerEventScope {
@@ -607,10 +658,8 @@ private fun IslandBody(
                     }
                 }
                 detectTapGestures(
-                    onTap = {
-                        haptic()
-                        onTap(context, current, isExpanded, settings)
-                    },
+                    onPress = { haptic() },
+                    onTap = { onTap(context, current, isExpanded, settings) },
                     onDoubleTap = onDouble,
                     onLongPress = onLong,
                 )
@@ -650,6 +699,11 @@ private fun IslandBody(
                             !isExpanded && vertical && dy < -threshold && act is Act.CallA && act.c.incoming -> {
                                 haptic()
                                 Controls.hideIncomingCall()
+                            }
+                            !isExpanded && !vertical && abs(dx) > side && settings.swipeActivities && activities.size > 1 -> {
+                                val i = activities.indexOfFirst { it.id == act.id }.coerceAtLeast(0)
+                                val next = Math.floorMod(i + if (dx < 0) 1 else -1, activities.size)
+                                IslandBus.focus.value = activities[next].id
                             }
                             !isExpanded && !vertical && abs(dx) > side && act is Act.MediaA && settings.swipeTracks -> {
                                 haptic()
@@ -795,8 +849,9 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
             // Пока вводят ответ, нажатие по карточке не должно открывать приложение
             if (IslandBus.reply.value != null) return
             // Нажатие на уведомление приложения открывает его, как на iPhone
-            act.n.message?.let { m ->
-                if (!Controls.send(context, m.intent)) Controls.openApp(context, m.pkg)
+            if (act.n.message != null) {
+                IslandBus.messageDetail.value = true
+                return
             }
             act.n.openPkg?.let { Controls.openApp(context, it) }
             act.n.alarm?.let { openAlarm(context, it) }
@@ -874,6 +929,7 @@ private fun Bubble(act: Act, s: IslandSettings) {
             is Act.CallA -> Icon(Ios.call, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
             is Act.ChargingA -> Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
+            is Act.WeatherA -> Icon(Icons.Rounded.WbSunny, null, tint = Tints.Yellow, modifier = Modifier.size(inner))
             is Act.InboxA -> AppIcon(act.items.last().appIcon, inner, Ios.chatbubble, Tints.Blue)
             else -> Unit
         }
@@ -920,15 +976,17 @@ fun DrawScope.drawIslandRect(
 ) = islandOutline(topLeft, size, corner, notch) { drawOutline(it, brush, alpha, style) }
 
 /** Форма острова: капсула со скруглениями или, у «Как вырез», прямой верх у края экрана. */
-fun islandShape(corner: Dp, s: IslandSettings): RoundedCornerShape = islandShape(corner, s.notch)
+fun islandShape(corner: Dp, s: IslandSettings): RoundedCornerShape =
+    if (s.notch) RoundedCornerShape(s.notchTopRadius.dp, s.notchTopRadius.dp, corner, corner) else RoundedCornerShape(corner)
 
 fun islandShape(corner: Dp, notch: Boolean): RoundedCornerShape =
     if (notch) RoundedCornerShape(0.dp, 0.dp, corner, corner) else RoundedCornerShape(corner)
 
 /** Форма острова со скруглением из анимации: рамка и стекло читают его при рисовании и обновляются без пересборки. */
-private class AnimatedIslandShape(private val corner: State<Dp>, private val notch: Boolean) : Shape {
+private class AnimatedIslandShape(private val corner: State<Dp>, private val notch: Boolean, private val topRadius: Int) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
-        islandShape(corner.value, notch).createOutline(size, layoutDirection, density)
+        (if (notch) RoundedCornerShape(topRadius.dp, topRadius.dp, corner.value, corner.value) else RoundedCornerShape(corner.value))
+            .createOutline(size, layoutDirection, density)
 }
 
 /** Заливка острова: цвет из «Цвета капсулы» с непрозрачностью из «Оформления». */
@@ -941,4 +999,18 @@ fun islandFill(s: IslandSettings): Color = Color(s.color).let { it.copy(alpha = 
 fun expandedWidth(screen: Dp, s: IslandSettings): Dp {
     val full = (screen - 22.dp).coerceAtMost(460.dp)
     return (full * (s.expandedWidthPercent.coerceIn(60, 100) / 100f)).coerceAtLeast((s.width.dp + 60.dp).coerceAtMost(full))
+}
+
+
+private val LocalActivities = staticCompositionLocalOf<List<Act>> { emptyList() }
+
+/** Stable aggregate: notification update times must not switch between downloads every second. */
+internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): com.akira.island.core.ProgressInfo? {
+    if (items.isEmpty()) return null
+    val first = items.minWithOrNull(compareBy<com.akira.island.core.ProgressInfo> { it.postTime }.thenBy { it.key })!!
+    if (items.size == 1) return first
+    val unknown = items.any { it.indeterminate || it.max <= 0 }
+    return first.copy(key = "downloads", title = trf("Загрузок: {0}", "Downloads: {0}", items.size),
+        progress = (items.sumOf { it.fraction.toDouble() } / items.size * 1000).toInt(), max = 1000,
+        indeterminate = unknown)
 }

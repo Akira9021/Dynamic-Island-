@@ -65,7 +65,7 @@ jobs:
 
       # Gradle собирает APK без подписи: ключ ему не нужен, и сторонний код сборки его не увидит
       - name: Сборка
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon --max-workers=4 testDebugUnitTest lintDebug assembleRelease
 
       # Подпись — отдельным шагом: ключ из секретов есть только здесь и сразу удаляется
       - name: Подпись
