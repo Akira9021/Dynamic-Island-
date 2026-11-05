@@ -55,8 +55,8 @@ object IslandBus {
     val inbox = MutableStateFlow<List<InboxItem>>(emptyList())
     /** Идёт ввод ответа на уведомление: окну острова нужен фокус, чтобы показать клавиатуру */
     val reply = MutableStateFlow<ReplyState?>(null)
-    /** Наклон телефона от -1 до 1: по нему сдвигаются блики Liquid Glass */
-    val glassTilt = MutableStateFlow(0f)
+    /** Обе оси наклона от -1 до 1, в координатах острова. */
+    val glassTilt = MutableStateFlow(GlassTilt.Zero)
     /** До какого момента (elapsedRealtime) показывать пример активности — пока двигают ползунок ширины */
     val widthPreviewUntil = MutableStateFlow(0L)
     /** Человек читает или отвечает — уведомление не убирается по таймеру */

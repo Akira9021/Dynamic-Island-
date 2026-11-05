@@ -504,14 +504,7 @@ internal fun IslandBody(
     // Скругление читается при рисовании: кадр раскрытия перерисовывает рамку и стекло, а не пересобирает остров
     val corner = animateDpAsState(cornerTarget, islandSpec(s), label = "corner")
     val shape = remember(corner, s.notch, s.notchTopRadius) { AnimatedIslandShape(corner, s.notch, s.notchTopRadius) }
-    val accent = when (primary) {
-        is Act.MediaA -> primary.m.accent
-        is Act.NoticeA -> primary.n.message?.accent ?: primary.n.tint
-        is Act.ChargingA -> Tints.Green
-        is Act.TimerA -> Tints.Orange
-        is Act.CallA -> Tints.Green
-        else -> null
-    }
+    val accent = primary.surfaceAccent()
 
     // Свечение цвета обложки, пока играет музыка («Эффекты»): с треком цвет плавно меняется, с паузой гаснет
     val playingArt = (primary as? Act.MediaA)?.m?.takeIf { it.playing }?.accent
@@ -549,11 +542,13 @@ internal fun IslandBody(
 
     // Liquid Glass: при смене содержимого по стеклу пробегает блик, при наклоне телефона блики сдвигаются
     val tilt = IslandBus.glassTilt.collectAsState()
+    val previewTilt = LocalGlassTilt.current
     val sheen = remember { Animatable(-1f) }
-    LaunchedEffect(primary.id, expanded, s.liquidGlass) {
+    LaunchedEffect(primary.id, expanded, s.liquidGlass, s.reduceEffects) {
+        sheen.snapTo(-1f)
         if (!s.liquidGlass || s.reduceEffects) return@LaunchedEffect
         sheen.snapTo(0f)
-        sheen.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
+        sheen.animateTo(1f, tween(850, easing = FastOutSlowInEasing))
         sheen.snapTo(-1f)
     }
 
@@ -585,7 +580,7 @@ internal fun IslandBody(
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
-                else Modifier.islandSurface(s, large, shape, accent, tilt = { tilt.value }, sheen = { sheen.value }),
+                else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value }),
             )
             .then(
                 if (egg && !calibrating) {
@@ -850,22 +845,28 @@ private fun perform(context: Context, action: TapAction, act: Act) {
 }
 
 /** Вторая активность — круглый пузырь справа от острова. */
+private fun Act.surfaceAccent(): Color? = when (this) {
+    is Act.MediaA -> m.accent
+    is Act.NoticeA -> n.message?.accent ?: n.tint
+    is Act.ChargingA, is Act.CallA -> Tints.Green
+    is Act.TimerA, is Act.StopwatchA, is Act.ChronoA -> Tints.Orange
+    is Act.TorchA -> Tints.Yellow
+    is Act.ProgressA -> Tints.Blue
+    is Act.LiveA -> liveTint(l.kind)
+    else -> null
+}
+
 @Composable
 private fun Bubble(act: Act, s: IslandSettings) {
     val h = activeHeight(s)
     val haptic = rememberHaptic()
     val tilt = IslandBus.glassTilt.collectAsState()
+    val previewTilt = LocalGlassTilt.current
     val now = rememberNow(500, active = act is Act.TimerA)
     Box(
         Modifier
             .size(h)
-            .then(if (s.shadow && !s.reduceEffects) Modifier.shadow(8.dp, CircleShape) else Modifier)
-            .clip(CircleShape)
-            .then(
-                if (s.liquidGlass) Modifier.glassSurface(CircleShape, Color(s.color), s.glassOpacity / 100f, tilt = { tilt.value })
-                else Modifier.background(islandFill(s)),
-            )
-            .then(if (s.outline) Modifier.border(s.outlineWidth.dp, Color(s.outlineColor), CircleShape) else Modifier)
+            .islandSurface(s, false, CircleShape, act.surfaceAccent(), tilt = { previewTilt ?: tilt.value })
             .clickable {
                 haptic()
                 Controls.expand(act.id)

@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import com.akira.island.core.GlassTilt
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.resolveOutline
 
@@ -17,7 +18,7 @@ fun Modifier.islandSurface(
     card: Boolean,
     shape: Shape,
     accent: Color? = null,
-    tilt: () -> Float = { 0f },
+    tilt: () -> GlassTilt = { GlassTilt.Zero },
     sheen: () -> Float = { -1f },
 ): Modifier {
     val outline = s.resolveOutline(card)
@@ -27,9 +28,11 @@ fun Modifier.islandSurface(
         it.copy(alpha = it.alpha * outline.opacity / 100f)
     }
     return this
-        .then(if ((s.shadow || s.liquidGlass) && !s.reduceEffects) Modifier.shadow(10.dp, shape, clip = false) else Modifier)
+        .then(if ((s.shadow || s.liquidGlass) && !s.reduceEffects) Modifier.shadow(if (s.liquidGlass) 6.dp else 10.dp, shape, clip = false) else Modifier)
         .clip(shape)
-        .then(if (s.liquidGlass) Modifier.glassSurface(shape, base, s.glassOpacity / 100f, tilt, sheen) else Modifier.background(fill))
+        .then(if (s.liquidGlass) Modifier.glassSurface(shape, base, s.glassOpacity / 100f,
+            tilt = { if (s.reduceEffects) GlassTilt.Zero else tilt() },
+            sheen = { if (s.reduceEffects) -1f else sheen() }) else Modifier.background(fill))
         .then(if (s.bottomGradient > 0) Modifier.background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = s.bottomGradient.coerceIn(0, 80) / 100f)))) else Modifier)
         .then(if (outline.visible) Modifier.islandEdgeOutline(shape, color, outline.edges[0].dp, outline.edges[1].dp, outline.edges[2].dp, outline.edges[3].dp) else Modifier)
 }

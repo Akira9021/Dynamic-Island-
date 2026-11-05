@@ -64,8 +64,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.ImageBitmap
@@ -403,105 +401,6 @@ fun PillButton(
         Spacer(Modifier.width(6.dp))
         // Длинная подпись («Не беспокоить», «Без звука») чуть уменьшается, а не обрезается
         FitText(text, controlTint(fg), 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false))
-    }
-}
-
-/**
- * Liquid Glass по образцу iOS 26: стекло, которое ловит и преломляет свет. Настоящего преломления
- * того, что лежит под островом, Android не даёт (поверх экрана нельзя «заглянуть» в чужое окно),
- * поэтому рисуется всё, что видно у настоящего стекла:
- *  - дымчатое полупрозрачное тело, светлее чёрной подложки, плотнее и темнее к низу (толщина);
- *  - пятно света сверху и каустика — светлое пятно у противоположного края, где свет собрало стекло;
- *  - мягкое свечение вдоль кромки и яркая линза-кромка: блики в верхнем левом и нижнем правом углу;
- *  - тонкая цветная дисперсия по краю (голубая и розовая каймы);
- *  - блики живут: при наклоне телефона ([tilt] от −1 до 1) они сдвигаются, а при смене содержимого
- *    по стеклу пробегает световая полоса ([sheen] от 0 до 1, иначе скрыта).
- */
-fun Modifier.glassSurface(
-    shape: Shape,
-    base: Color,
-    opacity: Float,
-    tilt: () -> Float = { 0f },
-    sheen: () -> Float = { -1f },
-): Modifier = drawWithCache {
-    val w = size.width
-    val h = size.height
-    val a = opacity.coerceIn(0.3f, 1f)
-    val outline = shape.createOutline(size, layoutDirection, this)
-    val dp = 1.dp.toPx()
-    // Всё, что не зависит от наклона, собирается один раз на размер, а кадр только рисует
-    val veil = Brush.verticalGradient(
-        0f to Color.White.copy(alpha = 0.20f),
-        0.5f to Color.White.copy(alpha = 0.05f),
-        1f to Color.White.copy(alpha = 0.10f),
-    )
-    val shade = Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.28f))
-    val glow = List(7) { i -> Stroke(width = (i + 1) * 2 * dp) }
-    val glowColor = Color.White.copy(alpha = 0.035f)
-    val wideRim = Stroke(width = 10 * dp)
-    val thinRim = Stroke(width = 3.2f * dp)
-    val fringe = Stroke(width = 4 * dp)
-
-    onDrawWithContent {
-        val t = tilt().coerceIn(-1f, 1f)
-
-        // Тело стекла
-        drawRect(base.copy(alpha = a))
-        drawRect(veil)
-        drawRect(shade)
-
-        // Свет сверху и каустика у противоположного края
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color.White.copy(alpha = 0.26f), Color.Transparent),
-                center = Offset(w * (0.22f + 0.30f * t), 0f),
-                radius = w * 0.55f,
-            ),
-        )
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color.White.copy(alpha = 0.20f), Color.Transparent),
-                center = Offset(w * (0.80f + 0.15f * t), h),
-                radius = w * 0.45f,
-            ),
-        )
-
-        // Бегущий блик при смене содержимого
-        val shine = sheen()
-        if (shine in 0f..1f) {
-            val x = -w * 0.3f + w * 1.6f * shine
-            drawRect(
-                Brush.linearGradient(
-                    0f to Color.Transparent,
-                    0.5f to Color.White.copy(alpha = 0.24f),
-                    1f to Color.Transparent,
-                    start = Offset(x - w * 0.25f, 0f),
-                    end = Offset(x + w * 0.25f, h * 0.6f),
-                ),
-            )
-        }
-
-        // Свечение вдоль кромки: полоски убывающей яркости складываются в плавный спад внутрь
-        for (stroke in glow) drawOutline(outline, glowColor, style = stroke)
-
-        drawContent()
-
-        // Кромка-линза: яркая слева сверху и справа снизу, посередине почти гаснет; при наклоне сдвигается
-        val shift = t * w * 0.35f
-        val rim = Brush.linearGradient(
-            0f to Color.White.copy(alpha = 0.95f),
-            0.18f to Color.White.copy(alpha = 0.35f),
-            0.45f to Color.White.copy(alpha = 0.06f),
-            0.72f to Color.White.copy(alpha = 0.22f),
-            1f to Color(0xFFD6E8FF).copy(alpha = 0.9f),
-            start = Offset(-shift, 0f),
-            end = Offset(w - shift, h),
-        )
-        drawOutline(outline, rim, alpha = 0.35f, style = wideRim)
-        drawOutline(outline, rim, style = thinRim)
-        // Дисперсия: свет раскладывается на цвета по краям
-        translate(-dp, -dp) { drawOutline(outline, Color(0xFF7DF9FF).copy(alpha = 0.20f), style = fringe) }
-        translate(dp, dp) { drawOutline(outline, Color(0xFFFF8AD8).copy(alpha = 0.18f), style = fringe) }
     }
 }
 

@@ -35,6 +35,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.akira.island.core.Controls
+import com.akira.island.core.GlassTilt
+import com.akira.island.core.GlassTiltFilter
+import com.akira.island.core.glassTiltFromGravity
 import com.akira.island.core.IslandBus
 import com.akira.island.core.ServiceCommand
 import com.akira.island.R
@@ -108,12 +111,14 @@ class IslandService : AccessibilityService() {
     private var imeCheckedAt = 0L
 
     private var tiltOn = false
-    private var tiltSmooth = 0f
+    private val tiltFilter = GlassTiltFilter()
+    private var screenRotation = Surface.ROTATION_0
     private val tiltListener = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) {
-            // Наклон влево-вправо от -1 до 1; сглаживаем, чтобы блик плыл, а не дрожал
-            tiltSmooth += (e.values[0] / 9.81f).coerceIn(-1f, 1f).minus(tiltSmooth) * 0.12f
-            if (abs(tiltSmooth - IslandBus.glassTilt.value) > 0.015f) IslandBus.glassTilt.value = tiltSmooth
+            val next = tiltFilter.update(glassTiltFromGravity(e.values[0], e.values[1], screenRotation,
+                IslandBus.contentRotation.value), e.timestamp)
+            val previous = IslandBus.glassTilt.value
+            if (abs(next.x - previous.x) > 0.01f || abs(next.y - previous.y) > 0.01f) IslandBus.glassTilt.value = next
         }
 
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -264,9 +269,12 @@ class IslandService : AccessibilityService() {
             }
         }
 
-        // Liquid Glass: блики сдвигаются при наклоне телефона, датчик слушаем только пока стекло включено и экран горит
+        // Датчик не нужен при выключенном экране, статичных эффектах и экономии заряда.
         scope.launch {
-            combine(SettingsRepo.state.map { it.liquidGlass && it.enabled }, IslandBus.screenOn) { glass, on -> glass && on }
+            combine(SettingsRepo.state, IslandBus.screenOn, IslandBus.powerSave) { saved, on, saving ->
+                val s = saved.forPowerSave(saving)
+                s.liquidGlass && s.enabled && !s.reduceEffects && on
+            }
                 .distinctUntilChanged()
                 .collect { setTiltEnabled(it) }
         }
@@ -432,6 +440,7 @@ class IslandService : AccessibilityService() {
     /** Поворот экрана: камера слева (90°) — остров повёрнут на −90°, камера справа (270°) — на 90°. */
     private fun readRotation() {
         val rotation = runCatching { displays?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation }.getOrNull() ?: Surface.ROTATION_0
+        screenRotation = rotation
         IslandBus.displayRotation.value = when (rotation) {
             Surface.ROTATION_90 -> -90
             Surface.ROTATION_270 -> 90
@@ -512,8 +521,8 @@ class IslandService : AccessibilityService() {
             sm.registerListener(tiltListener, sensor, SensorManager.SENSOR_DELAY_UI)
         } else {
             sm.unregisterListener(tiltListener)
-            tiltSmooth = 0f
-            IslandBus.glassTilt.value = 0f
+            tiltFilter.reset()
+            IslandBus.glassTilt.value = GlassTilt.Zero
         }
     }
 

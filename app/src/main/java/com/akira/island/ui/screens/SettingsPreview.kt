@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.Notice
+import com.akira.island.core.GlassTilt
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.AppearancePreview
@@ -40,6 +43,10 @@ fun SettingsPreview(
 ) {
     val s by SettingsRepo.state.collectAsState()
     val context = LocalContext.current
+    var light by remember { mutableStateOf(GlassTilt.Zero) }
+    val lightX by animateFloatAsState(light.x, spring(dampingRatio = 1f, stiffness = 250f), label = "glassLightX")
+    val lightY by animateFloatAsState(light.y, spring(dampingRatio = 1f, stiffness = 250f), label = "glassLightY")
+    LaunchedEffect(s.liquidGlass, s.reduceEffects) { light = GlassTilt.Zero }
     LaunchedEffect(s) { IslandType.apply(context, s) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
         .background(Brush.linearGradient(listOf(Color(0xFF464361), Color(0xFF262B3A)))).padding(12.dp)) {
@@ -52,7 +59,9 @@ fun SettingsPreview(
         Box(Modifier.fillMaxWidth().height(if (card) 155.dp else 85.dp), contentAlignment = Alignment.Center) {
             // Preview the real dimensions, then scale down only to fit the sample board.
             if (!eventShown || respectVisibility && scene == PreviewScene.IDLE && s.hideIdle) Text(tr("Пример скрыт", "Preview hidden"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
-            else Layout(content = { AppearancePreview(s, card, scene, event, notificationStyle, twoActivities) }) { measurables, constraints ->
+            else Layout(content = { AppearancePreview(s, card, scene, event, notificationStyle, twoActivities,
+                light = GlassTilt(lightX, lightY),
+                onLight = if (s.liquidGlass && !s.reduceEffects) ({ light = it }) else null) }) { measurables, constraints ->
                 val max = 600.dp.roundToPx()
                 val p = measurables.single().measure(Constraints(maxWidth = max, maxHeight = 600.dp.roundToPx()))
                 val k = minOf(1f, constraints.maxWidth.toFloat() / p.width.coerceAtLeast(1), constraints.maxHeight.toFloat() / p.height.coerceAtLeast(1))
@@ -73,5 +82,10 @@ fun SettingsPreview(
                 }
             }
         }
+        if (s.liquidGlass) Text(
+            if (s.reduceEffects) tr("Статичное стекло: включено «Уменьшить эффекты»", "Static glass: Reduce effects is on")
+            else tr("Проведите по стеклу — блики следуют за пальцем", "Drag across the glass to move the reflections"),
+            color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, lineHeight = 14.sp,
+        )
     }
 }
