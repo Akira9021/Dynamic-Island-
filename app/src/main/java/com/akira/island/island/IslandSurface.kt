@@ -26,6 +26,7 @@ fun Modifier.islandSurface(
     cornerPx: () -> Float = { 0f },
 ): Modifier {
     val preview = LocalIslandPreview.current
+    val previewBackdrop = LocalGlassPreviewBackdrop.current
     val outline = s.resolveOutline(card)
     val base = Color(if (card && s.expandedColorEnabled) s.expandedColor else s.color)
     val fill = base.copy(alpha = base.alpha * s.islandOpacity.coerceIn(20, 100) / 100f)
@@ -42,7 +43,10 @@ fun Modifier.islandSurface(
                 density = s.glassOpacity / 100f,
                 tilt = { if (s.reduceEffects) GlassTilt.Zero else tilt() },
                 sheen = { if (s.reduceEffects) -1f else sheen() },
-                backdrop = { if (s.glassShader && !preview) GlassBackdropState.frame else null },
+                backdrop = {
+                    if (!s.glassShader) null
+                    else previewBackdrop ?: if (!preview) GlassBackdropState.frame else null
+                },
                 geometry = GlassGeometry(
                     cornerPx = cornerPx,
                     roundness = if (circle) 2f else 4f,

@@ -1,5 +1,10 @@
 package com.akira.island.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +29,9 @@ import androidx.compose.animation.core.spring
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.AppearancePreview
+import com.akira.island.island.GlassBackdropFrame
 import com.akira.island.island.IslandType
+import com.akira.island.island.LocalGlassPreviewBackdrop
 import com.akira.island.island.PreviewScene
 import com.akira.island.ui.Ui
 
@@ -59,9 +66,13 @@ fun SettingsPreview(
         Box(Modifier.fillMaxWidth().height(if (card) 155.dp else 85.dp), contentAlignment = Alignment.Center) {
             // Preview the real dimensions, then scale down only to fit the sample board.
             if (!eventShown || respectVisibility && scene == PreviewScene.IDLE && s.hideIdle) Text(tr("Пример скрыт", "Preview hidden"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
-            else Layout(content = { AppearancePreview(s, card, scene, event, notificationStyle, twoActivities,
-                light = GlassTilt(lightX, lightY),
-                onLight = if (s.liquidGlass && !s.reduceEffects) ({ light = it }) else null) }) { measurables, constraints ->
+            else Layout(content = {
+                CompositionLocalProvider(LocalGlassPreviewBackdrop provides PreviewGlassBackdrop) {
+                    AppearancePreview(s, card, scene, event, notificationStyle, twoActivities,
+                        light = GlassTilt(lightX, lightY),
+                        onLight = if (s.liquidGlass && !s.reduceEffects) ({ light = it }) else null)
+                }
+            }) { measurables, constraints ->
                 val max = 600.dp.roundToPx()
                 val p = measurables.single().measure(Constraints(maxWidth = max, maxHeight = 600.dp.roundToPx()))
                 val k = minOf(1f, constraints.maxWidth.toFloat() / p.width.coerceAtLeast(1), constraints.maxHeight.toFloat() / p.height.coerceAtLeast(1))
@@ -88,4 +99,43 @@ fun SettingsPreview(
             color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, lineHeight = 14.sp,
         )
     }
+}
+
+/**
+ * The settings preview must show the shader, not the old Compose material. A
+ * synthetic gradient with bright bars gives the lens something to bend without
+ * depending on the accessibility screenshot.
+ */
+private val PreviewGlassBackdrop: GlassBackdropFrame by lazy { buildPreviewGlassBackdrop() }
+
+private fun buildPreviewGlassBackdrop(): GlassBackdropFrame {
+    val w = 1024
+    val h = 512
+    val sharp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(sharp)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.shader = LinearGradient(
+        0f, 0f, 0f, h.toFloat(),
+        intArrayOf(0xFF5C5878.toInt(), 0xFF2A2F42.toInt()),
+        null, Shader.TileMode.CLAMP,
+    )
+    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+    paint.shader = null
+    paint.color = 0x66FFFFFF
+    paint.strokeWidth = 8f
+    for (i in 0..14) {
+        val x = 40f + i * 68f
+        canvas.drawLine(x, 0f, x - 110f, h.toFloat(), paint)
+    }
+    paint.style = Paint.Style.FILL
+    paint.color = 0x33FFFFFF
+    canvas.drawRoundRect(72f, 72f, 500f, 236f, 56f, 56f, paint)
+    paint.color = 0x339CC8FF.toInt()
+    canvas.drawRoundRect(600f, 280f, 956f, 444f, 48f, 48f, paint)
+    sharp.density = Bitmap.DENSITY_NONE
+    val small = Bitmap.createScaledBitmap(sharp, w / 8, h / 8, true)
+    val blurred = Bitmap.createScaledBitmap(small, w, h, true)
+    small.recycle()
+    blurred.density = Bitmap.DENSITY_NONE
+    return GlassBackdropFrame(sharp, blurred, android.graphics.Rect(0, 0, w, h), 1L, local = true)
 }

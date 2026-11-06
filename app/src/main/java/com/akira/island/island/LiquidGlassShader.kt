@@ -145,7 +145,9 @@ half4 main(float2 fragCoord) {
     col = mix(col, half3(1.0), half((1.0 - vy) * 0.05 * uVeil));
     col = mix(col, half3(0.0), half(smoothstep(0.55, 1.0, vy) * 0.05 * uVeil));
 
-    // Fresnel rim reflection.
+    // Fresnel: a wide soft halo plus a thin bright lip, like a thick glass bevel.
+    float fresWide = pow(clamp(1.0 + d / max(uFresnelRange * 2.2, 0.5) + uFresnelHardness, 0.0, 1.0), 3.0);
+    col = mix(col, half3(1.0), half(fresWide * uFresnelFactor * 0.22));
     float fres = pow(clamp(1.0 + d / max(uFresnelRange, 0.5) + uFresnelHardness, 0.0, 1.0), 5.0);
     fres *= clamp(uFresnelFactor, 0.0, 1.0);
     col = mix(col, half3(1.0), half(fres * 0.7));
@@ -260,27 +262,29 @@ internal fun Modifier.liquidGlassSurface(
                             else geometry.cornerPx().coerceIn(0f, min(w, h) * 0.5f)
                             // A capsule needs circular end caps; cards use a squircle.
                             val roundness = if (geometry.circle || radius >= min(w, h) * 0.49f) 2f else geometry.roundness
-                            val thickness = (h * 0.32f).coerceIn(4.dp.toPx(), 16.dp.toPx())
-                            val rim = min(h * 0.24f, 10.dp.toPx())
+                            val thickness = (h * 0.42f).coerceIn(5.dp.toPx(), 22.dp.toPx())
+                            val rim = min(h * 0.34f, 18.dp.toPx())
                             shader.setInputShader("uSharp", sharp)
                             shader.setInputShader("uBlur", blur)
                             shader.setFloatUniform("uSize", w, h)
                             shader.setFloatUniform("uOrigin", screenRect.left, screenRect.top)
-                            shader.setFloatUniform("uBackOrigin", frame.screenRect.left.toFloat(), frame.screenRect.top.toFloat())
+                            val backOriginX = if (frame.local) screenRect.left else frame.screenRect.left.toFloat()
+                            val backOriginY = if (frame.local) screenRect.top else frame.screenRect.top.toFloat()
+                            shader.setFloatUniform("uBackOrigin", backOriginX, backOriginY)
                             shader.setFloatUniform("uBackSize", frame.sharp.width.toFloat(), frame.sharp.height.toFloat())
                             shader.setFloatUniform("uRadius", radius)
                             shader.setFloatUniform("uRoundness", roundness)
                             shader.setFloatUniform("uDensity", density.coerceIn(0.4f, 1f))
                             shader.setFloatUniform("uThickness", thickness)
-                            shader.setFloatUniform("uDistance", thickness * 0.55f)
-                            shader.setFloatUniform("uDispersion", 0.07f)
-                            shader.setFloatUniform("uIOR", 1.45f)
+                            shader.setFloatUniform("uDistance", thickness * 0.75f)
+                            shader.setFloatUniform("uDispersion", 0.10f)
+                            shader.setFloatUniform("uIOR", 1.50f)
                             shader.setFloatUniform("uFresnelRange", rim)
-                            shader.setFloatUniform("uFresnelFactor", 0.30f)
-                            shader.setFloatUniform("uFresnelHardness", 0.15f)
+                            shader.setFloatUniform("uFresnelFactor", 0.42f)
+                            shader.setFloatUniform("uFresnelHardness", 0.12f)
                             shader.setFloatUniform("uGlareRange", rim)
-                            shader.setFloatUniform("uGlareFactor", 0.65f)
-                            shader.setFloatUniform("uGlareHardness", 0.15f)
+                            shader.setFloatUniform("uGlareFactor", 0.85f)
+                            shader.setFloatUniform("uGlareHardness", 0.12f)
                             shader.setFloatUniform("uGlareConvergence", 0.5f)
                             shader.setFloatUniform("uGlareOpposite", 0.8f)
                             shader.setFloatUniform("uGlareAngle", (-45.0 * PI / 180.0).toFloat())
@@ -288,7 +292,7 @@ internal fun Modifier.liquidGlassSurface(
                             shader.setFloatUniform("uTilt", direction.x, direction.y)
                             shader.setFloatUniform("uSheen", if (reduceEffects) -1f else sheen())
                             shader.setFloatUniform("uTint", base.red, base.green, base.blue)
-                            shader.setFloatUniform("uVeil", if (reduceEffects) 0.6f else 1f)
+                            shader.setFloatUniform("uVeil", if (reduceEffects) 0.7f else 1.2f)
                             shader.setFloatUniform("uFreeze", if (reduceEffects) 1f else 0f)
                             paint.shader = shader
                             drawIntoCanvas { canvas ->

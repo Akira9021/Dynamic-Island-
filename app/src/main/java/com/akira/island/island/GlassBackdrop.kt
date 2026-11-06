@@ -5,6 +5,7 @@ import android.graphics.Rect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
  * A strip of the screen behind the island, captured through the accessibility
@@ -20,7 +21,12 @@ class GlassBackdropFrame(
     val blurred: Bitmap,
     val screenRect: Rect,
     val generation: Long,
+    /** Preview frames are addressed in island-local pixels, not screen pixels. */
+    val local: Boolean = false,
 )
+
+/** Synthetic backdrop for the settings previews; the real overlay uses [GlassBackdropState]. */
+val LocalGlassPreviewBackdrop = staticCompositionLocalOf<GlassBackdropFrame?> { null }
 
 /** Last captured backdrop, shared by the overlay and the local previews. */
 object GlassBackdropState {
