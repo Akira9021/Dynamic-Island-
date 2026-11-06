@@ -6,6 +6,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,8 +19,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,12 +33,14 @@ import com.akira.island.core.GlassTilt
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import com.akira.island.core.tr
+import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.AppearancePreview
 import com.akira.island.island.GlassBackdropFrame
 import com.akira.island.island.IslandType
 import com.akira.island.island.LocalGlassPreviewBackdrop
 import com.akira.island.island.PreviewScene
+import com.akira.island.island.islandSurface
 import com.akira.island.ui.Ui
 
 /** Pinned local examples do not post events or change any live playback/notification state. */
@@ -102,6 +109,49 @@ fun SettingsPreview(
     }
 }
 
+/** A large, colourful sample of the material, closer to the Apple reference shots. */
+@Composable
+fun LiquidGlassDemo() {
+    val density = LocalDensity.current
+    val settings = remember {
+        IslandSettings(liquidGlass = true, glassShader = true, glassOpacity = 60, shadow = false)
+    }
+    CompositionLocalProvider(LocalGlassPreviewBackdrop provides PreviewGlassBackdrop) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF151419))) {
+            Text(
+                "Liquid Glass",
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(12.dp),
+            )
+            Box(Modifier.fillMaxWidth().height(195.dp).clip(RoundedCornerShape(24.dp))) {
+                Image(
+                    bitmap = PreviewGlassBackdrop.sharp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopStart,
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp)
+                        .size(250.dp, 130.dp)
+                        .islandSurface(
+                            settings,
+                            card = false,
+                            shape = RoundedCornerShape(36.dp),
+                            cornerPx = { with(density) { 36.dp.toPx() } },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Liquid Glass", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
 /**
  * The settings preview must show the shader, not the old Compose material. A
  * synthetic gradient with bright bars gives the lens something to bend without
@@ -128,23 +178,28 @@ private fun buildPreviewGlassBackdrop(): GlassBackdropFrame {
     )
     canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
 
-    // Soft colour blobs, like the abstract Apple reference shots.
-    paint.shader = RadialGradient(
-        w * 0.18f, h * 0.22f, w * 0.42f,
-        intArrayOf(0x99FF7A4D.toInt(), 0x00FF7A4D),
-        null, Shader.TileMode.CLAMP,
-    )
-    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-    paint.shader = RadialGradient(
-        w * 0.78f, h * 0.78f, w * 0.48f,
-        intArrayOf(0x889B5CFF.toInt(), 0x009B5CFF),
-        null, Shader.TileMode.CLAMP,
-    )
-    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-    paint.shader = RadialGradient(
-        w * 0.5f, h * 0.45f, w * 0.30f,
-        intArrayOf(0x55FFFFFF, 0x00FFFFFF),
-        null, Shader.TileMode.CLAMP,
+    fun blob(cx: Float, cy: Float, radius: Float, color: Int) {
+        paint.shader = RadialGradient(
+            cx, cy, radius,
+            intArrayOf(color, color and 0x00FFFFFF),
+            null, Shader.TileMode.CLAMP,
+        )
+        canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+    }
+
+    // Distinct soft colour blobs give the lens something to bend.
+    blob(w * 0.15f, h * 0.35f, w * 0.30f, 0xCCFF6B4A.toInt())
+    blob(w * 0.72f, h * 0.20f, w * 0.28f, 0xCC8B5CF6.toInt())
+    blob(w * 0.55f, h * 0.80f, w * 0.34f, 0xCC4CC9F0.toInt())
+    blob(w * 0.90f, h * 0.65f, w * 0.22f, 0xCCFFD166.toInt())
+    blob(w * 0.35f, h * 0.12f, w * 0.20f, 0x99FFFFFF.toInt())
+
+    // A soft diagonal light band, not a hard stripe.
+    paint.shader = LinearGradient(
+        0f, h.toFloat(), w.toFloat(), 0f,
+        intArrayOf(0x00FFFFFF, 0x33FFFFFF, 0x00FFFFFF),
+        floatArrayOf(0.25f, 0.5f, 0.75f),
+        Shader.TileMode.CLAMP,
     )
     canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
     sharp.density = Bitmap.DENSITY_NONE

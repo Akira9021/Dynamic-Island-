@@ -123,8 +123,8 @@ half4 main(float2 fragCoord) {
     float2 uvG = uOrigin + fragCoord + disp - uBackOrigin;
     float2 uvB = uOrigin + fragCoord + disp * (1.0 - uDispersion) - uBackOrigin;
 
-    // Only the thin bevel is a sharp lens; the body is heavily frosted.
-    float sharpMix = (1.0 - smoothstep(0.0, 0.35, t)) * 0.90;
+    // Most of the bevel is a sharp lens; only the body is frosted.
+    float sharpMix = (1.0 - smoothstep(0.0, 0.85, t)) * 0.95;
 
     float2 lo = float2(0.5);
     float2 hi = max(uBackSize - 0.5, lo + 1.0);
@@ -136,22 +136,34 @@ half4 main(float2 fragCoord) {
     half3 blur = half3(uBlur.eval(uvR).r, uBlur.eval(uvG).g, uBlur.eval(uvB).b);
     half3 col = mix(blur, sharp, half(sharpMix));
 
-    // Apple's glass is mostly the backdrop: only a light tint, not an opaque fill.
-    half3 tint = half3(uTint);
-    col = mix(col, tint, half(clamp(uDensity, 0.0, 1.0) * 0.34));
-    col = mix(col, half3(1.0), 0.035);
+    // A clear, slightly cool tint makes the material readable over dark content
+    // without hiding the colours of the backdrop.
+    half3 tint = mix(half3(0.72, 0.84, 1.0), half3(uTint), 0.20);
+    col = mix(col, tint, half(clamp(uDensity, 0.0, 1.0) * 0.28));
+    col = mix(col, half3(1.0), 0.03);
 
-    // A faint vertical veil keeps the material readable over busy content.
+    // A soft inner glow along the top edge reads as the glass surface itself.
     float vy = clamp(fragCoord.y / max(uSize.y, 1.0), 0.0, 1.0);
-    col = mix(col, half3(1.0), half((1.0 - vy) * 0.05 * uVeil));
-    col = mix(col, half3(0.0), half(smoothstep(0.55, 1.0, vy) * 0.04 * uVeil));
+    float topGlow = (1.0 - smoothstep(0.0, 0.30, t)) * (1.0 - vy) * 0.18 * uVeil;
+    col = mix(col, half3(1.0), half(topGlow));
+    col = mix(col, half3(1.0), half((1.0 - vy) * 0.04 * uVeil));
+    col = mix(col, half3(0.0), half(smoothstep(0.55, 1.0, vy) * 0.03 * uVeil));
+
+    // A soft diagonal reflection makes the sheet read even over a flat backdrop.
+    float streak = exp(-pow((fragCoord.x / max(uSize.x, 1.0) * 0.7
+        + fragCoord.y / max(uSize.y, 1.0) * 0.3 - 0.35) / 0.16, 2.0));
+    col = mix(col, half3(1.0), half(streak * 0.06 * uVeil));
+
+    // A dark inner edge at the bottom/right gives the sheet physical depth.
+    float inner = (1.0 - smoothstep(0.0, 0.30, t)) * smoothstep(0.0, 0.9, n.y) * 0.20;
+    col = mix(col, half3(0.0), half(inner));
 
     // A thin, bright specular lip with only a whisper of a wider halo.
     float fresWide = pow(clamp(1.0 + d / max(uFresnelRange * 2.2, 0.5) + uFresnelHardness, 0.0, 1.0), 3.0);
-    col = mix(col, half3(1.0), half(fresWide * uFresnelFactor * 0.06));
+    col = mix(col, half3(1.0), half(fresWide * uFresnelFactor * 0.05));
     float fres = pow(clamp(1.0 + d / max(uFresnelRange, 0.5) + uFresnelHardness, 0.0, 1.0), 5.0);
     fres *= clamp(uFresnelFactor, 0.0, 1.0);
-    col = mix(col, half3(1.0), half(fres * 0.65));
+    col = mix(col, half3(1.0), half(fres * 0.80));
 
     // Directional glare that follows the device tilt.
     float tilt = uFreeze > 0.5 ? 0.0 : (uTilt.x * 0.55 + uTilt.y * 0.35);
@@ -263,8 +275,8 @@ internal fun Modifier.liquidGlassSurface(
                             else geometry.cornerPx().coerceIn(0f, min(w, h) * 0.5f)
                             // A capsule needs circular end caps; cards use a squircle.
                             val roundness = if (geometry.circle || radius >= min(w, h) * 0.49f) 2f else geometry.roundness
-                            val thickness = (h * 0.28f).coerceIn(4.dp.toPx(), 16.dp.toPx())
-                            val rim = min(h * 0.16f, 8.dp.toPx())
+                            val thickness = (h * 0.30f).coerceIn(5.dp.toPx(), 18.dp.toPx())
+                            val rim = min(h * 0.14f, 7.dp.toPx())
                             shader.setInputShader("uSharp", sharp)
                             shader.setInputShader("uBlur", blur)
                             shader.setFloatUniform("uSize", w, h)
@@ -277,15 +289,15 @@ internal fun Modifier.liquidGlassSurface(
                             shader.setFloatUniform("uRoundness", roundness)
                             shader.setFloatUniform("uDensity", density.coerceIn(0.4f, 1f))
                             shader.setFloatUniform("uThickness", thickness)
-                            shader.setFloatUniform("uDistance", thickness * 0.65f)
-                            shader.setFloatUniform("uDispersion", 0.08f)
+                            shader.setFloatUniform("uDistance", thickness * 1.20f)
+                            shader.setFloatUniform("uDispersion", 0.15f)
                             shader.setFloatUniform("uIOR", 1.50f)
                             shader.setFloatUniform("uFresnelRange", rim)
-                            shader.setFloatUniform("uFresnelFactor", 0.55f)
-                            shader.setFloatUniform("uFresnelHardness", 0.06f)
-                            shader.setFloatUniform("uGlareRange", rim * 1.3f)
-                            shader.setFloatUniform("uGlareFactor", 0.55f)
-                            shader.setFloatUniform("uGlareHardness", 0.08f)
+                            shader.setFloatUniform("uFresnelFactor", 0.90f)
+                            shader.setFloatUniform("uFresnelHardness", 0.05f)
+                            shader.setFloatUniform("uGlareRange", rim * 1.8f)
+                            shader.setFloatUniform("uGlareFactor", 1.00f)
+                            shader.setFloatUniform("uGlareHardness", 0.06f)
                             shader.setFloatUniform("uGlareConvergence", 0.5f)
                             shader.setFloatUniform("uGlareOpposite", 0.8f)
                             shader.setFloatUniform("uGlareAngle", (-45.0 * PI / 180.0).toFloat())

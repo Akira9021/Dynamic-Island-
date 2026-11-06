@@ -109,6 +109,7 @@ fun ColorsScreen(onBack: () -> Unit) {
 
         SectionHeader(tr("Материал и эффекты", "Material and effects"))
         SettingsHint(tr("Общие для капсулы и карточек. Пример сверху показывает выбранный вид.", "Shared by the capsule and cards. The preview above shows the selected appearance."))
+        LiquidGlassDemo()
         ChoiceStrip(listOf(false, true), s.liquidGlass, { if (it) tr("Стекло", "Glass") else tr("Обычная заливка", "Plain fill") }) {
             SettingsRepo.update { copy(liquidGlass = it) }
         }
