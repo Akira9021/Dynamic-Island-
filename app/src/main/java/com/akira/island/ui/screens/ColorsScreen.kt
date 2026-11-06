@@ -117,6 +117,17 @@ fun ColorsScreen(onBack: () -> Unit) {
             "${if (s.liquidGlass) s.glassOpacity else s.islandOpacity}%", color = Tile.Teal) { v ->
             SettingsRepo.update { if (liquidGlass) copy(glassOpacity = v.toInt()) else copy(islandOpacity = v.toInt()) }
         }
+        if (s.liquidGlass) GroupToggle(
+            Pos.Single,
+            Icons.Rounded.AutoAwesome,
+            tr("Живое преломление", "Live refraction"),
+            tr(
+                "Шейдер преломляет настоящий фон под островом. Нужны спец. возможности; снимок окна — Android 14+.",
+                "The shader bends the real backdrop. Requires accessibility; window capture needs Android 14+.",
+            ),
+            s.glassShader,
+            color = Tile.Purple,
+        ) { v -> SettingsRepo.update { copy(glassShader = v) } }
         GroupSlider(Pos.Single, Icons.Rounded.Gradient, tr("Затемнение снизу", "Bottom shading"), s.bottomGradient.toFloat(), 0f..80f, "${s.bottomGradient}%", color = Tile.Indigo) {
             v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
         }

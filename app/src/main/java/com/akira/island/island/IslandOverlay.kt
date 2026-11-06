@@ -89,6 +89,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -524,6 +525,7 @@ internal fun IslandBody(
     val activities by rememberUpdatedState(LocalActivities.current)
     val scope = rememberCoroutineScope()
     val conf = LocalConfiguration.current
+    val density = LocalDensity.current
     // Раскрытый остров iPhone — 371 pt при ширине экрана 393 pt, то есть по 11 с каждой стороны;
     // «Ширина раскрытого острова» в «Оформлении» делает его уже
     val expandedWidth = expandedWidth(conf.screenWidthDp.dp, s)
@@ -629,7 +631,8 @@ internal fun IslandBody(
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
-                else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value }),
+                else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value },
+                    cornerPx = { with(density) { corner.value.toPx() } }),
             )
             .then(
                 if (egg && !calibrating) {
@@ -956,7 +959,7 @@ private fun Bubble(act: Act, s: IslandSettings) {
     Box(
         Modifier
             .size(h)
-            .islandSurface(s, false, CircleShape, act.surfaceAccent(), tilt = { previewTilt ?: tilt.value })
+            .islandSurface(s, false, CircleShape, act.surfaceAccent(), tilt = { previewTilt ?: tilt.value }, circle = true)
             .clickable {
                 haptic()
                 Controls.expand(act.id)

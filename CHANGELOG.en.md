@@ -8,6 +8,12 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Real Liquid Glass shader — test branch, 2026-11-06
+- The glass material is now an AGSL shader: superellipse SDF, Snell refraction, dispersion, Fresnel and a directional glare.
+- The backdrop under the island is captured with accessibility `takeScreenshotOfWindow` (Android 14+), blurred and fed to the shader; older versions keep the Compose material.
+- New “Live refraction” switch in Appearance → Material and effects; 40–55 % density looks closest to Apple.
+- Details and limitations: [docs/LIQUID-GLASS-SHADER.md](docs/LIQUID-GLASS-SHADER.md).
+
 ### Recording, settings and security review — test branch, 2026-11-06
 - Liquid expansion defaults to on; an explicitly saved off preference is preserved.
 - Voice, screen and camera video recording have distinct presentation. Fixed foreground recording detection, pause/resume and elapsed time; Stop requires a real action supplied by the recording app.

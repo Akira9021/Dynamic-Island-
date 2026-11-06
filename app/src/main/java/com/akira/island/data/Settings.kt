@@ -289,7 +289,9 @@ data class IslandSettings(
 
     // Liquid Glass: полупрозрачное стекло с бликами вместо чёрной заливки. По умолчанию выключено
     val liquidGlass: Boolean = false,
-    val glassOpacity: Int = 68,
+    val glassOpacity: Int = 55,
+    /** Живое преломление настоящего фона под островом (AGSL, Android 13+, снимок окна — Android 14+). */
+    val glassShader: Boolean = true,
 
     // Анимации
     val expandStyle: ExpandStyle = ExpandStyle.FRUIT,
