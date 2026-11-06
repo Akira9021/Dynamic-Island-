@@ -225,7 +225,7 @@ class GlassBackdropCapture(
         val small = Bitmap.createScaledBitmap(source, w, h, true)
         val pixels = IntArray(w * h)
         small.getPixels(pixels, 0, w, 0, 0, w, h)
-        val radius = max(3, min(w, h) / 50)
+        val radius = max(4, min(w, h) / 28)
         repeat(3) { boxBlur(pixels, w, h, radius) }
         small.setPixels(pixels, 0, w, 0, 0, w, h)
         val out = Bitmap.createScaledBitmap(small, source.width, source.height, true)
