@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RadialGradient
 import android.graphics.Shader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -115,23 +116,37 @@ private fun buildPreviewGlassBackdrop(): GlassBackdropFrame {
     val canvas = Canvas(sharp)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     paint.shader = LinearGradient(
-        0f, 0f, 0f, h.toFloat(),
-        intArrayOf(0xFF5C5878.toInt(), 0xFF2A2F42.toInt()),
+        0f, 0f, w.toFloat(), h.toFloat(),
+        intArrayOf(
+            0xFFBFD8FF.toInt(),
+            0xFF4C7DFF.toInt(),
+            0xFF1D2B8F.toInt(),
+            0xFFB23A48.toInt(),
+        ),
+        floatArrayOf(0f, 0.35f, 0.7f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+
+    // Soft colour blobs, like the abstract Apple reference shots.
+    paint.shader = RadialGradient(
+        w * 0.18f, h * 0.22f, w * 0.42f,
+        intArrayOf(0x99FF7A4D.toInt(), 0x00FF7A4D),
         null, Shader.TileMode.CLAMP,
     )
     canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-    paint.shader = null
-    paint.color = 0x66FFFFFF
-    paint.strokeWidth = 8f
-    for (i in 0..14) {
-        val x = 40f + i * 68f
-        canvas.drawLine(x, 0f, x - 110f, h.toFloat(), paint)
-    }
-    paint.style = Paint.Style.FILL
-    paint.color = 0x33FFFFFF
-    canvas.drawRoundRect(72f, 72f, 500f, 236f, 56f, 56f, paint)
-    paint.color = 0x339CC8FF.toInt()
-    canvas.drawRoundRect(600f, 280f, 956f, 444f, 48f, 48f, paint)
+    paint.shader = RadialGradient(
+        w * 0.78f, h * 0.78f, w * 0.48f,
+        intArrayOf(0x889B5CFF.toInt(), 0x009B5CFF),
+        null, Shader.TileMode.CLAMP,
+    )
+    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+    paint.shader = RadialGradient(
+        w * 0.5f, h * 0.45f, w * 0.30f,
+        intArrayOf(0x55FFFFFF, 0x00FFFFFF),
+        null, Shader.TileMode.CLAMP,
+    )
+    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
     sharp.density = Bitmap.DENSITY_NONE
     val small = Bitmap.createScaledBitmap(sharp, w / 8, h / 8, true)
     val blurred = Bitmap.createScaledBitmap(small, w, h, true)

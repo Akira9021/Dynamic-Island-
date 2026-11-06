@@ -25,7 +25,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import com.akira.island.data.IslandSettings
+import com.akira.island.data.SettingsRepo
 import com.akira.island.ui.MainActivity
+import com.akira.island.ui.screens.SettingsPreview
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -146,6 +148,69 @@ class LiquidGlassShaderTest {
         } finally {
             scenario.close()
             GlassBackdropState.clear()
+        }
+    }
+
+    @SdkSuppress(minSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    @Test
+    fun settingsPreviewRendersTheShader() {
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            val captured = CountDownLatch(1)
+            var screenshot: Bitmap? = null
+            var width = 0
+            var height = 0
+            scenario.onActivity { activity ->
+                val decor = activity.window.decorView
+                width = decor.width
+                height = decor.height
+                require(width > 0 && height > 0)
+                SettingsRepo.init(activity)
+                SettingsRepo.update {
+                    copy(liquidGlass = true, glassShader = true, glassOpacity = 60, shadow = false)
+                }
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(ComposeColor(0xFF151419))) {
+                        SettingsPreview(scene = PreviewScene.MUSIC)
+                    }
+                }
+                decor.postOnAnimation {
+                    decor.postOnAnimation {
+                        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        PixelCopy.request(
+                            activity.window,
+                            output,
+                            { result ->
+                                if (result == PixelCopy.SUCCESS) screenshot = output else output.recycle()
+                                captured.countDown()
+                            },
+                            Handler(Looper.getMainLooper()),
+                        )
+                    }
+                }
+            }
+            assertTrue("the window must be captured", captured.await(10, TimeUnit.SECONDS))
+            val image = screenshot ?: error("PixelCopy failed")
+            runCatching {
+                val directory = InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null)
+                File(directory, "liquid-glass-preview.png").outputStream().use {
+                    image.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+            }
+            var colourful = 0
+            for (y in 0 until image.height step 8) {
+                for (x in 0 until image.width step 8) {
+                    val color = image.getPixel(x, y)
+                    val r = (color shr 16) and 0xFF
+                    val g = (color shr 8) and 0xFF
+                    val b = color and 0xFF
+                    if (abs(r - g) > 20 || abs(r - b) > 20) colourful++
+                }
+            }
+            image.recycle()
+            assertTrue("the preview must show the coloured shader backdrop", colourful > 20)
+        } finally {
+            scenario.close()
         }
     }
 

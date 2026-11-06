@@ -11,7 +11,7 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 ### Real Liquid Glass shader — test branch, 2026-11-06
 - The glass material is now an AGSL shader: superellipse SDF, Snell refraction, dispersion, Fresnel and a directional glare.
 - The backdrop under the island is captured with accessibility `takeScreenshotOfWindow` (Android 14+), blurred and fed to the shader; older versions keep the Compose material.
-- New “Live refraction” switch in Appearance → Material and effects; 60 % density by default. Wider bevel, stronger lensing and a matte body; the settings preview now renders the shader too.
+- New “Live refraction” switch in Appearance → Material and effects; 60 % density by default. Clear, colourful glass with a thin bright rim and a matte blur; the settings preview now renders the shader too.
 - Details and limitations: [docs/LIQUID-GLASS-SHADER.md](docs/LIQUID-GLASS-SHADER.md).
 
 ### Recording, settings and security review — test branch, 2026-11-06

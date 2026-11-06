@@ -136,21 +136,22 @@ half4 main(float2 fragCoord) {
     half3 blur = half3(uBlur.eval(uvR).r, uBlur.eval(uvG).g, uBlur.eval(uvB).b);
     half3 col = mix(blur, sharp, half(sharpMix));
 
-    // Body tint: at 100% the substrate is opaque, at 40% the backdrop shows.
+    // Apple's glass is mostly the backdrop: only a light tint, not an opaque fill.
     half3 tint = half3(uTint);
-    col = mix(col, tint, half(clamp(uDensity, 0.0, 1.0)));
+    col = mix(col, tint, half(clamp(uDensity, 0.0, 1.0) * 0.30));
+    col = mix(col, half3(1.0), 0.035);
 
     // A faint vertical veil keeps the material readable over busy content.
     float vy = clamp(fragCoord.y / max(uSize.y, 1.0), 0.0, 1.0);
     col = mix(col, half3(1.0), half((1.0 - vy) * 0.05 * uVeil));
-    col = mix(col, half3(0.0), half(smoothstep(0.55, 1.0, vy) * 0.05 * uVeil));
+    col = mix(col, half3(0.0), half(smoothstep(0.55, 1.0, vy) * 0.04 * uVeil));
 
-    // Fresnel: a wide soft halo plus a thin bright lip, like a thick glass bevel.
+    // A thin, bright specular lip with only a whisper of a wider halo.
     float fresWide = pow(clamp(1.0 + d / max(uFresnelRange * 2.2, 0.5) + uFresnelHardness, 0.0, 1.0), 3.0);
-    col = mix(col, half3(1.0), half(fresWide * uFresnelFactor * 0.22));
+    col = mix(col, half3(1.0), half(fresWide * uFresnelFactor * 0.06));
     float fres = pow(clamp(1.0 + d / max(uFresnelRange, 0.5) + uFresnelHardness, 0.0, 1.0), 5.0);
     fres *= clamp(uFresnelFactor, 0.0, 1.0);
-    col = mix(col, half3(1.0), half(fres * 0.7));
+    col = mix(col, half3(1.0), half(fres * 0.65));
 
     // Directional glare that follows the device tilt.
     float tilt = uFreeze > 0.5 ? 0.0 : (uTilt.x * 0.55 + uTilt.y * 0.35);
@@ -262,8 +263,8 @@ internal fun Modifier.liquidGlassSurface(
                             else geometry.cornerPx().coerceIn(0f, min(w, h) * 0.5f)
                             // A capsule needs circular end caps; cards use a squircle.
                             val roundness = if (geometry.circle || radius >= min(w, h) * 0.49f) 2f else geometry.roundness
-                            val thickness = (h * 0.42f).coerceIn(5.dp.toPx(), 22.dp.toPx())
-                            val rim = min(h * 0.34f, 18.dp.toPx())
+                            val thickness = (h * 0.28f).coerceIn(4.dp.toPx(), 16.dp.toPx())
+                            val rim = min(h * 0.16f, 8.dp.toPx())
                             shader.setInputShader("uSharp", sharp)
                             shader.setInputShader("uBlur", blur)
                             shader.setFloatUniform("uSize", w, h)
@@ -276,15 +277,15 @@ internal fun Modifier.liquidGlassSurface(
                             shader.setFloatUniform("uRoundness", roundness)
                             shader.setFloatUniform("uDensity", density.coerceIn(0.4f, 1f))
                             shader.setFloatUniform("uThickness", thickness)
-                            shader.setFloatUniform("uDistance", thickness * 0.75f)
-                            shader.setFloatUniform("uDispersion", 0.10f)
+                            shader.setFloatUniform("uDistance", thickness * 0.65f)
+                            shader.setFloatUniform("uDispersion", 0.08f)
                             shader.setFloatUniform("uIOR", 1.50f)
                             shader.setFloatUniform("uFresnelRange", rim)
-                            shader.setFloatUniform("uFresnelFactor", 0.42f)
-                            shader.setFloatUniform("uFresnelHardness", 0.12f)
-                            shader.setFloatUniform("uGlareRange", rim)
-                            shader.setFloatUniform("uGlareFactor", 0.85f)
-                            shader.setFloatUniform("uGlareHardness", 0.12f)
+                            shader.setFloatUniform("uFresnelFactor", 0.55f)
+                            shader.setFloatUniform("uFresnelHardness", 0.06f)
+                            shader.setFloatUniform("uGlareRange", rim * 1.3f)
+                            shader.setFloatUniform("uGlareFactor", 0.55f)
+                            shader.setFloatUniform("uGlareHardness", 0.08f)
                             shader.setFloatUniform("uGlareConvergence", 0.5f)
                             shader.setFloatUniform("uGlareOpposite", 0.8f)
                             shader.setFloatUniform("uGlareAngle", (-45.0 * PI / 180.0).toFloat())
@@ -292,7 +293,7 @@ internal fun Modifier.liquidGlassSurface(
                             shader.setFloatUniform("uTilt", direction.x, direction.y)
                             shader.setFloatUniform("uSheen", if (reduceEffects) -1f else sheen())
                             shader.setFloatUniform("uTint", base.red, base.green, base.blue)
-                            shader.setFloatUniform("uVeil", if (reduceEffects) 0.7f else 1.2f)
+                            shader.setFloatUniform("uVeil", if (reduceEffects) 0.7f else 1.1f)
                             shader.setFloatUniform("uFreeze", if (reduceEffects) 1f else 0f)
                             paint.shader = shader
                             drawIntoCanvas { canvas ->
