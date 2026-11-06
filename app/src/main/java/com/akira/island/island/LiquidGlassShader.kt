@@ -123,8 +123,8 @@ half4 main(float2 fragCoord) {
     float2 uvG = uOrigin + fragCoord + disp - uBackOrigin;
     float2 uvB = uOrigin + fragCoord + disp * (1.0 - uDispersion) - uBackOrigin;
 
-    // The bevel is a sharp lens; the body is frosted.
-    float sharpMix = (1.0 - smoothstep(0.0, 1.0, t)) * 0.85;
+    // Only the thin bevel is a sharp lens; the body is heavily frosted.
+    float sharpMix = (1.0 - smoothstep(0.0, 0.35, t)) * 0.90;
 
     float2 lo = float2(0.5);
     float2 hi = max(uBackSize - 0.5, lo + 1.0);
@@ -138,7 +138,7 @@ half4 main(float2 fragCoord) {
 
     // Apple's glass is mostly the backdrop: only a light tint, not an opaque fill.
     half3 tint = half3(uTint);
-    col = mix(col, tint, half(clamp(uDensity, 0.0, 1.0) * 0.30));
+    col = mix(col, tint, half(clamp(uDensity, 0.0, 1.0) * 0.34));
     col = mix(col, half3(1.0), 0.035);
 
     // A faint vertical veil keeps the material readable over busy content.
