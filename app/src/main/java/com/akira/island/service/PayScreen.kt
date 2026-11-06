@@ -274,7 +274,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         if (fresh.isEmpty() || screenLogs >= 6 || now - screenLoggedAt < 2_000) return
         screenLogs++
         screenLoggedAt = now
-        val line = fresh.take(14).joinToString(" | ") { it.replace(Regex("\\d{9,}"), "…") }
+        val line = fresh.take(14).joinToString(" | ")
         PayDebug.add(tr("Экран после оплаты", "Screen after the payment screen"), pkg, line)
     }
 

@@ -190,10 +190,17 @@ object NotificationParser {
         } else {
             null
         }
-        // Диктофон и запись экрана без системного отсчёта: идущая запись с кнопкой «Стоп»
+        // Многие диктофоны дают только время/паузу. Android 14+ также допускает FGS-плашку без ongoing.
+        // The recording name may contain a date/time; prefer the live status over its title.
+        val recordingElapsed = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT, Notification.EXTRA_BIG_TEXT, Notification.EXTRA_TITLE)
+            .firstNotNullOfOrNull { ClockScreenParser.find(ex.getCharSequence(it)) }
         val recording = classifyRecording(sbn.packageName, title,
             texts.mapNotNull { ex.getCharSequence(it)?.toString() }.joinToString(" "), ongoing,
-            n.actions?.any { isStopRecordingAction(it.title?.toString().orEmpty()) } == true)
+            n.actions?.any { isStopRecordingAction(it.title?.toString().orEmpty()) } == true,
+            hasChronometer = ticking, hasElapsedTime = recordingElapsed != null,
+            hasPauseAction = n.actions?.any { isPauseRecordingAction(it.title?.toString().orEmpty()) } == true,
+            hasResumeAction = n.actions?.any { isResumeRecordingAction(it.title?.toString().orEmpty()) } == true,
+            foregroundService = n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0, hasProgress = hasProgress)
         val recorder = call == null && !isMedia && recording.recording
         // Неактивный (на паузе) таймер, который остров уже убрал, снова не показываем
         val chrono = call == null && !isMedia && (ticking || pausedMs != null || runningMs != null || recorder) &&
@@ -216,13 +223,19 @@ object NotificationParser {
                 // отсчёта — от времени в тексте или с момента, как появилось уведомление
                 val base = when {
                     runningMs != null -> if (down) now + runningMs else now - runningMs
-                    recorder -> texts.firstNotNullOfOrNull { ClockScreenParser.find(ex.getCharSequence(it)) }?.let { now - it }
-                        ?: n.`when`.takeIf { it in 1..now } ?: IslandBus.chrono.value[sbn.key]?.takeIf { it.recording }?.base ?: sbn.postTime
+                    recorder -> n.`when`.takeIf { ticking && it in 1..now }
+                        ?: recordingElapsed?.let { now - it }
+                        ?: IslandBus.chrono.value[sbn.key]?.takeIf { it.recordingKind == recording.kind }?.let { previous ->
+                            if (!recording.paused && previous.pausedMs != null) now - previous.pausedMs else previous.base
+                        }
+                        ?: n.`when`.takeIf { it in 1..now } ?: sbn.postTime
                     else -> n.`when`
                 }
                 put(sbn.key, ChronoInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), base, down, sbn.postTime, stop,
-                    pausedMs = pausedMs, pause = buttons[ClockAction.PAUSE], resume = buttons[ClockAction.START],
-                    reset = buttons[ClockAction.RESET], recording = recorder, screenRecording = recording.screen))
+                    pausedMs = if (recorder && recording.paused) recordingElapsed
+                        ?: IslandBus.chrono.value[sbn.key]?.elapsed(now) ?: (now - base).coerceAtLeast(0) else pausedMs,
+                    pause = buttons[ClockAction.PAUSE], resume = buttons[ClockAction.START],
+                    reset = buttons[ClockAction.RESET], recordingKind = recording.kind.takeIf { recorder }))
             } else {
                 remove(sbn.key)
             }

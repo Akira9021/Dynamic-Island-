@@ -106,8 +106,6 @@ object PayMonitor {
     /** Умеет ли приложение платить телефоном: Mir Pay, T-Pay, SberPay, Яндекс Пэй и любые другие. */
     fun isPayApp(context: Context, pkg: String): Boolean = pkg in known || pkg in nfcApps(context)
 
-    fun isWallet(pkg: String) = pkg in wallets || pkg == GMS
-
     /** Список платёжных приложений меняется редко — спрашиваем систему раз в десять минут. */
     private fun nfcApps(context: Context): Set<String> {
         val now = SystemClock.elapsedRealtime()
@@ -296,7 +294,7 @@ object PayDebug {
         // Экран оплаты разбирается много раз подряд — одно и то же записываем один раз
         val what = buildString {
             append(result).append('\n').append(pkg)
-            if (text.isNotBlank()) append('\n').append(text.trim().take(200))
+            if (text.isNotBlank()) append('\n').append(com.akira.island.security.redactDiagnosticNumbers(text).trim().take(200))
         }
         if (what == last) return
         last = what

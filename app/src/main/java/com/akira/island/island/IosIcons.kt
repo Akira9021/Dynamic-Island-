@@ -25,8 +25,6 @@ object Ios {
     val remove @Composable get() = ImageVector.vectorResource(R.drawable.ios_remove)
     val download @Composable get() = ImageVector.vectorResource(R.drawable.ios_download)
     val arrowUp @Composable get() = ImageVector.vectorResource(R.drawable.ios_arrow_up)
-    val batteryCharging @Composable get() = ImageVector.vectorResource(R.drawable.ios_battery_charging)
-    val batteryFull @Composable get() = ImageVector.vectorResource(R.drawable.ios_battery_full)
     val call @Composable get() = ImageVector.vectorResource(R.drawable.ios_call)
     val close @Composable get() = ImageVector.vectorResource(R.drawable.ios_close)
     val flash @Composable get() = ImageVector.vectorResource(R.drawable.ios_flash)

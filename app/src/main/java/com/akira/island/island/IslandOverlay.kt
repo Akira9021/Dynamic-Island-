@@ -48,6 +48,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -78,7 +79,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -89,6 +89,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
@@ -111,6 +115,7 @@ import com.akira.island.data.MessageStyle
 import com.akira.island.data.ExpandStyle
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
+import com.akira.island.data.shouldTimeOutIdle
 import com.akira.island.data.TapAction
 import com.akira.island.service.CallMonitor
 import com.akira.island.service.NavScreen
@@ -274,7 +279,7 @@ fun IslandOverlay(
         // «Только при подключении» — зарядка не занимает остров всё время, пока телефон заряжается
         if (s.cardCharging && battery.charging && !s.chargingBrief) persistent += Act.ChargingA(battery)
         if (s.historyMinutes != 0 && inbox.isNotEmpty()) persistent += Act.InboxA(inbox)
-        if (extras.weatherEnabled) weather?.let { persistent += Act.WeatherA(it) }
+        if (extras.weatherEnabled && !extras.briefEnabled) weather?.let { persistent += Act.WeatherA(it) }
         // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь
         val alarm = nextAlarm
         if (s.cardAlarm && alarm != null && alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS) persistent += Act.AlarmA(alarm)
@@ -337,25 +342,44 @@ fun IslandOverlay(
         Controls.collapse()
     }
 
-    // «Скрывать пустую капсулу» не прячет замок экрана блокировки: он виден, пока телефон заблокирован
     val keyguard by IslandBus.keyguard.collectAsState()
-    val hidden = s.hideIdle && primary is Act.Idle && !showExpanded && !calibrating && !(s.evLock && keyguard)
+    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle, showExpanded, calibrating, screenOn, keyguard, shadeOpen)
+    var idleTimedOut by remember { mutableStateOf(false) }
+    var idleWakeRevision by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(autoHideEligible, s.idleHideSec, idleWakeRevision) {
+        idleTimedOut = false
+        if (!autoHideEligible) return@LaunchedEffect
+        val started = SystemClock.elapsedRealtime()
+        val timeout = s.idleHideSec.coerceIn(1, 300) * 1000L
+        // Sleep to the deadline; touches extend it without a polling loop.
+        while (true) {
+            val remaining = timeout - (SystemClock.elapsedRealtime() - maxOf(started, IslandBus.lastTouch))
+            if (remaining <= 0) break
+            delay(remaining)
+        }
+        idleTimedOut = true
+    }
+    val timedHidden = autoHideEligible && idleTimedOut
+    // Explicitly hiding the empty capsule retains its previous non-interactive behavior.
+    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && !showExpanded && !calibrating && !(s.evLock && keyguard)
+    val wakeBounds = remember { mutableStateOf(Rect.Zero) }
 
     // Спрятанный остров не ловит касания, даже пока уходит
     if (hidden) {
         SideEffect {
-            onBodyBounds(Rect.Zero)
+            onBodyBounds(if (timedHidden) wakeBounds.value else Rect.Zero)
             onBubbleBounds(Rect.Zero)
         }
     }
     val hiddenNow = rememberUpdatedState(hidden)
+    val timedHiddenNow = rememberUpdatedState(timedHidden)
 
     // Где остров в окне — вокруг него рисуются эффекты пасхалки
     val body = remember { mutableStateOf(Rect.Zero) }
     val onBody = remember(onBodyBounds) {
         { r: Rect ->
             body.value = r
-            onBodyBounds(if (hiddenNow.value) Rect.Zero else r)
+            onBodyBounds(if (hiddenNow.value) { if (timedHiddenNow.value) wakeBounds.value else Rect.Zero } else r)
         }
     }
     val onBubble = remember(onBubbleBounds) { { r: Rect -> onBubbleBounds(if (hiddenNow.value) Rect.Zero else r) } }
@@ -378,10 +402,35 @@ fun IslandOverlay(
                 IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble)
             }
         }
+        if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
+            wakeBounds.value = r
+            onBodyBounds(r)
+        }) {
+            IslandBus.lastTouch = SystemClock.elapsedRealtime()
+            idleTimedOut = false
+            idleWakeRevision++
+        }
         if (eggOn) {
             EggSparks { body.value }
             EggDriver({ body.value }, s)
         }
+    }
+}
+
+/** Only the area at the camera remains tappable after a timed hide, not the old wide capsule. */
+@Composable
+internal fun CameraWakeTarget(s: IslandSettings, onBounds: (Rect) -> Unit, onWake: () -> Unit) {
+    val label = tr("Показать остров", "Show the island")
+    Box(Modifier.layout { measurable, constraints ->
+        val p = measurable.measure(constraints)
+        val room = ((constraints.maxWidth - s.width.dp.roundToPx() - 2 * ISLAND_PAD_DP.dp.roundToPx()) / 2).coerceAtLeast(0)
+        layout(p.width, p.height) { p.place(s.offsetX.dp.roundToPx().coerceIn(-room, room), 0) }
+    }.padding(ISLAND_PAD_DP.dp)) {
+        Box(Modifier.size(s.width.coerceIn(24, 48).dp, s.height.coerceIn(24, 48).dp)
+            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
+            .testTag("idle-island-wake")
+            .semantics { contentDescription = label }
+            .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = label, onClick = onWake))
     }
 }
 
@@ -815,6 +864,10 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
         Controls.collapse()
         return
     }
+    if (s.tapAction == TapAction.SCROLL_TOP) {
+        perform(context, s.tapAction, act)
+        return
+    }
     when (act) {
         is Act.NoticeA -> {
             // Пока вводят ответ, нажатие по карточке не должно открывать приложение
@@ -847,6 +900,10 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
 }
 
 private fun perform(context: Context, action: TapAction, act: Act) {
+    if (action == TapAction.SCROLL_TOP) {
+        Controls.scrollToTop()
+        return
+    }
     if (act is Act.NoticeA && act.n.message != null) {
         if (IslandBus.locked.value) return
         val message = act.n.message
@@ -871,6 +928,7 @@ private fun perform(context: Context, action: TapAction, act: Act) {
         TapAction.PLAY_PAUSE -> if (hasMedia) Controls.playPause() else Controls.expand(act.id)
         TapAction.NEXT_TRACK -> if (hasMedia) Controls.next() else Controls.expand(act.id)
         TapAction.SCREENSHOT -> Controls.screenshot()
+        TapAction.SCROLL_TOP -> Unit // Handled above, including the idle island and transient cards.
         TapAction.NOTHING -> Unit
         TapAction.DISMISS_NOTIFICATION -> Unit
     }

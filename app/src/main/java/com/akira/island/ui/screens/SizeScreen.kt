@@ -82,7 +82,6 @@ fun SizeScreen(onBack: () -> Unit) {
             action = {
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).background(Ui.Card).clickable {
-                        val d = IslandSettings()
                         set { withPlacement(IslandSettings()) }
                     },
                     contentAlignment = Alignment.Center,
@@ -97,10 +96,9 @@ fun SizeScreen(onBack: () -> Unit) {
                     Pos.First, Icons.Rounded.SwapHoriz, tr("По горизонтали", "Horizontal"), s.offsetX, -200..200,
                     action = tr("Центр", "Center") to { set { copy(offsetX = 0) } }, color = Tile.Blue,
                 ) { v -> set { copy(offsetX = v) } }
-                if (!s.notch) {
-                    GroupStepSlider(Pos.Middle, Icons.Rounded.SwapVert, tr("Отступ сверху", "Top offset"), s.offsetY, -10..120, color = Tile.Indigo) { v ->
-                        set { copy(offsetY = v) }
-                    }
+                GroupStepSlider(Pos.Middle, Icons.Rounded.SwapVert, tr("Отступ сверху", "Top offset"),
+                    if (s.notch) s.notchOffsetY else s.offsetY, if (s.notch) -10..30 else -10..120, color = Tile.Indigo) { v ->
+                    set { if (notch) copy(notchOffsetY = v) else copy(offsetY = v) }
                 }
                 GroupToggle(
                     Pos.Last, Icons.Rounded.WaterDrop, tr("Как вырез", "Like a notch"),
@@ -141,4 +139,5 @@ fun SizeScreen(onBack: () -> Unit) {
 
 /** Всё, что настраивается на этом экране, — из [from]: для «назад» и «Сбросить». */
 private fun IslandSettings.withPlacement(from: IslandSettings) =
-    copy(offsetX = from.offsetX, offsetY = from.offsetY, width = from.width, height = from.height, notch = from.notch)
+    copy(offsetX = from.offsetX, offsetY = from.offsetY, notchOffsetY = from.notchOffsetY,
+        width = from.width, height = from.height, notch = from.notch)

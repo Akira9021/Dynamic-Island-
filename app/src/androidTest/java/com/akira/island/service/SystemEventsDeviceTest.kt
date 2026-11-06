@@ -39,7 +39,8 @@ class SystemEventsDeviceTest {
         fun await(description: String, condition: () -> Boolean) {
             val end = SystemClock.elapsedRealtime() + 30_000
             while (!condition() && SystemClock.elapsedRealtime() < end) SystemClock.sleep(50)
-            assertTrue(description, condition())
+            assertTrue("$description (setting=${Settings.Global.getString(resolver, key)}, " +
+                "observed=${SystemEventObservation.state.value.wirelessDebug})", condition())
         }
         val automation = instrumentation.uiAutomation
         val accessibilityInfo = automation.serviceInfo

@@ -163,7 +163,7 @@ fun UpdateCard(n: Notice, s: IslandSettings, wideWidth: Dp) {
             ) {
                 when {
                     release == null -> IslandBus.notice.value = null
-                    ready != null -> UpdateChecker.install(context.applicationContext, ready)
+                    ready != null -> UpdateChecker.install(context.applicationContext, ready, release)
                     progress == null -> {
                         val app = context.applicationContext
                         IslandBus.scope.launch { UpdateChecker.downloadAndInstall(app, release) }

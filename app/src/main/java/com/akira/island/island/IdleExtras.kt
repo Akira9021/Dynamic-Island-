@@ -30,14 +30,15 @@ fun IdleExtras(s: IslandSettings) {
     val extras by ExtrasRepo.state.collectAsState()
     val locked by IslandBus.locked.collectAsState()
     val steps by com.akira.island.service.StepRepo.count.collectAsState()
-    if (!extras.controls && !extras.steps && !extras.analogClock && extras.apps.isEmpty() && extras.contacts.isEmpty()) return
+    val standaloneInfo = !extras.briefEnabled && (extras.steps || extras.analogClock)
+    if (!extras.controls && !standaloneInfo && extras.apps.isEmpty() && extras.contacts.isEmpty()) return
     fun open(intent: Intent) {
         Controls.collapse()
         runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        if (extras.analogClock) AnalogClock()
-        if (extras.steps && !locked) Text(tr("Шаги сегодня", "Steps today") + ": " + (steps?.toString() ?: "…"), color = Color.White, fontSize = 14.sp)
+        if (extras.analogClock && !extras.briefEnabled) AnalogClock(rememberWallNow(1000), Modifier.fillMaxWidth().height(110.dp))
+        if (extras.steps && !locked && !extras.briefEnabled) Text(tr("Шаги сегодня", "Steps today") + ": " + (steps?.toString() ?: "…"), color = Color.White, fontSize = 14.sp)
         // Shortcuts never bypass the lock screen; Android owns the eventual authentication.
         if (!locked) {
             extras.apps.chunked(3).forEach { row ->
@@ -108,10 +109,9 @@ fun WeatherDetails(weather: WeatherInfo) {
 }
 
 @Composable
-private fun AnalogClock() {
-    val now = rememberWallNow(1000)
+internal fun AnalogClock(now: Long, modifier: Modifier) {
     val calendar = java.util.Calendar.getInstance().apply { timeInMillis = now }
-    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(110.dp)) {
+    androidx.compose.foundation.Canvas(modifier) {
         val radius = size.minDimension / 2 - 6.dp.toPx()
         val middle = center
         drawCircle(Color.White.copy(alpha = 0.15f), radius)

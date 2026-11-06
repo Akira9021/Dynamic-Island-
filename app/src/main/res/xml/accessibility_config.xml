@@ -15,4 +15,5 @@
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
     android:description="@string/a11y_desc"
+    android:settingsActivity="com.akira.island.ui.MainActivity"
     android:notificationTimeout="100" />

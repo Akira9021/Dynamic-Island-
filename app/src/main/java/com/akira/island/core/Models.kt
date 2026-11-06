@@ -72,6 +72,17 @@ data class ProgressInfo(
     val fraction: Float get() = if (max > 0) (progress.toFloat() / max).coerceIn(0f, 1f) else 0f
 }
 
+enum class RecordingKind {
+    VOICE, SCREEN, VIDEO, GENERIC;
+
+    val title: String get() = when (this) {
+        VOICE -> tr("Запись звука", "Audio recording")
+        SCREEN -> tr("Запись экрана", "Screen recording")
+        VIDEO -> tr("Запись видео", "Video recording")
+        GENERIC -> tr("Запись", "Recording")
+    }
+}
+
 data class ChronoInfo(
     val key: String,
     val pkg: String,
@@ -89,9 +100,8 @@ data class ChronoInfo(
     val pause: PendingIntent? = null,
     val resume: PendingIntent? = null,
     val reset: PendingIntent? = null,
-    /** Идёт запись (диктофон, запись экрана) — узнали по приложению и кнопке «Стоп» */
-    val recording: Boolean = false,
-    val screenRecording: Boolean = false,
+    /** Тип записи подтверждён уведомлением источника; заголовок сам по себе не делает таймер диктофоном. */
+    val recordingKind: RecordingKind? = null,
 ) {
     fun elapsed(nowWall: Long): Long = pausedMs ?: if (countDown) (base - nowWall).coerceAtLeast(0) else nowWall - base
 
@@ -107,9 +117,9 @@ data class ChronoInfo(
         const val DONE_MS = 3_000L
     }
 
-    /** Запись экрана или звука — показывается красным. */
-    val isRecording: Boolean
-        get() = recording || title.lowercase().let { t -> "record" in t || "запис" in t || "grava" in t || "rekam" in t }
+    val isRecording: Boolean get() = recordingKind != null
+    val recording: Boolean get() = isRecording
+    val screenRecording: Boolean get() = recordingKind == RecordingKind.SCREEN
 }
 
 /** Звонок из уведомления звонилки: входящий или идущий разговор. */

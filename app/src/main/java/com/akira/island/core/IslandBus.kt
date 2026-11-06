@@ -156,5 +156,5 @@ object IslandBus {
     private fun waitingIsEmpty(): Boolean = queue.isEmpty
 }
 
-/** Команды службе: скриншот без острова, блокировка экрана, выключение острова (для банков). */
-enum class ServiceCommand { SCREENSHOT, LOCK, TURN_OFF }
+/** Команды службе: скриншот без острова, блокировка, выключение и прокрутка по явному жесту. */
+enum class ServiceCommand { SCREENSHOT, LOCK, TURN_OFF, SCROLL_TOP }

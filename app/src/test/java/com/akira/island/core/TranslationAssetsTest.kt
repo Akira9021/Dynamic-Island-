@@ -16,10 +16,10 @@ class TranslationAssetsTest {
 
     @Test
     fun translatedTablesCoverExistingStringsAndPreserveFormatting() {
-        val baseline = Json.parseToJsonElement(File(assets, "pt.json").readText()).jsonObject.keys
-        for (language in listOf("id", "fr", "es")) {
+        val baseline = Json.parseToJsonElement(File(assets, "fr.json").readText()).jsonObject.keys
+        for (language in listOf("id", "pt", "kk", "fr", "es")) {
             val table = Json.parseToJsonElement(File(assets, "$language.json").readText()).jsonObject
-            assertTrue("$language is missing existing strings", table.keys.containsAll(baseline))
+            assertEquals("$language must cover the same strings as the other translations", baseline, table.keys)
             for ((key, value) in table) {
                 val text = value.jsonPrimitive.content
                 assertTrue("$language has an empty translation for $key", text.isNotBlank())
@@ -31,7 +31,10 @@ class TranslationAssetsTest {
     }
 
     @Test
-    fun bothLanguagesAreSelectable() {
+    fun translatedLanguagesAreSelectable() {
+        assertEquals("id", AppLanguage.ID.code)
+        assertEquals("pt", AppLanguage.PT.code)
+        assertEquals("kk", AppLanguage.KK.code)
         assertEquals("fr", AppLanguage.FR.code)
         assertEquals("es", AppLanguage.ES.code)
     }

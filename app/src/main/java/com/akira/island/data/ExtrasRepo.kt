@@ -1,12 +1,24 @@
 package com.akira.island.data
 
 import android.content.Context
+import com.akira.island.core.tr
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable
 data class ContactShortcut(val name: String, val uri: String)
+
+@Serializable
+enum class BriefClockStyle {
+    DIGITAL, SPLIT, ANALOG;
+
+    val title: String get() = when (this) {
+        DIGITAL -> tr("Цифровые", "Digital")
+        SPLIT -> tr("Раздельные цифры", "Split digits")
+        ANALOG -> tr("Аналоговые", "Analog")
+    }
+}
 
 @Serializable
 data class ExtraSettings(
@@ -19,6 +31,8 @@ data class ExtraSettings(
     val weatherCity: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
+    val briefEnabled: Boolean = false,
+    val briefClockStyle: BriefClockStyle = BriefClockStyle.DIGITAL,
 )
 
 /** Optional panel preferences are separate from the island layout migration. */

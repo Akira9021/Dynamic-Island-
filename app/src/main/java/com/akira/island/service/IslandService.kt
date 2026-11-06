@@ -16,6 +16,7 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Display
@@ -29,6 +30,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.geometry.Rect
@@ -40,6 +42,7 @@ import com.akira.island.core.GlassTiltFilter
 import com.akira.island.core.glassTiltFromGravity
 import com.akira.island.core.IslandBus
 import com.akira.island.core.ServiceCommand
+import com.akira.island.core.tr
 import com.akira.island.R
 import com.akira.island.core.LangScope
 import com.akira.island.data.IslandSettings
@@ -93,6 +96,7 @@ class IslandService : AccessibilityService() {
     private var navReader: NavScreenReader? = null
     private var clockReader: ClockScreenReader? = null
     private var payReader: PayScreenReader? = null
+    private var scrollToTop: ScrollToTop? = null
     private var alarmMonitor: AlarmMonitor? = null
     private var screenEvents = false
     private var connected = false
@@ -107,8 +111,7 @@ class IslandService : AccessibilityService() {
     private var wakeBlocked = false
     private var lastScreenOn = true
     private var replySince = 0L
-    private var imePackages: Set<String> = emptySet()
-    private var imeCheckedAt = 0L
+    @Volatile private var imeSnapshot = ImeSnapshot(0L, emptySet())
 
     private var tiltOn = false
     private val tiltFilter = GlassTiltFilter()
@@ -212,6 +215,18 @@ class IslandService : AccessibilityService() {
         navReader = NavScreenReader(this, scope)
         clockReader = ClockScreenReader(this, scope).also { ClockControl.reader = it }
         payReader = PayScreenReader(this, scope)
+        scrollToTop = ScrollToTop(scope, { windows },
+            canRun = { IslandBus.screenOn.value && !IslandBus.locked.value && !IslandBus.keyguard.value &&
+                keyguard?.isKeyguardLocked == false && getSystemService(PowerManager::class.java)?.isInteractive == true },
+            isExcluded = { pkg, cls -> pkg == packageName || pkg == "com.android.systemui" || isKeyboard(pkg, cls) },
+            report = { result ->
+                val message = when (result) {
+                    ScrollTopResult.UNSUPPORTED -> tr("На этом экране нет доступной прокрутки вверх", "No supported upward scroll action on this screen")
+                    ScrollTopResult.LIMIT_REACHED -> tr("Прокрутка остановлена. Повторите жест, чтобы продолжить.", "Scrolling stopped. Repeat the gesture to continue.")
+                    else -> null
+                }
+                if (message != null) Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            })
         alarmMonitor = AlarmMonitor(this).also { runCatching { it.start() } }
         WeatherRepo.start(this, scope)
         IslandBus.serviceRunning.value = display != null && touch != null
@@ -223,13 +238,14 @@ class IslandService : AccessibilityService() {
                 .collect { ringing -> if (!ringing) IslandBus.callHidden.value = false }
         }
 
-        // То, что умеет только служба: скриншот без острова, блокировка экрана, выключение (на время банка)
+        // То, что умеет только служба: скриншот, блокировка, выключение и прокрутка по жесту
         scope.launch {
             IslandBus.commands.collect { cmd ->
                 when (cmd) {
                     ServiceCommand.SCREENSHOT -> screenshotWithoutIsland()
                     ServiceCommand.LOCK -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
                     ServiceCommand.TURN_OFF -> disableSelf()
+                    ServiceCommand.SCROLL_TOP -> scrollToTop?.request()
                 }
             }
         }
@@ -253,13 +269,15 @@ class IslandService : AccessibilityService() {
             IslandBus.screenOn.collect {
                 applyCurrentSettings()
                 if (!it) {
+                    scrollToTop?.cancel()
                     keyguardShown = true
                     PayMonitor.clearReady()
                 }
             }
         }
         // Телефон заблокировали — отвечать с экрана блокировки нельзя
-        scope.launch { IslandBus.locked.collect { if (it) IslandBus.reply.value = null } }
+        scope.launch { IslandBus.locked.collect { if (it) { IslandBus.reply.value = null; scrollToTop?.cancel() } } }
+        scope.launch { IslandBus.keyguard.collect { if (it) scrollToTop?.cancel() } }
 
         // Новая версия на GitHub: проверка сама ограничена разом в 3 часа, здесь только будим её
         scope.launch {
@@ -590,6 +608,7 @@ class IslandService : AccessibilityService() {
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        scrollToTop?.onAccessibilityEvent(event)
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> onWindowsChanged()
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> onWindowState(event)
@@ -718,19 +737,22 @@ class IslandService : AccessibilityService() {
     private fun isKeyboard(pkg: String, cls: String): Boolean {
         if (cls.contains("inputmethod", ignoreCase = true)) return true
         val now = SystemClock.elapsedRealtime()
-        if (now - imeCheckedAt > 60_000) {
-            imeCheckedAt = now
-            imePackages = runCatching {
+        val snapshot = imeSnapshot
+        if (snapshot.checkedAt == 0L || now - snapshot.checkedAt > 60_000) {
+            val packages = runCatching {
                 getSystemService(InputMethodManager::class.java)?.enabledInputMethodList.orEmpty().map { it.packageName }.toSet()
             }.getOrDefault(emptySet())
+            // Accessibility actions also consult this cache from their worker thread.
+            imeSnapshot = ImeSnapshot(now, packages)
         }
-        return pkg in imePackages
+        return pkg in imeSnapshot.packages
     }
 
-    override fun onInterrupt() = Unit
+    override fun onInterrupt() { scrollToTop?.cancel() }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        scrollToTop?.cancel()
         IslandBus.landscape.value = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
     }
 
@@ -753,6 +775,7 @@ class IslandService : AccessibilityService() {
         navReader?.stop()
         clockReader?.stop()
         payReader?.stop()
+        scrollToTop?.cancel()
         ClockControl.reader = null
         alarmMonitor?.stop()
         scope.cancel()
@@ -808,3 +831,6 @@ private fun Rect.snapped() = Rect(floor(left), floor(top), ceil(right), ceil(bot
 
 /** Что определяет, где и виден ли остров: настройки, поворот, экран блокировки. */
 private data class Placement(val s: IslandSettings, val landscape: Boolean, val keyguard: Boolean, val rotation: Int)
+
+/** Immutable cache shared by the service callbacks and the scroll action worker. */
+private data class ImeSnapshot(val checkedAt: Long, val packages: Set<String>)

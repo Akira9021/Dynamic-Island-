@@ -11,12 +11,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
+import com.akira.island.security.openTrustedHttps
+import com.akira.island.security.readUtf8Bounded
 
 /** No location permission: users select the city sent to Open-Meteo. */
 data class WeatherInfo(val city: String, val temperature: Double, val code: Int, val updatedAt: Long) {
@@ -36,20 +37,22 @@ object WeatherRepo {
     val state = MutableStateFlow<WeatherInfo?>(null)
     val error = MutableStateFlow<String?>(null)
     private var coordinateKey: Pair<Double, Double>? = null
+    private data class Query(val enabled: Boolean, val city: String, val latitude: Double, val longitude: Double, val screen: Boolean)
     fun start(context: Context, scope: CoroutineScope) {
         ExtrasRepo.init(context)
         scope.launch {
-            combine(ExtrasRepo.state, IslandBus.screenOn) { s, screen -> s to screen }.collectLatest { (s, screen) ->
+            combine(ExtrasRepo.state, IslandBus.screenOn) { s, screen -> Query(s.weatherEnabled, s.weatherCity, s.latitude, s.longitude, screen) }
+                .distinctUntilChanged().collectLatest { s ->
                 val coordinates = s.latitude to s.longitude
-                state.value = state.value?.takeIf { it.city == s.weatherCity && s.weatherEnabled && coordinateKey == coordinates }
+                state.value = state.value?.takeIf { it.city == s.city && s.enabled && coordinateKey == coordinates }
                 coordinateKey = coordinates
-                if (!s.weatherEnabled || s.weatherCity.isBlank() || !s.latitude.isFinite() || !s.longitude.isFinite() || s.latitude !in -90.0..90.0 || s.longitude !in -180.0..180.0 || !screen) return@collectLatest
+                if (!s.enabled || s.city.isBlank() || !s.latitude.isFinite() || !s.longitude.isFinite() || s.latitude !in -90.0..90.0 || s.longitude !in -180.0..180.0 || !s.screen) return@collectLatest
                 while (true) {
                     try {
                         val old = state.value
                         if (old == null || System.currentTimeMillis() - old.updatedAt !in 0..900_000) {
                             val body = get("https://api.open-meteo.com/v1/forecast?latitude=${s.latitude}&longitude=${s.longitude}&current=temperature_2m,weather_code")
-                            state.value = parse(body, s.weatherCity, System.currentTimeMillis())
+                            state.value = parse(body, s.city, System.currentTimeMillis())
                             error.value = null
                         }
                     } catch (e: CancellationException) { throw e }
@@ -77,12 +80,10 @@ object WeatherRepo {
         }
     }
     private suspend fun get(url: String): String = withContext(Dispatchers.IO) {
-        val c = URL(url).openConnection() as HttpURLConnection
+        val c = openTrustedHttps(url, 7000, 7000, mapOf("User-Agent" to "DynamicIsland/1.7.0"))
         try {
-            c.connectTimeout = 7000; c.readTimeout = 7000
-            c.setRequestProperty("User-Agent", "DynamicIsland/1.7.0")
             check(c.responseCode == 200)
-            c.inputStream.bufferedReader().use { r -> r.readText().also { require(it.length < 1_000_000) } }
+            c.inputStream.use { it.readUtf8Bounded(1_000_000) }
         } finally { c.disconnect() }
     }
 }

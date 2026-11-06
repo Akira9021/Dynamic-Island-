@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.NewReleases
@@ -226,6 +227,11 @@ fun AppInfoScreen(open: (Screen) -> Unit) {
                 onClick = { open(Screen.PAYDIAG) }, color = Tile.Green) { Arrow() }
             AppDetailsItem(Pos.Last)
         }
+
+        SectionHeader(tr("Значок приложения", "App icon"))
+        GroupItem(Pos.Single, Icons.Rounded.Apps, tr("Значок на рабочем столе", "Launcher icon"),
+            tr("Скрыть только после проверки входа через плитку", "Hide only after testing access through the tile"),
+            onClick = { open(Screen.LAUNCHER) }, color = Tile.Purple) { Arrow() }
 
         SectionHeader(tr("Проект", "Project"))
         Group {

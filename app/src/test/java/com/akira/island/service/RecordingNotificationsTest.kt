@@ -2,8 +2,39 @@ package com.akira.island.service
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.akira.island.core.RecordingKind
 
 class RecordingNotificationsTest {
+    @Test fun oemRecorderWithJustTimeAndPauseIsRecognized() {
+        assertEquals(RecordingKind.VOICE, classifyRecording("com.sec.android.app.voicenote", "00:12", "", true, false,
+            hasElapsedTime = true, hasPauseAction = true).kind)
+        assertEquals(RecordingKind.VOICE, classifyRecording("com.miui.soundrecorder", "Диктофон", "00:12", false, false,
+            hasElapsedTime = true, foregroundService = true).kind)
+    }
+    @Test fun cameraAndScreenRecordingsHaveDifferentKinds() {
+        assertEquals(RecordingKind.VIDEO, classifyRecording("com.sec.android.app.camera", "Recording video", "00:12", true, true).kind)
+        assertEquals(RecordingKind.SCREEN, classifyRecording("com.miui.screenrecorder", "Recording video", "00:12", true, true).kind)
+        assertEquals(RecordingKind.VIDEO, classifyRecording("example.camera", "Запись видео", "", true, true).kind)
+    }
+    @Test fun recorderPauseIsNotTreatedAsFinished() {
+        val result = classifyRecording("com.google.android.apps.recorder", "Recording paused", "00:12", true, true, hasResumeAction = true)
+        assertEquals(RecordingKind.VOICE, result.kind); assertTrue(result.paused)
+    }
+    @Test fun finishedRecordingsAndSavingWorkAreNotLiveRecording() {
+        assertFalse(classifyRecording("com.miui.soundrecorder", "Recording saved", "00:12", true, true, hasElapsedTime = true).recording)
+        assertFalse(classifyRecording("com.miui.screenrecorder", "Saving recording", "00:12", true, true, hasElapsedTime = true).recording)
+        assertFalse(classifyRecording("com.android.camera", "Processing video", "", true, true, hasProgress = true).recording)
+    }
+    @Test fun systemUiTimersAndFileTransfersAreNotScreenRecordings() {
+        assertFalse(classifyRecording("com.android.systemui", "Timer", "00:12", true, true, hasElapsedTime = true).recording)
+        assertFalse(classifyRecording("com.miui.soundrecorder", "Uploading recording", "00:12", true, true, hasProgress = true).recording)
+        assertFalse(classifyRecording("example.download", "Downloading video recording", "", true, true, hasProgress = true).recording)
+    }
+    @Test fun unknownRecorderUsesANeutralSymbolRatherThanGuessingAudio() {
+        assertEquals(RecordingKind.GENERIC, classifyRecording("example.recorder", "Recording", "", true, true).kind)
+        assertEquals(RecordingKind.VOICE, classifyRecording("example.recorder", "Audio recording", "00:12", true, false,
+            hasElapsedTime = true).kind)
+    }
     @Test fun tapToStopSystemRecorderNeedsNoActionButtons() {
         val match = classifyRecording("com.android.systemui", "Tap here to stop recording.", "00:01", true, false)
         assertTrue(match.recording); assertTrue(match.screen); assertTrue(match.stopOnTap)

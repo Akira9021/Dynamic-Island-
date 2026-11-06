@@ -1,6 +1,7 @@
 package com.akira.island.core
 
 import com.akira.island.service.CallMonitor
+import com.akira.island.data.LauncherVisibility
 
 import android.app.ActivityOptions
 import android.app.NotificationManager
@@ -113,7 +114,8 @@ object Controls {
     // Прочее
 
     fun openApp(context: Context, pkg: String) {
-        val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return
+        val intent = if (pkg == context.packageName) LauncherVisibility.settingsIntent(context)
+            else context.packageManager.getLaunchIntentForPackage(pkg) ?: return
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         runCatching { context.startActivity(intent) }
         collapse()
@@ -203,6 +205,11 @@ object Controls {
     /** Скриншот без острова — остров на миг прячется, снимок делает Android (9+) */
     fun screenshot() {
         IslandBus.commands.tryEmit(ServiceCommand.SCREENSHOT)
+    }
+
+    /** Only a configured, explicit island gesture requests scrolling in the current app. */
+    fun scrollToTop() {
+        IslandBus.commands.tryEmit(ServiceCommand.SCROLL_TOP)
     }
 
     fun lockScreen() {

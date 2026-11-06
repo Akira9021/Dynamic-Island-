@@ -118,7 +118,7 @@ fun UpdateSection() {
                         "If the installer didn't open, allow the island to install apps and tap Install again."),
                     color = Ui.Sub, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 10.dp),
                 )
-                FilledPill(tr("Установить", "Install")) { UpdateChecker.install(context, ready) }
+                FilledPill(tr("Установить", "Install")) { UpdateChecker.install(context, ready, release) }
             }
             else -> {
                 if (d is DownloadState.Failed) {

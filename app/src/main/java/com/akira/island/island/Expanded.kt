@@ -72,6 +72,7 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.HeartBroken
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.State
@@ -99,12 +100,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.BatteryInfo
 import com.akira.island.core.CallInfo
 import com.akira.island.core.ChronoInfo
+import com.akira.island.core.RecordingKind
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Lang
@@ -621,27 +625,44 @@ private fun TorchCard(t: TorchState, s: IslandSettings) {
     }
 }
 
-/** Таймер или секундомер из Часов, звонок по VoIP и запись экрана или звука — запись красной волной и кнопкой «стоп». */
+/** Таймеры Часов и подтверждённая запись: звуковая волна только у диктофона. */
 @Composable
 private fun ChronoExpanded(c: ChronoInfo, s: IslandSettings) {
     val context = LocalContext.current
     if (c.isRecording) {
         val now = rememberWallNow(1_000, active = c.pausedMs == null)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RecordingWave(Modifier.weight(1f).height(22.dp), !s.reduceEffects && c.pausedMs == null)
-            Spacer(Modifier.width(14.dp))
-            Text(formatDuration(c.elapsed(now)), color = Tints.Red, fontSize = 22.sp, style = Digits)
-            Spacer(Modifier.width(14.dp))
-            // Белое кольцо с красным квадратом — как кнопка «стоп» диктофона на iPhone
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .border(3.dp, Color.White, CircleShape)
-                    .clickable { if (!Controls.send(context, c.stop)) Controls.openApp(context, c.pkg) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Tints.Red))
+        val kind = c.recordingKind!!
+        Column {
+            Text(if (c.pausedMs != null) "${kind.title} · ${tr("Пауза", "Paused")}" else kind.title,
+                color = Tints.Gray, fontSize = 14.sp, modifier = Modifier.clickable { Controls.openApp(context, c.pkg) })
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (kind == RecordingKind.VOICE) {
+                    RecordingWave(Modifier.weight(1f).height(22.dp).semantics { contentDescription = kind.title }, !s.reduceEffects && c.pausedMs == null)
+                } else {
+                    Icon(kind.icon, kind.title, tint = Tints.Red, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.weight(1f))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(formatDuration(c.elapsed(now)), color = Tints.Red, fontSize = 22.sp, style = Digits,
+                    maxLines = 1, softWrap = false)
+                Spacer(Modifier.width(12.dp))
+                if (c.stop != null) {
+                    val label = tr("Остановить запись", "Stop recording")
+                    Box(Modifier.size(44.dp).clip(CircleShape).border(3.dp, Color.White, CircleShape)
+                        .semantics { contentDescription = label }
+                        .clickable {
+                            if (!Controls.send(context, c.stop)) android.widget.Toast.makeText(context,
+                                tr("Не удалось остановить запись", "Couldn't stop recording"), android.widget.Toast.LENGTH_SHORT).show()
+                        }, contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Tints.Red))
+                    }
+                } else {
+                    val label = tr("Открыть приложение", "Open app")
+                    RoundButton(Icons.Rounded.OpenInNew, modifier = Modifier.semantics { contentDescription = label }) {
+                        Controls.openApp(context, c.pkg)
+                    }
+                }
             }
         }
         return
@@ -794,6 +815,8 @@ private fun LiveExpanded(l: LiveInfo) {
 @Composable
 private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
     val context = LocalContext.current
+    val extras by com.akira.island.data.ExtrasRepo.state.collectAsState()
+    val locked by IslandBus.locked.collectAsState()
     val now = rememberWallNow(1000)
     val time = DateFormat.getTimeFormat(context).format(Date(now))
     // «Пятница, 24 октября» или «Friday, October 24» — на языке острова
@@ -806,7 +829,9 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
         .replaceFirstChar { it.titlecase(Lang.locale) }
     val alarm by IslandBus.nextAlarm.collectAsState()
     Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (extras.briefEnabled) {
+            BriefPanel(s, extras, battery, now, time, date, alarm)
+        } else Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(clockText(time, 36.sp), color = Color.White, fontSize = 36.sp, style = Digits)
                 Text(date, color = Dim, fontSize = 14.sp)
@@ -845,7 +870,7 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                 modifier = Modifier.padding(top = 8.dp))
         }
         IdleExtras(s)
-        val actions = s.quickActions
+        val actions = if (extras.briefEnabled && locked) emptyList() else s.quickActions
         if (actions.isEmpty()) return@Column
         Spacer(Modifier.height(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

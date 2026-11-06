@@ -53,6 +53,7 @@ enum class TapAction(private val ru: String, private val en: String) {
     SCREENSHOT("Скриншот без острова", "Screenshot without the island"),
     NOTHING("Ничего", "Nothing"),
     DISMISS_NOTIFICATION("Удалить уведомление", "Dismiss notification"),
+    SCROLL_TOP("Прокрутить наверх", "Scroll to top"),
     ;
 
     val title: String get() = tr(ru, en)
@@ -103,7 +104,7 @@ enum class BubbleSide(private val ru: String, private val en: String) {
 enum class MessageStyle(private val ru: String, private val en: String, private val hintRu: String, private val hintEn: String) {
     CARD("Карточка", "Card", "Остров раскрывается сверху: аватар, текст и кнопки", "The island opens from the top: avatar, text and buttons"),
     PILL("Пилюля", "Pill", "Небольшая капсула у камеры: имя и одна строка текста", "A small capsule at the camera: the name and one line of text"),
-    ICON("Только значок", "Icon only", "Значок приложения и число уведомлений; нажатие раскрывает сообщение", "App icon and notification count; tap to read the message"),
+    ICON("Компактный счётчик", "Compact count", "Без текста у камеры; считает текущее уведомление и историю острова. Нажмите, чтобы прочитать", "No text around the camera; counts the current notification and island history. Tap to read"),
     ;
 
     val title: String get() = tr(ru, en)
@@ -152,6 +153,16 @@ enum class AppRule { ALWAYS, NEVER }
 @Serializable
 enum class MessageIconMode(private val ru: String, private val en: String) {
     DEFAULT("Аватар", "Avatar"), APP("Значок приложения", "App icon"), NONE("Без значка", "No icon");
+    val title: String get() = tr(ru, en)
+}
+
+@Serializable
+enum class MessageIconPosition(private val ru: String, private val en: String) {
+    LEFT("Слева", "On the left"),
+    CENTER("По центру под камерой", "Centered below the camera"),
+    RIGHT("Справа", "On the right"),
+    ;
+
     val title: String get() = tr(ru, en)
 }
 
@@ -238,6 +249,8 @@ data class IslandSettings(
     val height: Int = 31,
     val offsetX: Int = 0,
     val offsetY: Int = 11,
+    /** Independent edge trim for waterdrop cutouts; old notch placements retain their zero offset. */
+    val notchOffsetY: Int = 0,
     /**
      * «Как вырез»: остров прилегает к верхнему краю экрана, верх у него прямой — для телефонов с каплей
      * (waterdrop): капсула закрывает вырез и растёт из него вниз. Отступ сверху тогда не нужен.
@@ -285,7 +298,7 @@ data class IslandSettings(
      * «Жидкое раскрытие» («Оформление»): содержимое растёт вместе с островом и проявляется из размытия.
      * Длительность и упругость те же, что без него. Выключено — прежнее перетекание
      */
-    val liquidExpand: Boolean = false,
+    val liquidExpand: Boolean = true,
     /** Слабая упругость: с сильной остров, как писали в комментариях, слишком «прыгает» */
     val elasticity: Elasticity = Elasticity.LOW,
     val reduceEffects: Boolean = false,
@@ -319,6 +332,8 @@ data class IslandSettings(
 
     // Поведение
     val hideIdle: Boolean = false,
+    /** Hide an inactive empty capsule after this many seconds; 0 disables the timer. */
+    val idleHideSec: Int = 0,
     val hideInLandscape: Boolean = true,
     val hideWhenPlayerOpen: Boolean = true,
     /** «По расписанию»: остров виден только с [scheduleFrom] до [scheduleTo] часов (можно через полночь) */
@@ -424,13 +439,24 @@ data class IslandSettings(
 
     val bottomGradient: Int = 0,
     val messageIconMode: MessageIconMode = MessageIconMode.DEFAULT,
+    /** Kept for settings saved before the three-position choice was added. */
     val messageIconRight: Boolean = false,
+    /** Null inherits the saved left/right choice without changing existing notification layouts. */
+    val messageIconPosition: MessageIconPosition? = null,
     val batteryPercentOnly: Boolean = false,
     val liveBanner: Boolean = true,
     val actionColorEnabled: Boolean = false,
     val actionColor: Long = 0xFFC6C3F7,
 
 ) {
+    val notificationIconPosition: MessageIconPosition
+        get() = messageIconPosition ?: if (messageIconRight) MessageIconPosition.RIGHT else MessageIconPosition.LEFT
+
+    fun withMessageIconPosition(position: MessageIconPosition): IslandSettings = copy(
+        messageIconPosition = position,
+        messageIconRight = position == MessageIconPosition.RIGHT,
+    )
+
     /** С «Экономией заряда» в энергосбережении Android — как с «Уменьшить эффекты» */
     fun forPowerSave(on: Boolean): IslandSettings = if (on && batterySaver && !reduceEffects) copy(reduceEffects = true) else this
 
@@ -442,7 +468,7 @@ data class IslandSettings(
     }
 
     /** Отступ острова сверху: у «Как вырез» остров начинается от самого края экрана */
-    val topOffset: Int get() = if (notch) 0 else offsetY
+    val topOffset: Int get() = if (notch) notchOffsetY.coerceIn(-10, 30) else offsetY
 
     /** Пляшет ли эквалайзер */
     val liveEqualizer: Boolean get() = fxEqualizer && !reduceEffects

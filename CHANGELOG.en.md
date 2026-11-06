@@ -8,6 +8,17 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Recording, settings and security review — test branch, 2026-11-06
+- Liquid expansion defaults to on; an explicitly saved off preference is preserved.
+- Voice, screen and camera video recording have distinct presentation. Fixed foreground recording detection, pause/resume and elapsed time; Stop requires a real action supplied by the recording app.
+- Optional idle timeout with tap-to-restore, independent notch top offset, centered notification icons and compact notification count.
+- Extra controls now offer a default-off Brief panel with three clock styles, steps and weather. A scroll-to-top gesture works with apps that expose suitable accessibility actions.
+- Hide the launcher icon after testing settings access through the tile; removing the tile restores the icon. Settings explain launcher limitations.
+- Completed Portuguese and Kazakh and translated new labels into all supported languages. Live previews and the overall app style remain intact.
+- Reused media controllers and hardware artwork, avoided unrelated step/weather restarts, and removed confirmed unused code.
+- Hardened update signatures and URLs, bounded network reads and partial-download cleanup. Private data is excluded from backup; installing an update over the app retains local data.
+- Validation and remaining limitations: [test build maintenance](docs/maintenance-1.7.0/README.md), [local security review](docs/security-1.7.0/README.md). No public release is published.
+
 ### Test build improvements — 2026-11-05
 - Restored concise notifications without Open, Dismiss and Collapse buttons. Reply and Mark as read remain, long actions wrap, and dismissal is available as a configurable gesture.
 - Single-line player timestamps and a timer picker that fits narrow cards. An expanded paused player stays available until closed.

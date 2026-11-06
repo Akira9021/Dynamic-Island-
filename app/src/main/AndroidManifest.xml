@@ -68,7 +68,10 @@
 
     <application
         android:name=".IslandApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:usesCleartextTraffic="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -78,12 +81,26 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:taskAffinity=""
             android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Hide only this alias. MainActivity remains enabled for the tile and Android settings. -->
+        <activity-alias
+            android:name=".Launcher"
+            android:enabled="true"
+            android:exported="true"
+            android:targetActivity=".ui.MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- «Поставь таймер» от помощника или виджета: если выбрать остров, таймер сразу в нём.
          Как у «Часов» Android: позвать его могут только приложения с правом ставить будильники и таймеры -->

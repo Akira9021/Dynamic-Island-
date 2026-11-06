@@ -44,14 +44,12 @@ fun BanksScreen(onBack: () -> Unit) {
             "Your bank says it detected a third-party app or accessibility service?")) {
         InfoText(
             tr(
-                "Так банки защищаются от мошенников: пока включена любая служба спец. возможностей не из Play Маркета, " +
-                    "они не пускают. Остров ничего не читает в банке, но проверку обойти нельзя — только выключить " +
-                    "остров на время. Проще всего — плиткой в шторке: нажали — остров выключился, можно в банк; " +
-                    "нажали ещё раз — включаете обратно.",
-                "Banks do this to protect against fraud: while any accessibility service not from Google Play is on, " +
-                    "they won't let you in. The island reads nothing in your bank, but there's no way around the check — " +
-                    "only turning the island off for a while. The easiest way is a tile in quick settings: tap it — the " +
-                    "island turns off and you can use the bank; tap it again to turn the island back on.",
+                "Некоторые банки ограничивают работу, пока включена служба спец. возможностей. " +
+                    "Остров не обходит эту проверку — его нужно выключить на время. Проще всего плиткой в быстрых настройках: " +
+                    "нажмите, чтобы выключить остров и открыть банк; нажмите ещё раз, чтобы вернуться к включению острова.",
+                "Some banks restrict access while an accessibility service is enabled. " +
+                    "The island cannot bypass this check — turn it off temporarily. The easiest way is the quick settings tile: " +
+                    "tap it to turn the island off and open your bank; tap it again to return to enabling the island.",
             ),
         )
         Group {

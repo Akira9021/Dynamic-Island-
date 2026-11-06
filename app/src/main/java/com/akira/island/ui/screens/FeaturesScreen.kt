@@ -4,19 +4,9 @@ import com.akira.island.data.*
 import com.akira.island.island.PreviewScene
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Circle
@@ -49,16 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.akira.island.core.Lang
-import com.akira.island.core.Tints
 import com.akira.island.core.tr
 import com.akira.island.core.trf
 import com.akira.island.data.AccentMode
@@ -77,11 +58,7 @@ import com.akira.island.data.LockScreenMode
 import com.akira.island.data.MessageIconMode
 import com.akira.island.data.MessageStyle
 import com.akira.island.data.AppLanguage
-import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
-import com.akira.island.island.FitText
-import com.akira.island.island.onAccent
-import com.akira.island.island.resolveAccent
 import com.akira.island.ui.ChoiceDialog
 import com.akira.island.ui.Group
 import com.akira.island.ui.GroupItem
@@ -191,6 +168,7 @@ fun BehaviorScreen(onBack: () -> Unit) {
     var landscapeDialog by remember { mutableStateOf(false) }
     var lockDialog by remember { mutableStateOf(false) }
     var emptyDialog by remember { mutableStateOf(false) }
+    var idleHideDialog by remember { mutableStateOf(false) }
     var sourceDialog by remember { mutableStateOf(false) }
     var sideDialog by remember { mutableStateOf(false) }
 
@@ -206,6 +184,8 @@ fun BehaviorScreen(onBack: () -> Unit) {
         Group {
             GroupItem(Pos.First, Icons.Rounded.Schedule, tr("Когда нет активностей", "When no activities are active"),
                 emptyLabel(s.emptyCapsule), color = Tile.Blue, onClick = { previewScene = PreviewScene.IDLE; emptyDialog = true })
+            if (!s.hideIdle) GroupItem(Pos.Middle, Icons.Rounded.Timelapse, tr("Автоскрытие пустого острова", "Auto-hide the idle island"),
+                idleHideLabel(s.idleHideSec), color = Tile.Indigo, onClick = { idleHideDialog = true })
             // В играх и видео: спрятать, оставить над камерой (как на iPhone) или посередине сверху
             GroupItem(Pos.Middle, Icons.Rounded.ScreenRotation, tr("В альбомной ориентации", "In landscape"),
                 "${s.landscape.title} — ${s.landscape.hint}", color = Tile.Gray, onClick = { landscapeDialog = true })
@@ -300,6 +280,10 @@ fun BehaviorScreen(onBack: () -> Unit) {
         ChoiceDialog(tr("Сворачивать раскрытый остров", "Collapse the expanded island"), listOf(0, 5, 10, 20, 30), s.autoCollapseSec, ::collapseLabel,
             { v -> SettingsRepo.update { copy(autoCollapseSec = v) } }) { collapseDialog = false }
     }
+    if (idleHideDialog) {
+        ChoiceDialog(tr("Автоскрытие пустого острова", "Auto-hide the idle island"), listOf(0, 5, 10, 20, 30, 60), s.idleHideSec, ::idleHideLabel,
+            { v -> SettingsRepo.update { copy(idleHideSec = v) } }) { idleHideDialog = false }
+    }
     if (landscapeDialog) {
         ChoiceDialog(tr("В альбомной ориентации", "In landscape"), LandscapeMode.entries, s.landscape, { "${it.title} — ${it.hint}" },
             { v -> SettingsRepo.update { copy(landscape = v) } }) { landscapeDialog = false }
@@ -313,6 +297,9 @@ fun BehaviorScreen(onBack: () -> Unit) {
             { v -> SettingsRepo.update { copy(bubbleSide = v) } }) { sideDialog = false }
     }
 }
+
+private fun idleHideLabel(seconds: Int): String = if (seconds <= 0) tr("Не скрывать по таймеру", "No timed hiding")
+else trf("Через {0} с; нажатие у камеры возвращает остров", "After {0} s; tap at the camera to restore", seconds)
 
 /** «Язык» на текущем языке и рядом по-английски — язык найдётся, даже если сейчас он непонятен. */
 private fun languageTitle(): String = when (Lang.code) {
@@ -345,6 +332,7 @@ fun NotificationsScreen(onBack: () -> Unit, open: (Screen) -> Unit) {
     var timeDialog by remember { mutableStateOf(false) }
     var historyDialog by remember { mutableStateOf(false) }
     var iconDialog by remember { mutableStateOf(false) }
+    var iconPositionDialog by remember { mutableStateOf(false) }
 
     Page(tr("Уведомления", "Notifications"), onBack, preview = {
         SettingsPreview(card = s.messageStyle == MessageStyle.CARD, scene = PreviewScene.MESSAGE, notificationStyle = true)
@@ -386,9 +374,9 @@ fun NotificationsScreen(onBack: () -> Unit, open: (Screen) -> Unit) {
         Group {
             GroupItem(Pos.First, Icons.Rounded.ChatBubble, tr("Вид значка", "Icon style"), s.messageIconMode.title,
                 color = Tile.Blue, onClick = { iconDialog = true })
-            GroupToggle(Pos.Last, Icons.Rounded.AlignHorizontalRight, tr("Значок справа", "Icon on the right"),
-                tr("Меняет сторону значка в карточке и пилюле", "Move the icon to the other side in the card and pill"),
-                s.messageIconRight, color = Tile.Purple) { v -> SettingsRepo.update { copy(messageIconRight = v) } }
+            GroupItem(Pos.Last, Icons.Rounded.AlignHorizontalRight, tr("Положение значка", "Icon position"),
+                "${s.notificationIconPosition.title} · ${tr("В карточке и пилюле", "In cards and pills")}",
+                color = Tile.Purple, onClick = { iconPositionDialog = true })
         }
 
         SectionHeader(tr("Какие приложения", "Which apps"))
@@ -416,6 +404,10 @@ fun NotificationsScreen(onBack: () -> Unit, open: (Screen) -> Unit) {
     if (iconDialog) {
         ChoiceDialog(tr("Вид значка", "Icon style"), MessageIconMode.entries, s.messageIconMode, { it.title },
             { v -> SettingsRepo.update { copy(messageIconMode = v) } }) { iconDialog = false }
+    }
+    if (iconPositionDialog) {
+        ChoiceDialog(tr("Положение значка", "Icon position"), MessageIconPosition.entries, s.notificationIconPosition, { it.title },
+            { v -> SettingsRepo.update { withMessageIconPosition(v) } }) { iconPositionDialog = false }
     }
     if (accentDialog) {
         ChoiceDialog(tr("Цвет кнопок", "Button color"), AccentMode.entries, s.accentMode, { "${it.title} — ${it.hint}" },

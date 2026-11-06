@@ -18,6 +18,11 @@ import com.akira.island.island.Ios
 import com.akira.island.island.releaseHighlights
 import com.akira.island.service.NotificationParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -29,8 +34,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
+import com.akira.island.security.copyBoundedTo
+import com.akira.island.security.readUtf8Bounded
+import com.akira.island.security.openTrustedHttps
 
 /** Новая версия на GitHub: номер, что изменилось и откуда скачать APK. */
 data class Release(
@@ -70,6 +76,7 @@ object UpdateChecker {
 
     /** О какой версии остров уже сообщил плашкой — чтобы не повторять каждые 3 часа */
     private var announced: String? = null
+    private var installation: Job? = null
 
     fun currentVersion(context: Context): String = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
@@ -87,7 +94,12 @@ object UpdateChecker {
         if (!force && (!s.autoUpdateCheck || now - s.lastUpdateCheck < CHECK_EVERY_MS)) return
         if (state.value is UpdateState.Checking) return
         state.value = UpdateState.Checking
-        val result = runCatching { withContext(Dispatchers.IO) { fetchLatest() } }
+        val result = try {
+            Result.success(withContext(Dispatchers.IO) { fetchLatest() })
+        } catch (cancel: CancellationException) {
+            state.value = UpdateState.Idle
+            throw cancel
+        } catch (error: Exception) { Result.failure(error) }
         // Без связи проверка не считается: повторим при следующей возможности, а не через 3 часа
         if (result.isSuccess) SettingsRepo.update { copy(lastUpdateCheck = now) }
         val release = result.getOrNull()
@@ -192,29 +204,27 @@ object UpdateChecker {
         }
         if (download.value is DownloadState.Running) return
         download.value = DownloadState.Running(0f)
-        val result = runCatching {
-            withContext(Dispatchers.IO) {
+        val result = try {
+            val downloaded = withContext(Dispatchers.IO) {
+                require(UpdateDownloadPolicy.isReleaseAssetUrl(url))
+                require(release.sizeBytes in 0..UpdateDownloadPolicy.MAX_APK_BYTES)
+                val job = currentCoroutineContext()
                 val dir = File(context.cacheDir, "update").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
                 val file = File(dir, apkName(release.version))
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15_000
-                    readTimeout = 30_000
-                    setRequestProperty("User-Agent", "DynamicIsland-Android")
-                }
+                val partial = File(dir, file.name + ".part")
+                val conn = openTrustedHttps(url, 15_000, 30_000,
+                    mapOf("User-Agent" to "DynamicIsland-Android"), UpdateDownloadPolicy::isDownloadHop)
                 try {
                     if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode}")
                     val total = conn.contentLengthLong.takeIf { it > 0 } ?: release.sizeBytes
-                    var done = 0L
+                    require(total in 0..UpdateDownloadPolicy.MAX_APK_BYTES)
+                    if (release.sizeBytes > 0 && total > 0) require(total == release.sizeBytes)
                     conn.inputStream.use { input ->
-                        file.outputStream().use { out ->
-                            val buf = ByteArray(64 * 1024)
+                        partial.outputStream().use { out ->
                             var lastShown = -1
-                            while (true) {
-                                val n = input.read(buf)
-                                if (n < 0) break
-                                out.write(buf, 0, n)
-                                done += n
+                            input.copyBoundedTo(out, UpdateDownloadPolicy.MAX_APK_BYTES, total) { done ->
+                                job.ensureActive()
                                 if (total > 0) {
                                     val percent = (done * 100 / total).toInt()
                                     if (percent != lastShown) {
@@ -225,20 +235,20 @@ object UpdateChecker {
                             }
                         }
                     }
-                    // Связь оборвалась посреди файла — недокачанный APK установка не примет
-                    if (total > 0 && done < total) error(trf("Скачано {0} из {1} байт", "Downloaded {0} of {1} bytes", done, total))
+                    job.ensureActive()
+                    check(trustedUpdate(context, partial, release.version))
+                    check(partial.renameTo(file))
+                    file
                 } finally {
                     conn.disconnect()
+                    partial.delete()
                 }
-                // Ставим только сам остров: файл с другим приложением внутри не открываем.
-                // Подпись проверит установка Android — чужой ключ поверх острова она не поставит
-                if (context.packageManager.getPackageArchiveInfo(file.path, 0)?.packageName != context.packageName) {
-                    file.delete()
-                    error(tr("Файл обновления повреждён", "The update file is damaged"))
-                }
-                file
             }
-        }
+            Result.success(downloaded)
+        } catch (cancel: CancellationException) {
+            download.value = DownloadState.Idle
+            throw cancel
+        } catch (error: Exception) { Result.failure(error) }
         val file = result.getOrNull()
         if (file == null) {
             download.value = DownloadState.Failed(tr("Не удалось скачать. Проверьте интернет и попробуйте ещё раз.",
@@ -246,43 +256,50 @@ object UpdateChecker {
             return
         }
         download.value = DownloadState.Ready(file)
-        install(context, file)
+        install(context, file, release)
     }
 
     /**
      * Открывает системную установку. Если приложению ещё не разрешена установка из неизвестных
      * источников, сначала открываются нужные настройки — после разрешения нажмите «Установить» снова.
      */
-    fun install(context: Context, file: File) {
-        runCatching {
-            if (!context.packageManager.canRequestPackageInstalls()) {
+    fun install(context: Context, file: File, release: Release) {
+        if (installation?.isActive == true) return
+        installation = IslandBus.scope.launch {
+            try {
+                val verified = withContext(Dispatchers.IO) {
+                    file.canonicalFile.parentFile == File(context.cacheDir, "update").canonicalFile &&
+                        readyFile(release, DownloadState.Ready(file)) != null &&
+                        trustedUpdate(context, file, release.version)
+                }
+                check(verified)
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    context.startActivity(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    return@launch
+                }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                 context.startActivity(
-                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
-                return
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) {
+                download.value = DownloadState.Failed(tr("Не удалось открыть установку", "Couldn't open the installer"))
             }
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(uri, "application/vnd.android.package-archive")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
         }
     }
 
     private fun fetchLatest(): Release? {
-        val conn = (URL("https://api.github.com/repos/$REPO/releases/latest").openConnection() as HttpURLConnection).apply {
-            connectTimeout = 10_000
-            readTimeout = 15_000
-            setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("User-Agent", "DynamicIsland-Android")
-        }
+        val conn = openTrustedHttps("https://api.github.com/repos/$REPO/releases/latest", 10_000, 15_000,
+            mapOf("Accept" to "application/vnd.github+json", "User-Agent" to "DynamicIsland-Android"))
         try {
             // Релизов ещё нет
             if (conn.responseCode == 404) return null
             if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode}")
-            return parseRelease(conn.inputStream.bufferedReader().use { it.readText() })
+            return parseRelease(conn.inputStream.use { it.readUtf8Bounded(1_000_000) })
         } finally {
             conn.disconnect()
         }
@@ -294,7 +311,9 @@ object UpdateChecker {
         val tag = o["tag_name"]?.jsonPrimitive?.contentOrNull ?: return null
         val apk: JsonObject? = o["assets"]?.jsonArray?.map { it.jsonObject }?.firstOrNull { a ->
             val name = a["name"]?.jsonPrimitive?.contentOrNull.orEmpty().lowercase()
-            name.endsWith(".apk") && "debug" !in name
+            val url = a["browser_download_url"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val size = a["size"]?.jsonPrimitive?.longOrNull ?: 0
+            name.endsWith(".apk") && "debug" !in name && UpdateDownloadPolicy.isReleaseAssetUrl(url) && size in 0..UpdateDownloadPolicy.MAX_APK_BYTES
         }
         return Release(
             version = tag.removePrefix("v").removePrefix("V"),

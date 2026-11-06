@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.akira.island.core.tr
+import com.akira.island.data.BriefClockStyle
 import com.akira.island.data.ContactShortcut
 import com.akira.island.data.ExtrasRepo
 import com.akira.island.service.WeatherCity
@@ -36,6 +37,7 @@ fun ExtrasScreen(onBack: () -> Unit) {
     var cities by remember { mutableStateOf<List<WeatherCity>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var clockStyle by remember { mutableStateOf(false) }
     val stepPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         ExtrasRepo.update { copy(steps = granted) }
     }
@@ -50,11 +52,20 @@ fun ExtrasScreen(onBack: () -> Unit) {
         }
     }
     Page(tr("Дополнительная панель", "Extra controls"), onBack) {
+        GroupToggle(Pos.Single, Icons.Rounded.Dashboard, tr("Сводка", "Brief"),
+            tr("Часы, шаги и погода на трёх страницах раскрытого пустого острова", "Clock, steps and weather on three pages of the expanded idle island"),
+            s.briefEnabled, color = Tile.Purple) { ExtrasRepo.update { copy(briefEnabled = it) } }
+        if (s.briefEnabled) {
+            GroupItem(Pos.Single, Icons.Rounded.Schedule, tr("Стиль часов", "Clock style"), s.briefClockStyle.title,
+                color = Tile.Purple, onClick = { clockStyle = true })
+            SettingsHint(tr("Сводка использует включённый шагомер и погоду выбранного города. Ярлыки и управление остаются ниже. Шаги, погода и ярлыки скрыты до разблокировки.",
+                "Brief uses your enabled step counter and selected city's weather. Shortcuts and controls stay below. Steps, weather and shortcuts are hidden until unlocked."))
+        }
         GroupToggle(Pos.Single, Icons.Rounded.Tune, tr("Элементы управления", "Controls"),
             tr("Громкость, яркость и журнал звонков в раскрытом пустом острове", "Volume, brightness and call history in the expanded idle island"), s.controls, color = Tile.Indigo) {
             ExtrasRepo.update { copy(controls = it) }
         }
-        GroupToggle(Pos.Single, Icons.Rounded.Schedule, tr("Аналоговые часы", "Analog clock"),
+        if (!s.briefEnabled) GroupToggle(Pos.Single, Icons.Rounded.Schedule, tr("Аналоговые часы", "Analog clock"),
             tr("Циферблат в раскрытом пустом острове", "Clock face in the expanded idle island"), s.analogClock, color = Tile.Purple) { ExtrasRepo.update { copy(analogClock = it) } }
         GroupToggle(Pos.Single, Icons.Rounded.DirectionsWalk, tr("Шагомер", "Step counter"),
             tr("Шаги за день с момента включения; нужен датчик шагов", "Daily steps since enabling; requires a step sensor"), s.steps, color = Tile.Green) { enabled ->
@@ -85,10 +96,11 @@ fun ExtrasScreen(onBack: () -> Unit) {
                 tr("Приложения и контакты доступны после раскрытия пустого острова. Контакты скрыты на экране блокировки.", "Apps and contacts appear in the expanded idle island. Contacts are hidden on the lock screen."))
         }
         SectionHeader(tr("Погода", "Weather"))
-        GroupToggle(Pos.Single, Icons.Rounded.Cloud, tr("Карточка погоды", "Weather card"),
+        GroupToggle(Pos.Single, Icons.Rounded.Cloud, if (s.briefEnabled) tr("Погода в сводке", "Weather in Brief") else tr("Карточка погоды", "Weather card"),
             s.weatherCity.ifBlank { tr("Сначала выберите город", "Choose a city first") }, s.weatherEnabled, color = Tile.Teal) {
             ExtrasRepo.update { copy(weatherEnabled = it && weatherCity.isNotBlank()) }
         }
+        if (s.briefEnabled) SettingsHint(tr("Погода появится на странице сводки вместо отдельной карточки острова.", "Weather appears on the Brief page instead of a separate island card."))
         OutlinedTextField(query, { query = it.take(100) }, label = { Text(tr("Город", "City")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
         TextButton(enabled = !busy && query.trim().length >= 2, onClick = {
             scope.launch {
@@ -111,6 +123,8 @@ fun ExtrasScreen(onBack: () -> Unit) {
         Text(tr("Прогноз Open-Meteo (CC BY 4.0). Выбранный город и координаты отправляются Open-Meteo. Обновление раз в 15 минут при включённом экране; геолокация не запрашивается.",
             "Forecast by Open-Meteo (CC BY 4.0). Your selected city and coordinates are sent to Open-Meteo. Refreshes every 15 minutes while the screen is on; no location permission is requested."), color = Ui.Sub, modifier = Modifier.padding(vertical = 12.dp))
     }
+    if (clockStyle) ChoiceDialog(tr("Стиль часов", "Clock style"), BriefClockStyle.entries.toList(), s.briefClockStyle,
+        { it.title }, { style -> ExtrasRepo.update { copy(briefClockStyle = style) } }, { clockStyle = false })
     apps?.let { available ->
         AlertDialog(onDismissRequest = { apps = null }, title = { Text(tr("Выберите приложение", "Choose app")) }, text = {
             Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {

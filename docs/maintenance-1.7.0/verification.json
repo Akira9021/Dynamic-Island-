@@ -1,0 +1,771 @@
+{
+  "date": "2026-11-06",
+  "branch": "test-1.7.0",
+  "base": "2f8fe51f05ac5c9391ace349e3ba69508df144ff",
+  "versionName": "1.7.0",
+  "versionCode": 14,
+  "jvm": {
+    "totals": {
+      "tests": 103,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "com.akira.island.core.TranslationAssetsTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.data.AppearanceStyleTest",
+        "tests": "10",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.data.SettingsCompatibilityTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.island.GroupedProgressTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.lyrics.LyricTimingTest",
+        "tests": "7",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.BatteryReadingsTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.DailyStepsTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.MessageIdentityTest",
+        "tests": "7",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.NotificationActionsTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.PaymentRulesTest",
+        "tests": "7",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.ShadeDetectionTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.SystemEventObservationTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.WeatherRepoTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.RecordingNotificationsTest",
+        "tests": "11",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.island.BriefPresentationTest",
+        "tests": "6",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.data.IdleVisibilityTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.security.NetworkBoundsTest",
+        "tests": "4",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.data.NotificationPresentationTest",
+        "tests": "4",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.MessageImportanceTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.update.UpdatePolicyTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.security.DiagnosticNumbersTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.service.ScrollToTopTest",
+        "tests": "6",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.core.GlassMotionTest",
+        "tests": "5",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "com.akira.island.data.SettingsSearchTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      }
+    ]
+  },
+  "lint": {
+    "Warning": 22
+  },
+  "build": [
+    "testDebugUnitTest",
+    "lintDebug",
+    "assembleDebug",
+    "assembleDebugAndroidTest",
+    "assembleRelease"
+  ],
+  "localApks": {
+    "app-debug.apk": {
+      "bytes": 19423244,
+      "sha256": "57b90f708594e35480ce96a0d313af9aa1d288889fe8b8e0462d92a1b3a9ba54"
+    },
+    "app-debug-androidTest.apk": {
+      "bytes": 1180661,
+      "sha256": "9439cfafc19e0bc0061afddc5392896e165224badfb1a637ac07f3d4447d2b42"
+    },
+    "app-release-unsigned.apk": {
+      "bytes": 2636997,
+      "sha256": "2c06316915352df3b0fba5ed1b8691aac2dc14f9464560deed1d4cdcefb3e7f3"
+    }
+  },
+  "android": {
+    "status": "passed-in-targeted-runs",
+    "uniqueCases": 37,
+    "passed": 37,
+    "failed": 0,
+    "skipped": 0,
+    "device": {
+      "api": 35,
+      "size": "720x1600",
+      "density": 320,
+      "kvm": false
+    },
+    "runs": [
+      {
+        "name": "integrated37",
+        "cases": [
+          {
+            "class": "com.akira.island.core.SystemLanguageDeviceTest",
+            "test": "systemChoiceHonorsAndroidAppLocaleAndTranslatesNewSettings",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.BriefPanelDeviceTest",
+            "test": "narrowAndScaledClockPagesKeepTimeBatteryAndAlarmInsideTheCard",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.BriefPanelDeviceTest",
+            "test": "optingOutRestoresTheExistingHeaderAndSingleStepsRow",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.BriefPanelDeviceTest",
+            "test": "pagerSupportsSwipesAndButtonsAndLockImmediatelyRemovesPrivateContentAndActions",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.FeedbackRegressionTest",
+            "test": "playerTimestampsFitNarrowCardsAndLargeSystemText",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.FeedbackRegressionTest",
+            "test": "settingsSearchOpensASectionAndKeepsTheQueryOnBack",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.FeedbackRegressionTest",
+            "test": "idleTimerPickerDoesNotSqueezeItsCounter",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.FeedbackRegressionTest",
+            "test": "detailedNotificationKeepsReplyAndReadWithoutThreeUtilityButtons",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.LiquidGlassRenderingTest",
+            "test": "captureActualCapsuleMessageAndTimer",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.LiquidGlassRenderingTest",
+            "test": "previewLightFollowsFingerWithoutChangingPhoneTilt",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.LiquidGlassRenderingTest",
+            "test": "staticGlassIgnoresMotionAndKeepsCircleAndNotchClipped",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.LiquidGlassRenderingTest",
+            "test": "densityReallyControlsTransparencyAndReflectionsNeverWashOutContent",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.MaintenanceUiTest",
+            "test": "notchTopOffsetIsAvailableAndDoesNotOverwriteCapsulePlacement",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.MaintenanceUiTest",
+            "test": "actualStopButtonSendsTheProvidedAction",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.MaintenanceUiTest",
+            "test": "idleHidesAfterItsDeadlineAndCameraTapRestoresIt",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.MaintenanceUiTest",
+            "test": "audioScreenAndCameraHaveDifferentPresentationsWithoutAFakeStopButton",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+            "test": "centeredAvatarStaysBelowTheCameraAndHonorsAvatarAppAndNone",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+            "test": "positionChoiceReplacesTheOldRightToggleAndPreservesIconMode",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+            "test": "compactCountDeduplicatesHistoryAndKeepsTextOutsideTheCameraGap",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+            "test": "centeredAvatarKeepsSensitiveContentPrivateOnTheLockScreen",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.MediaPauseDeviceTest",
+            "test": "aPausedSessionStaysWhileOpenThenHidesAfterClosing",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.MediaSessionLifecycleTest",
+            "test": "progressNotificationsReuseTheSessionAndDoNotLoseCallbacks",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.RecordingRoutingDeviceTest",
+            "test": "recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.RecordingRoutingDeviceTest",
+            "test": "resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.RecordingRoutingDeviceTest",
+            "test": "foregroundRecorderWithoutAStopButtonTracksPauseAndFinish",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.ScrollToTopDeviceTest",
+            "test": "aRealAccessibleListReturnsToItsFirstRowAndAnUnsupportedScreenIsReported",
+            "code": -2
+          },
+          {
+            "class": "com.akira.island.service.SystemEventsDeviceTest",
+            "test": "debuggingSettingIsObservedAndDeliveredAsARealEvent",
+            "code": -4
+          },
+          {
+            "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+            "test": "tileRemovalRestoresTheLauncherAndClearsTheRecoveryProof",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+            "test": "hiddenAliasLeavesRecoveryAndLegacyPinnedActivityWorking",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+            "test": "addingATileAloneOrOpeningOtherSettingsCannotAuthorizeHiding",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+            "test": "accessibilitySettingsGearTargetsTheAlwaysEnabledActivity",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.SettingsExperienceTest",
+            "test": "systemEventsHaveOneHomeAndHardwareReadings",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.SettingsExperienceTest",
+            "test": "borderChoicesAreExclusiveAndPreviewStaysVisible",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.SettingsExperienceTest",
+            "test": "previewDoesNotReleaseOrHoldRealNotifications",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.update.UpdateSecurityDeviceTest",
+            "test": "archiveNeedsTheActualPackageVersionAndCertificate",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.update.UpdateSecurityDeviceTest",
+            "test": "apkWithAnotherSigningKeyCannotBeAnUpdate",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.update.UpdateSecurityDeviceTest",
+            "test": "installerUsesTheChosenReleaseEvenAfterAFailedRecheck",
+            "code": 0
+          }
+        ],
+        "passed": 35,
+        "failed": 1,
+        "skipped": 1,
+        "apks": {
+          "app-debug.apk": "13fe45459d6e2174071bf8db19142eba103e091e908010f111c69b5d4a4c339f",
+          "app-debug-androidTest.apk": "5cd43fb515bce55f2de47ffecdb45416fa0d7a0a238079016fe9f14d6a11dc07"
+        },
+        "seconds": 917.78
+      },
+      {
+        "name": "targeted8",
+        "cases": [
+          {
+            "class": "com.akira.island.island.BriefPanelDeviceTest",
+            "test": "narrowAndScaledClockPagesKeepTimeBatteryAndAlarmInsideTheCard",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.BriefPanelDeviceTest",
+            "test": "optingOutRestoresTheExistingHeaderAndSingleStepsRow",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.island.BriefPanelDeviceTest",
+            "test": "pagerSupportsSwipesAndButtonsAndLockImmediatelyRemovesPrivateContentAndActions",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.service.ScrollToTopDeviceTest",
+            "test": "aRealAccessibleListReturnsToItsFirstRowAndAnUnsupportedScreenIsReported",
+            "code": -2
+          },
+          {
+            "class": "com.akira.island.service.SystemEventsDeviceTest",
+            "test": "debuggingSettingIsObservedAndDeliveredAsARealEvent",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.SettingsExperienceTest",
+            "test": "systemEventsHaveOneHomeAndHardwareReadings",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.SettingsExperienceTest",
+            "test": "borderChoicesAreExclusiveAndPreviewStaysVisible",
+            "code": 0
+          },
+          {
+            "class": "com.akira.island.ui.SettingsExperienceTest",
+            "test": "previewDoesNotReleaseOrHoldRealNotifications",
+            "code": 0
+          }
+        ],
+        "passed": 7,
+        "failed": 1,
+        "skipped": 0,
+        "apks": {
+          "app-debug.apk": "47e53146dc5045d279dc12eca5878482fd281fe9fe507c4b4117d2cca9c86b5c",
+          "app-debug-androidTest.apk": "d544e12756817dfba94a0a9dab58b201dde98e9ec3b2fe09ec2a90215ac85c87"
+        },
+        "seconds": 288.85
+      },
+      {
+        "name": "scrollNativeCompletion",
+        "cases": [
+          {
+            "class": "com.akira.island.service.ScrollToTopDeviceTest",
+            "test": "aRealAccessibleListReturnsToItsFirstRowAndAnUnsupportedScreenIsReported",
+            "code": 0
+          }
+        ],
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "apks": {
+          "app-debug.apk": "57b90f708594e35480ce96a0d313af9aa1d288889fe8b8e0462d92a1b3a9ba54",
+          "app-debug-androidTest.apk": "9439cfafc19e0bc0061afddc5392896e165224badfb1a637ac07f3d4447d2b42"
+        },
+        "seconds": 75.491
+      }
+    ],
+    "latest": [
+      {
+        "class": "com.akira.island.core.SystemLanguageDeviceTest",
+        "test": "systemChoiceHonorsAndroidAppLocaleAndTranslatesNewSettings",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.BriefPanelDeviceTest",
+        "test": "narrowAndScaledClockPagesKeepTimeBatteryAndAlarmInsideTheCard",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.island.BriefPanelDeviceTest",
+        "test": "optingOutRestoresTheExistingHeaderAndSingleStepsRow",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.island.BriefPanelDeviceTest",
+        "test": "pagerSupportsSwipesAndButtonsAndLockImmediatelyRemovesPrivateContentAndActions",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.island.FeedbackRegressionTest",
+        "test": "playerTimestampsFitNarrowCardsAndLargeSystemText",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.FeedbackRegressionTest",
+        "test": "settingsSearchOpensASectionAndKeepsTheQueryOnBack",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.FeedbackRegressionTest",
+        "test": "idleTimerPickerDoesNotSqueezeItsCounter",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.FeedbackRegressionTest",
+        "test": "detailedNotificationKeepsReplyAndReadWithoutThreeUtilityButtons",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.LiquidGlassRenderingTest",
+        "test": "captureActualCapsuleMessageAndTimer",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.LiquidGlassRenderingTest",
+        "test": "previewLightFollowsFingerWithoutChangingPhoneTilt",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.LiquidGlassRenderingTest",
+        "test": "staticGlassIgnoresMotionAndKeepsCircleAndNotchClipped",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.LiquidGlassRenderingTest",
+        "test": "densityReallyControlsTransparencyAndReflectionsNeverWashOutContent",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.MaintenanceUiTest",
+        "test": "notchTopOffsetIsAvailableAndDoesNotOverwriteCapsulePlacement",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.MaintenanceUiTest",
+        "test": "actualStopButtonSendsTheProvidedAction",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.MaintenanceUiTest",
+        "test": "idleHidesAfterItsDeadlineAndCameraTapRestoresIt",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.MaintenanceUiTest",
+        "test": "audioScreenAndCameraHaveDifferentPresentationsWithoutAFakeStopButton",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+        "test": "centeredAvatarStaysBelowTheCameraAndHonorsAvatarAppAndNone",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+        "test": "positionChoiceReplacesTheOldRightToggleAndPreservesIconMode",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+        "test": "compactCountDeduplicatesHistoryAndKeepsTextOutsideTheCameraGap",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.island.NotificationLayoutDeviceTest",
+        "test": "centeredAvatarKeepsSensitiveContentPrivateOnTheLockScreen",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.service.MediaPauseDeviceTest",
+        "test": "aPausedSessionStaysWhileOpenThenHidesAfterClosing",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.service.MediaSessionLifecycleTest",
+        "test": "progressNotificationsReuseTheSessionAndDoNotLoseCallbacks",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.service.RecordingRoutingDeviceTest",
+        "test": "recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.service.RecordingRoutingDeviceTest",
+        "test": "resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.service.RecordingRoutingDeviceTest",
+        "test": "foregroundRecorderWithoutAStopButtonTracksPauseAndFinish",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.service.ScrollToTopDeviceTest",
+        "test": "aRealAccessibleListReturnsToItsFirstRowAndAnUnsupportedScreenIsReported",
+        "code": 0,
+        "run": "scrollNativeCompletion"
+      },
+      {
+        "class": "com.akira.island.service.SystemEventsDeviceTest",
+        "test": "debuggingSettingIsObservedAndDeliveredAsARealEvent",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+        "test": "tileRemovalRestoresTheLauncherAndClearsTheRecoveryProof",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+        "test": "hiddenAliasLeavesRecoveryAndLegacyPinnedActivityWorking",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+        "test": "addingATileAloneOrOpeningOtherSettingsCannotAuthorizeHiding",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.ui.LauncherVisibilityDeviceTest",
+        "test": "accessibilitySettingsGearTargetsTheAlwaysEnabledActivity",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.ui.SettingsExperienceTest",
+        "test": "systemEventsHaveOneHomeAndHardwareReadings",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.ui.SettingsExperienceTest",
+        "test": "borderChoicesAreExclusiveAndPreviewStaysVisible",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.ui.SettingsExperienceTest",
+        "test": "previewDoesNotReleaseOrHoldRealNotifications",
+        "code": 0,
+        "run": "targeted8"
+      },
+      {
+        "class": "com.akira.island.update.UpdateSecurityDeviceTest",
+        "test": "archiveNeedsTheActualPackageVersionAndCertificate",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.update.UpdateSecurityDeviceTest",
+        "test": "apkWithAnotherSigningKeyCannotBeAnUpdate",
+        "code": 0,
+        "run": "integrated37"
+      },
+      {
+        "class": "com.akira.island.update.UpdateSecurityDeviceTest",
+        "test": "installerUsesTheChosenReleaseEvenAfterAFailedRecheck",
+        "code": 0,
+        "run": "integrated37"
+      }
+    ],
+    "note": "Initial integrated run had one scroll failure and one unavailable-network skip; latest targeted runs resolved both. Native ListView completion is asynchronous; only test completion wait is30s, production budgets unchanged."
+  },
+  "staticAnalysis": {
+    "mobsfscan": "1.1.0",
+    "ruleGroups": 9,
+    "partialParsingWarnings": 1
+  },
+  "publicReleaseBefore": {
+    "id": 426500551,
+    "tag_name": "v1.6.5",
+    "published_at": "2026-10-28T10:02:39Z",
+    "target_commitish": "3c3d9d10cbaf01731195fd7fd879adc9951bc586",
+    "html_url": "https://github.com/Akira9021/Dynamic-Island-/releases/tag/v1.6.5"
+  },
+  "openIssueNumbers": [
+    45,
+    44,
+    41,
+    36,
+    35,
+    34,
+    33,
+    32,
+    31,
+    30,
+    29,
+    28,
+    27,
+    24,
+    23,
+    22,
+    21,
+    19,
+    18,
+    17,
+    16,
+    15,
+    14,
+    13,
+    12,
+    11,
+    10,
+    9,
+    8,
+    6,
+    3
+  ],
+  "preservedPreviewFiles": [
+    "SettingsPreview.kt",
+    "AppearancePreview.kt",
+    "GlassSurface.kt",
+    "GlassMotion.kt"
+  ],
+  "sourceTreeSha256": "6e1bf35b2c9d790d2f7826da0bda5046254fb9115ca699a5b97d50c97936ebbd",
+  "buildStatus": "passed"
+}

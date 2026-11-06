@@ -10,7 +10,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.Notice
 import com.akira.island.core.Tints
-import com.akira.island.core.trf
 import com.akira.island.service.ConnectionEvent
 import com.akira.island.service.SystemEventObservation
 import com.akira.island.ui.*

@@ -19,6 +19,7 @@ import com.akira.island.core.IslandBus
 import com.akira.island.R
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
+import com.akira.island.data.LauncherVisibility
 import com.akira.island.ui.Perms
 
 /**
@@ -75,8 +76,7 @@ class KeepAliveService : Service() {
             },
         )
         // Нажатие открывает настройки острова
-        val open = packageManager.getLaunchIntentForPackage(packageName)
-            ?.let { PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE) }
+        val open = PendingIntent.getActivity(this, 0, LauncherVisibility.settingsIntent(this), PendingIntent.FLAG_IMMUTABLE)
         val restore = PendingIntent.getActivity(this, 1,
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)

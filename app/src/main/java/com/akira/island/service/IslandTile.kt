@@ -13,6 +13,7 @@ import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
+import com.akira.island.data.LauncherVisibility
 
 /**
  * Плитка «Остров» в шторке. Банки (K PLUS, GCash и другие) не пускают, пока включена служба спец. возможностей
@@ -20,6 +21,16 @@ import com.akira.island.data.SettingsRepo
  * спец. возможности, чтобы включить его обратно: включить службу сама Android приложению не даёт.
  */
 class IslandTile : TileService() {
+    override fun onTileAdded() {
+        super.onTileAdded()
+        LauncherVisibility.onTileAdded(this)
+    }
+
+    override fun onTileRemoved() {
+        LauncherVisibility.onTileRemoved(this)
+        super.onTileRemoved()
+    }
+
     override fun onStartListening() {
         SettingsRepo.init(this)
         val tile = qsTile ?: return

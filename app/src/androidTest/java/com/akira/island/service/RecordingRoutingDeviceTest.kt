@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Process
+import android.os.SystemClock
 import android.service.notification.StatusBarNotification
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -14,6 +15,70 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class RecordingRoutingDeviceTest {
+    @Test fun resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val saved = IslandBus.chrono.value
+        val savedLive = IslandBus.live.value
+        val savedProgress = IslandBus.progress.value
+        val action = PendingIntent.getBroadcast(context, 96, Intent("test-recording").setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE)
+        fun notification(button: String): StatusBarNotification {
+            val n = Notification.Builder(context, "test").setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentTitle("Recorder").setWhen(0).addAction(Notification.Action.Builder(null, button, action).build()).build()
+            n.flags = n.flags or Notification.FLAG_FOREGROUND_SERVICE
+            return StatusBarNotification("com.miui.soundrecorder", "com.miui.soundrecorder", 96, "test", Process.myUid(), 0, 0,
+                n, Process.myUserHandle(), System.currentTimeMillis() - 5_000)
+        }
+        try {
+            val running = notification("Pause")
+            val paused = notification("Resume")
+            instrumentation.runOnMainSync {
+                NotificationParser.onPosted(context, running, initial = true)
+                NotificationParser.onPosted(context, paused, initial = true)
+            }
+            val frozen = IslandBus.chrono.value[paused.key]!!.pausedMs!!
+            SystemClock.sleep(2200)
+            instrumentation.runOnMainSync {
+                NotificationParser.onPosted(context, notification("Pause"), initial = true)
+                val elapsed = IslandBus.chrono.value[running.key]!!.elapsed(System.currentTimeMillis())
+                assertTrue("Resuming must continue from recorded time, not include the pause", elapsed in frozen..frozen + 1000)
+            }
+        } finally {
+            instrumentation.runOnMainSync { IslandBus.chrono.value = saved; IslandBus.live.value = savedLive; IslandBus.progress.value = savedProgress }
+        }
+    }
+    @Test fun foregroundRecorderWithoutAStopButtonTracksPauseAndFinish() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val original = IslandBus.chrono.value
+        val live = IslandBus.live.value
+        val progress = IslandBus.progress.value
+        val action = PendingIntent.getBroadcast(context, 95, Intent("test-recorder-pause").setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE)
+        fun notification(title: String, button: String): StatusBarNotification {
+            val n = Notification.Builder(context, "test").setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentTitle(title).setContentText("00:12").setWhen(0)
+                .addAction(Notification.Action.Builder(null, button, action).build()).build()
+            n.flags = n.flags or Notification.FLAG_FOREGROUND_SERVICE
+            return StatusBarNotification("com.miui.soundrecorder", "com.miui.soundrecorder", 95, "test", Process.myUid(), 0, 0,
+                n, Process.myUserHandle(), System.currentTimeMillis())
+        }
+        try {
+            val running = notification("Диктофон", "Пауза")
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, running, initial = true) }
+            val first = IslandBus.chrono.value[running.key]!!
+            assertEquals(com.akira.island.core.RecordingKind.VOICE, first.recordingKind)
+            assertNull(first.stop)
+            assertFalse(first.screenRecording)
+            val paused = notification("Запись приостановлена", "Продолжить")
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, paused, initial = true) }
+            assertEquals(12_000L, IslandBus.chrono.value[paused.key]!!.pausedMs)
+            val ended = notification("Запись сохранена", "Открыть")
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, ended, initial = true) }
+            assertFalse(IslandBus.chrono.value.containsKey(ended.key))
+        } finally {
+            instrumentation.runOnMainSync { IslandBus.chrono.value = original; IslandBus.live.value = live; IslandBus.progress.value = progress }
+        }
+    }
     @Test fun recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

@@ -112,6 +112,12 @@ class MediaMonitor(private val context: Context) {
         @Suppress("DEPRECATION")
         val token = runCatching { sbn.notification.extras.getParcelable<MediaSession.Token>(Notification.EXTRA_MEDIA_SESSION) }.getOrNull()
         if (token != null) {
+            if (notificationSessions[sbn.key]?.sessionToken == token) {
+                // Some players update progress/artwork notifications every second. Reuse the
+                // controller and callbacks; a refresh also covers players that miss callbacks.
+                if (bound.any { it.first.sessionToken == token }) refresh() else rescan()
+                return
+            }
             runCatching { MediaController(context, token) }.getOrNull()?.let { notificationSessions[sbn.key] = it }
             rescan()
         }
@@ -128,8 +134,14 @@ class MediaMonitor(private val context: Context) {
     }
 
     private fun bind(list: List<MediaController>) {
-        unbindAll()
-        list.forEach { c ->
+        val previous = bound.associateBy { it.first.sessionToken }.toMutableMap()
+        val next = ArrayList<Pair<MediaController, MediaController.Callback>>()
+        list.distinctBy { it.sessionToken }.forEach { c ->
+            val existing = previous.remove(c.sessionToken)
+            if (existing != null) {
+                next += existing
+                return@forEach
+            }
             val cb = object : MediaController.Callback() {
                 override fun onPlaybackStateChanged(state: PlaybackState?) = refresh()
                 override fun onMetadataChanged(metadata: MediaMetadata?) = refresh()
@@ -139,8 +151,11 @@ class MediaMonitor(private val context: Context) {
                     bind(remaining)
                 }
             }
-            if (runCatching { c.registerCallback(cb, handler) }.isSuccess) bound += c to cb
+            if (runCatching { c.registerCallback(cb, handler) }.isSuccess) next += c to cb
         }
+        previous.values.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
+        bound.clear()
+        bound.addAll(next)
         refresh()
     }
 
@@ -340,10 +355,11 @@ class MediaMonitor(private val context: Context) {
 
 /**
  * Отпечаток картинки: размер и 25 точек сеткой 5×5. Дёшево (не весь битмап) и отличает разные обложки одного размера.
- * Аппаратный битмап читать нельзя — тогда каждый раз «новая», как было до отпечатков.
+ * Аппаратный битмап неизменяем: его generationId отличает новую картинку без чтения GPU-пикселей.
  */
 private fun artPrint(b: Bitmap): Long = runCatching {
     var h = b.width * 31L + b.height
+    if (b.config == Bitmap.Config.HARDWARE) return@runCatching (h * 31 + b.generationId) * 31 + System.identityHashCode(b)
     for (i in 1..5) for (j in 1..5) h = h * 31 + b.getPixel(b.width * i / 6, b.height * j / 6)
     h
 }.getOrDefault(System.nanoTime())

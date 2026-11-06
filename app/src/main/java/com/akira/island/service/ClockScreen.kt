@@ -11,7 +11,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
-import com.akira.island.core.tr
 import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope

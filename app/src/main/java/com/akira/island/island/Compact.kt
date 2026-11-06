@@ -83,6 +83,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,6 +97,7 @@ import com.akira.island.core.AppMessage
 import com.akira.island.core.InboxItem
 import com.akira.island.core.CallInfo
 import com.akira.island.core.Controls
+import com.akira.island.core.RecordingKind
 import com.akira.island.core.IslandBus
 import com.akira.island.core.LiveInfo
 import com.akira.island.core.LiveKind
@@ -108,7 +111,8 @@ import com.akira.island.core.formatDuration
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.MessageStyle
 import com.akira.island.data.MessageIconMode
-import com.akira.island.service.NotifListener
+import com.akira.island.data.MessageIconPosition
+import com.akira.island.data.retainedNotificationCount
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import android.text.format.DateFormat
@@ -225,14 +229,16 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
         }
 
         is Act.ChronoA -> {
-            val now = rememberWallNow(500)
+            val now = rememberWallNow(1_000, active = act.c.pausedMs == null)
             // Запись экрана — красная, как на iPhone; таймеры и секундомеры Часов — оранжевые
             val recording = act.c.isRecording
             val tint = if (recording) Tints.Red else Tints.Orange
             CompactRow(h, gap, side * 1.4f,
                 left = {
                     when {
-                        recording -> Equalizer(tint, true, s.liveEqualizer, Modifier.size(h * 0.62f, h * 0.42f), bars = 5)
+                        act.c.recordingKind == RecordingKind.VOICE -> Equalizer(tint, act.c.pausedMs == null, s.liveEqualizer,
+                            Modifier.size(h * 0.62f, h * 0.42f).semantics { contentDescription = RecordingKind.VOICE.title }, bars = 5)
+                        recording -> Icon(act.c.recordingKind!!.icon, act.c.recordingKind.title, tint = tint, modifier = Modifier.size(icon))
                         act.c.pausedMs != null -> Icon(Ios.pause, null, tint = tint, modifier = Modifier.size(icon))
                         else -> AppIcon(act.c.icon, h * 0.56f, Ios.timer, tint)
                     }
@@ -511,6 +517,9 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
     val locked by IslandBus.locked.collectAsState()
     // На заблокированном телефоне — как в шторке: без кнопок, а скрытые уведомления без имени и текста
     val hidden = locked && m.sensitive
+    val iconPosition = s.notificationIconPosition
+    val showIcon = s.messageIconMode != MessageIconMode.NONE
+    val iconMessage = if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m
     val replyAction = reply?.takeIf { it.noticeId == n.id && !locked }?.action
     val accent = rememberAccent(s, m.accent)
     var open by remember(n.id) { mutableStateOf(false) }
@@ -557,9 +566,14 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
         // Ниже шапки — крупнее или мельче по «Размеру содержимого»; шапка у камеры остаётся как есть
         Scaled(s.contentScale) {
             Column {
+                if (showIcon && iconPosition == MessageIconPosition.CENTER) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = 10.dp), contentAlignment = Alignment.Center) {
+                        NotifIcon(iconMessage, n, iconSize, Color(s.color))
+                    }
+                }
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
-                    if (s.messageIconMode != MessageIconMode.NONE && !s.messageIconRight) {
-                        NotifIcon(if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
+                    if (showIcon && iconPosition == MessageIconPosition.LEFT) {
+                        NotifIcon(iconMessage, n, iconSize, Color(s.color))
                         Spacer(Modifier.width(12.dp))
                     }
                     Column(Modifier.weight(1f)) {
@@ -593,14 +607,14 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
                             )
                         }
                     }
-                    if (s.messageIconMode != MessageIconMode.NONE && s.messageIconRight) {
+                    if (showIcon && iconPosition == MessageIconPosition.RIGHT) {
                         Spacer(Modifier.width(12.dp))
-                        NotifIcon(if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m, n, iconSize, Color(s.color))
+                        NotifIcon(iconMessage, n, iconSize, Color(s.color))
                     }
                 }
                 if (replyAction != null) {
                     // Строка ответа стоит под текстом, как кнопки, — на одной линии с ним
-                    Box(Modifier.padding(start = 16.dp + (if (s.messageIconMode == MessageIconMode.NONE || s.messageIconRight) 0.dp else iconSize + 12.dp), end = 16.dp)) {
+                    Box(Modifier.padding(start = 16.dp + (if (showIcon && iconPosition == MessageIconPosition.LEFT) iconSize + 12.dp else 0.dp), end = 16.dp)) {
                         ReplyField(replyAction, accent) { text ->
                             if (text.isBlank()) return@ReplyField
                             if (Controls.sendReply(context, replyAction, text)) {
@@ -659,6 +673,8 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
 private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
     val locked by IslandBus.locked.collectAsState()
     val hidden = locked && m.sensitive
+    val iconPosition = s.notificationIconPosition
+    val showIcon = s.messageIconMode != MessageIconMode.NONE
     val dim = Color.White.copy(alpha = 0.6f)
     Column(Modifier.width(messageWidth(s)).padding(bottom = 10.dp)) {
         Row(
@@ -667,7 +683,7 @@ private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
         ) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 val face = if (hidden || s.messageIconMode == MessageIconMode.APP) m.appIcon else m.avatar ?: m.appIcon
-                if (face != null && s.messageIconMode != MessageIconMode.NONE && !s.messageIconRight) {
+                if (face != null && showIcon && iconPosition == MessageIconPosition.LEFT) {
                     Image(face, null, Modifier.size(20.dp).clip(CircleShape), contentScale = ContentScale.Crop)
                     Spacer(Modifier.width(6.dp))
                 }
@@ -680,7 +696,7 @@ private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 Text(m.appName, color = dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false))
-                if (s.messageIconMode != MessageIconMode.NONE && s.messageIconRight) {
+                if (showIcon && iconPosition == MessageIconPosition.RIGHT) {
                     val icon = if (hidden || s.messageIconMode == MessageIconMode.APP) m.appIcon else m.avatar ?: m.appIcon
                     if (icon != null) {
                         Spacer(Modifier.width(5.dp))
@@ -690,11 +706,19 @@ private fun MessagePill(n: Notice, m: AppMessage, s: IslandSettings) {
             }
         }
         Scaled(s.contentScale) {
-            Text(
-                if (hidden) tr("Содержимое скрыто", "Content hidden") else m.text.ifEmpty { m.appName },
-                color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 18.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
-            )
+            Column {
+                if (showIcon && iconPosition == MessageIconPosition.CENTER) {
+                    Box(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+                        NotifIcon(if (hidden || s.messageIconMode == MessageIconMode.APP) m.copy(avatar = null) else m,
+                            n, 24.dp, Color(s.color))
+                    }
+                }
+                Text(
+                    if (hidden) tr("Содержимое скрыто", "Content hidden") else m.text.ifEmpty { m.appName },
+                    color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp, lineHeight = 18.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
+                )
+            }
         }
     }
 }
@@ -756,7 +780,7 @@ private fun statusBarHeight(): Dp {
 /** Круглый аватар (или значок приложения) со значком приложения в углу. */
 @Composable
 private fun NotifIcon(m: AppMessage, n: Notice, size: Dp, ring: Color) {
-    Box(Modifier.size(size + 4.dp)) {
+    Box(Modifier.size(size + 4.dp).semantics { contentDescription = tr("Значок уведомления", "Notification icon") }) {
         val big = m.avatar ?: m.appIcon
         if (big != null) {
             Image(big, null, Modifier.size(size).clip(CircleShape), contentScale = ContentScale.Crop)
@@ -1061,8 +1085,12 @@ private fun IncomingCall(c: CallInfo, s: IslandSettings, wideWidth: Dp) {
 @Composable
 private fun MessageIcon(m: AppMessage, s: IslandSettings) {
     val h = activeHeight(s)
+    val inbox by IslandBus.inbox.collectAsState()
+    val count = if (LocalIslandPreview.current) m.history.size.coerceAtLeast(1)
+        else retainedNotificationCount(m.key, inbox.map { it.key })
     CompactRow(h, compactGap(s), sideMax(s),
         left = { AppIcon(m.appIcon, h * 0.55f, Ios.chatbubble, Tints.Blue) },
-        right = { Text(m.history.size.coerceAtLeast(1).toString(), color = Color.White, fontSize = 15.sp, style = Digits) },
+        right = { Text(count.toString(), color = Color.White, fontSize = 15.sp, style = Digits,
+            maxLines = 1, softWrap = false) },
     )
 }

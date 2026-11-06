@@ -1,7 +1,9 @@
 package com.akira.island.ui
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.service.quicksettings.TileService
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -64,6 +66,7 @@ import com.akira.island.R
 import com.akira.island.core.LangScope
 import com.akira.island.core.tr
 import com.akira.island.data.SettingsRepo
+import com.akira.island.data.LauncherVisibility
 import com.akira.island.ui.screens.AnimScreen
 import com.akira.island.ui.screens.SearchScreen
 import com.akira.island.ui.screens.AppInfoScreen
@@ -84,6 +87,7 @@ import com.akira.island.ui.screens.InstructionScreen
 import com.akira.island.ui.screens.KeepAliveScreen
 import com.akira.island.ui.screens.LookScreen
 import com.akira.island.ui.screens.LyricsScreen
+import com.akira.island.ui.screens.LauncherScreen
 import com.akira.island.ui.screens.NotificationsScreen
 import com.akira.island.ui.screens.NotifAppsScreen
 import com.akira.island.ui.screens.NotifDiagScreen
@@ -97,29 +101,46 @@ import com.akira.island.update.UpdateChecker
 
 enum class Screen {
     CARDS, EVENTS, GESTURES, LYRICS, SIZE, COLORS, INSTRUCTION, ABOUT, DIAG, LOOK, ANIM, EFFECTS, BANNERS,
-    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT, EXTRAS, SEARCH,
+    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT, EXTRAS, SEARCH, LAUNCHER,
 }
 
 class MainActivity : ComponentActivity() {
+    private var launcherSettingsRequest by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SettingsRepo.init(this)
+        openSettingsFrom(intent)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
-        setContent { IslandTheme { AppRoot() } }
+        setContent { IslandTheme { AppRoot(launcherSettingsRequest) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openSettingsFrom(intent)
+    }
+
+    private fun openSettingsFrom(intent: Intent) {
+        LauncherVisibility.onSettingsOpened(this, intent)
+        if (intent.action == TileService.ACTION_QS_TILE_PREFERENCES ||
+            intent.action == Intent.ACTION_APPLICATION_PREFERENCES
+        ) launcherSettingsRequest++
     }
 
     override fun onResume() {
         super.onResume()
+        LauncherVisibility.refresh(this)
         // «Не выгружать остров»: из фона Android может не запустить службу — запускаем, пока приложение открыто
         KeepAliveService.sync(this)
     }
 }
 
 @Composable
-private fun AppRoot() {
+private fun AppRoot(launcherSettingsRequest: Int) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var stack by remember { mutableStateOf(listOf<Screen>()) }
     var forward by remember { mutableStateOf(true) }
@@ -133,6 +154,13 @@ private fun AppRoot() {
         stack = stack.dropLast(1)
     }
     BackHandler(enabled = stack.isNotEmpty(), onBack = back)
+    LaunchedEffect(launcherSettingsRequest) {
+        if (launcherSettingsRequest > 0) {
+            tab = 3
+            forward = true
+            stack = listOf(Screen.LAUNCHER)
+        }
+    }
 
     // Раз в 3 часа спрашиваем GitHub, не вышла ли новая версия; после обновления — «Что нового»
     val context = LocalContext.current
@@ -174,6 +202,7 @@ private fun AppRoot() {
                     Screen.DIAG.name -> DiagScreen(back)
                     Screen.PAYDIAG.name -> PayDiagScreen(back)
                     Screen.KEEPALIVE.name -> KeepAliveScreen(back)
+                    Screen.LAUNCHER.name -> LauncherScreen(back)
                     Screen.BANKS.name -> BanksScreen(back)
                     Screen.LOOK.name -> LookScreen(back)
                     Screen.ANIM.name -> AnimScreen(back)

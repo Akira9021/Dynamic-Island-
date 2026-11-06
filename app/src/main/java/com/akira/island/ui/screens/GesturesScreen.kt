@@ -43,6 +43,10 @@ fun GesturesScreen(onBack: () -> Unit) {
             GroupItem(Pos.Last, Icons.Rounded.PanTool, tr("Долгое нажатие", "Long press"), s.longPressAction.title,
                 onClick = { dialog = Which.LONG }, color = Tile.Orange)
         }
+        if (s.tapAction == TapAction.SCROLL_TOP || s.doubleTapAction == TapAction.SCROLL_TOP || s.longPressAction == TapAction.SCROLL_TOP) {
+            SettingsHint(tr("Работает только в приложениях, которые предоставляют прокрутку вертикальных списков. Для длинного списка может понадобиться повторить жест.",
+                "Works only in apps that expose vertical list scrolling. Long lists may need the gesture again."))
+        }
         SectionHeader(tr("Свайпы", "Swipes"))
         Group {
             GroupToggle(Pos.First, Icons.Rounded.KeyboardArrowDown, tr("Потянуть вниз", "Pull down"),

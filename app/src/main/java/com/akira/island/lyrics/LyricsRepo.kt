@@ -8,9 +8,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
+import com.akira.island.security.openTrustedHttps
+import com.akira.island.security.readUtf8Bounded
 import kotlin.math.abs
 
 /** Найденный текст: [synced] — с настоящими метками времени; иначе обычный текст без караоке. */
@@ -156,9 +156,8 @@ object LyricsRepo {
     }
 
     /** NetEase в начале пишет авторов: «作词 : …», «Composer: …» */
-    private fun isCredit(text: String): Boolean =
-        Regex("""^(作词|作曲|编曲|制作人|lyrics|composer|producer|arranger|автор|музыка|слова)\s*[:：]""", RegexOption.IGNORE_CASE)
-            .containsMatchIn(text)
+    private val credit = Regex("""^(作词|作曲|编曲|制作人|lyrics|composer|producer|arranger|автор|музыка|слова)\s*[:：]""", RegexOption.IGNORE_CASE)
+    private fun isCredit(text: String): Boolean = credit.containsMatchIn(text)
 
     private fun norm(s: String) = s.lowercase().replace(noise, "").filter { it.isLetterOrDigit() }
 
@@ -168,19 +167,14 @@ object LyricsRepo {
         params.entries.joinToString("&") { (k, v) -> "$k=" + URLEncoder.encode(v, "UTF-8") }
 
     private fun get(url: String, netease: Boolean = false): String? {
-        val c = URL(url).openConnection() as HttpURLConnection
+        val headers = if (netease) mapOf("Referer" to "https://music.163.com",
+            "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+        else mapOf("User-Agent" to UA)
+        val c = openTrustedHttps(url, 6000, 8000, headers)
         return try {
-            c.connectTimeout = 6000
-            c.readTimeout = 8000
-            if (netease) {
-                c.setRequestProperty("Referer", "https://music.163.com")
-                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
-            } else {
-                c.setRequestProperty("User-Agent", UA)
-            }
             if (c.responseCode == 404) return null
             if (c.responseCode != 200) error("HTTP ${c.responseCode}")
-            c.inputStream.bufferedReader().use { it.readText() }
+            c.inputStream.use { it.readUtf8Bounded(2_000_000) }
         } finally {
             c.disconnect()
         }
