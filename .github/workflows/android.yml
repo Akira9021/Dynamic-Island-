@@ -117,8 +117,8 @@ jobs:
           expected_app=$(grep -oP 'applicationId = "\K[^"]+' app/build.gradle.kts)
           expected_code=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)
           package_info=$("$bt/aapt" dump badging out/DynamicIsland.apk | grep '^package:')
-          actual_app=$(sed -n "s/.*name='\([^']*\)'.*/\1/p" <<<"$package_info")
-          actual_code=$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$package_info")
+          actual_app=$(sed -nE "s/^package: name='([^']+)'.*/\1/p" <<<"$package_info")
+          actual_code=$(sed -nE "s/^package: name='[^']+' versionCode='([^']+)'.*/\1/p" <<<"$package_info")
           if [[ "$actual_app" != "$expected_app" || "$actual_code" != "$expected_code" ]]; then
             echo "::error::APK identity/version mismatch: $actual_app/$actual_code; expected $expected_app/$expected_code"
             exit 1
