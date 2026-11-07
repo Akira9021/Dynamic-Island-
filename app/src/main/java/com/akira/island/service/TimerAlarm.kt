@@ -73,6 +73,13 @@ class TimerAlarm(private val context: Context, private val scope: CoroutineScope
         cancelWake()
         if (t == null || !t.ringing) stopRinging()
         if (t == null) return
+        if (t.fromSystem) {
+            // Таймер создан через системный Clock: остров не ставит свой будильник и не звонит —
+            // звук и завершающий сигнал делает сама система через уведомление.
+            if (t.left(SystemClock.elapsedRealtime()) > 100) return
+            IslandBus.timer.value = null
+            return
+        }
         if (t.ringing) {
             startRinging()
         } else if (t.pausedLeft == null) {

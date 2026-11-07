@@ -13,6 +13,8 @@ import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.os.SystemClock
 
+import com.akira.island.core.system.ClockBridge
+
 /** Команды, которые капсула отдаёт системе: плеер, таймер, фонарик, громкость. */
 object Controls {
     @Volatile
@@ -22,6 +24,9 @@ object Controls {
     var torchOn: () -> Unit = {}
     var torchOff: () -> Unit = {}
     var torchLevel: (Int) -> Unit = {}
+
+    /** Системный мост к приложению «Часы» (AlarmClock intents / AlarmManager). Без него таймеры острова живут только внутри. */
+    var clockBridge: ClockBridge? = null
 
     fun expand(id: String) {
         IslandBus.focus.value = id
@@ -68,6 +73,28 @@ object Controls {
     fun startTimerSeconds(seconds: Int) {
         val total = seconds * 1000L
         IslandBus.timer.value = TimerState(total, SystemClock.elapsedRealtime() + total)
+    }
+
+    /**
+     * Таймер через системный Clock: создаётся в приложении «Часы» через AlarmClock.ACTION_SET_TIMER
+     * (с системным звуком и завершением). Если подходящей «Часов» нет — остров ставит свой таймер
+     * как fallback. Возвращает true, если таймер создан системой.
+     */
+    fun startSystemTimer(context: Context, seconds: Int, label: String? = null): Boolean {
+        val bridge = clockBridge
+        if (bridge != null) {
+            val created = bridge.createTimer(context, seconds * 1000L, label)
+            if (created) {
+                IslandBus.timer.value = TimerState(
+                    seconds * 1000L,
+                    SystemClock.elapsedRealtime() + seconds * 1000L,
+                    fromSystem = true,
+                )
+                return true
+            }
+        }
+        startTimerSeconds(seconds)
+        return false
     }
 
     fun pauseTimer() {

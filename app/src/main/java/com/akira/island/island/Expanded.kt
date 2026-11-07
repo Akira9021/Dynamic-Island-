@@ -735,7 +735,7 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                 }
                 Spacer(Modifier.width(8.dp))
                 PillButton(Ios.play, tr("Таймер", "Timer"), bg = Tints.Orange, fg = Color.Black) {
-                    Controls.startTimer(s.timerMinutes)
+                    Controls.startSystemTimer(context, s.timerMinutes * 60, null)
                     Controls.expand("timer")
                 }
             }
@@ -778,7 +778,7 @@ private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
                 Controls.collapse()
                 Controls.lockScreen()
             }
-            QuickAction.TIMER -> Controls.startTimer(SettingsRepo.current.timerMinutes)
+            QuickAction.TIMER -> Controls.startSystemTimer(context, SettingsRepo.current.timerMinutes * 60, null)
         }
     }
 }

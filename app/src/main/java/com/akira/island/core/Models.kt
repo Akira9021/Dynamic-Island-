@@ -166,6 +166,11 @@ data class TimerState(
     val endAt: Long,
     val pausedLeft: Long? = null,
     val ringing: Boolean = false,
+    /**
+     * Создан через системный Clock (AlarmClock.ACTION_SET_TIMER): отсчёт и звук держит сама система,
+     * остров только показывает provisional-счётчик и убирает его, когда время вышло.
+     */
+    val fromSystem: Boolean = false,
 ) {
     fun left(now: Long): Long = pausedLeft ?: (endAt - now).coerceAtLeast(0)
     val paused: Boolean get() = pausedLeft != null && !ringing
