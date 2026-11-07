@@ -19,6 +19,13 @@ fallback. A fork can set its own repository variable to its own key's
 fingerprint, so fork signing configuration does not replace the original
 repository's signer.
 
+Actions artifacts themselves require a GitHub sign-in to download. A fork that
+sets repository variable `PUBLIC_CI_PREVIEW=true` also publishes the latest
+successful push build as a rolling prerelease at
+`/releases/download/ci-preview/DynamicIsland.apk`; GitHub release assets are
+publicly downloadable without an account. Stable versioned releases remain
+separate.
+
 The fork key and a backup are stored in separate private directories outside the
 repository on the build machine. Its password is in the ignored local
 `keystore.properties` and in a private external credentials file; the same

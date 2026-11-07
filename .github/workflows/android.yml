@@ -178,3 +178,42 @@ jobs:
         if: needs.build.outputs.update == 'true'
         run: |
           gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file notes.md --title "Dynamic Island $TAG · Динамический остров"
+
+  # GitHub Actions artifacts require a signed-in viewer. Forks can opt in to a
+  # rolling prerelease, whose APK asset is downloadable anonymously by anyone.
+  preview-release:
+    needs: build
+    if: >-
+      needs.build.outputs.signed == 'true' &&
+      needs.build.outputs.release != 'true' &&
+      needs.build.outputs.update != 'true' &&
+      github.event_name == 'push' &&
+      vars.PUBLIC_CI_PREVIEW == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: public-ci-preview-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PREVIEW_TAG: ci-preview
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: DynamicIsland-apk
+          path: out
+
+      - name: Обновить публичную preview-сборку
+        run: |
+          download_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIEW_TAG/DynamicIsland.apk"
+          printf 'Latest successful APK built from commit `%s`. This rolling preview is replaced by the next successful push build.\n\n[Download APK](%s)\n' \
+            "$GITHUB_SHA" "$download_url" > "$RUNNER_TEMP/preview-notes.md"
+          if gh release view "$PREVIEW_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$PREVIEW_TAG" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
+          gh release create "$PREVIEW_TAG" out/DynamicIsland.apk \
+            -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Dynamic Island · CI preview" \
+            --notes-file "$RUNNER_TEMP/preview-notes.md"
+          echo "Anonymous APK download: $download_url" >> "$GITHUB_STEP_SUMMARY"
