@@ -671,7 +671,10 @@ internal fun IslandBody(
                 }
                 detectTapGestures(
                     onPress = { haptic() },
-                    onTap = { onTap(context, current, isExpanded, settings) },
+                    onTap = { offset ->
+                        val capsuleBand = with(density) { h.toPx() }
+                        onTap(context, current, isExpanded, settings, offset.y, capsuleBand)
+                    },
                     onDoubleTap = onDouble,
                     onLongPress = onLong,
                 )
@@ -862,10 +865,20 @@ private fun GraphicsLayerScope.blurLayer(dp: Float, cache: BlurEffectCache) {
     renderEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dp > 0.3f) cache.effect(dp.dp.toPx()) else null
 }
 
-private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettings) {
-    // A tap on the expanded surface is just interaction with the card, not a
-    // dismiss gesture. Collapse remains available via swipe-up or outside tap.
-    if (expanded) return
+private fun onTap(
+    context: Context,
+    act: Act,
+    expanded: Boolean,
+    s: IslandSettings,
+    tapY: Float,
+    capsuleBandPx: Float,
+) {
+    // The top capsule remains the explicit tap-to-close area. Taps on the
+    // expanded card body are ordinary card interaction and must not dismiss it.
+    if (expanded) {
+        if (tapY <= capsuleBandPx) Controls.collapse()
+        return
+    }
     if (s.tapAction == TapAction.SCROLL_TOP) {
         perform(context, s.tapAction, act)
         return
