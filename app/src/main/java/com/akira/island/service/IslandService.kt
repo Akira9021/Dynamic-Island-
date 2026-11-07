@@ -210,13 +210,14 @@ class IslandService : AccessibilityService() {
             }
         }
 
-        // Пока вводят ответ на уведомление, окну нужен фокус, иначе клавиатура не покажется
+        // Пока вводят ответ на уведомление или подпись будильника, окну нужен фокус, иначе клавиатура не покажется
         scope.launch {
-            IslandBus.reply.collect {
-                keyboardSeen = false
-                replySince = SystemClock.elapsedRealtime()
-                setInputFocus(it != null)
-            }
+            combine(IslandBus.reply, IslandBus.alarmDraft) { reply, draft -> reply != null || draft != null }
+                .distinctUntilChanged().collect {
+                    keyboardSeen = false
+                    replySince = SystemClock.elapsedRealtime()
+                    setInputFocus(it)
+                }
         }
         // Звонит таймер, будильник «Часов» или входящий вызов: экран включается и не гаснет, пока звонит
         scope.launch {

@@ -39,6 +39,10 @@ object Controls {
     fun collapse() {
         IslandBus.expanded.value = false
         IslandBus.focus.value = null
+        if (IslandBus.alarmDraft.value != null) {
+            IslandBus.alarmDraft.value = null
+            IslandBus.alarmCreateFailed.value = false
+        }
     }
 
     // Плеер

@@ -47,6 +47,19 @@ fun isDismissLabel(label: CharSequence?): Boolean {
 
 fun snoozeDurationMs(): Long = ALARM_SNOOZE_MINUTES * 60_000L
 
+/** Сдвиг времени будильника на [delta] минут с переходом через полночь: 23:55 + 10 → 00:05. */
+fun shiftAlarmTime(hour: Int, minute: Int, delta: Int): Pair<Int, Int> {
+    val total = (((hour.coerceIn(0, 23) * 60 + minute.coerceIn(0, 59) + delta) % 1440) + 1440) % 1440
+    return total / 60 to total % 60
+}
+
+/** Переключить день недели в маске (bit 0 = понедельник … 6 = воскресенье); null — ни одного дня. */
+fun toggleAlarmDay(mask: Int?, day: Int): Int? {
+    if (day !in 0..6) return mask?.takeIf { it != 0 }
+    val toggled = (mask ?: 0) xor (1 shl day)
+    return toggled.takeIf { it != 0 }
+}
+
 /**
  * Ближайшее срабатывание будильника (epoch ms) для часа, минут и маски дней, начиная с [now]:
  * тот же расчёт, что делает «Часы» при постановке будильника. Нужен, чтобы после создания

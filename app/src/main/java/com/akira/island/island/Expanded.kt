@@ -126,7 +126,11 @@ fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: Batte
     }
     // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал
     Box(Modifier.width(width).padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
-        when (act) {
+        // Карточка нового будильника перекрывает активность острова, пока её не закроют
+        val draft by IslandBus.alarmDraft.collectAsState()
+        if (draft != null) {
+            AlarmCreateCard()
+        } else when (act) {
             is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
             is Act.TimerA -> TimerExpanded(context, act.t, s)
             is Act.StopwatchA -> StopwatchExpanded(act.w)
@@ -685,17 +689,27 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
             Column(Modifier.weight(1f)) {
                 Text(clockText(time, 36.sp), color = Color.White, fontSize = 36.sp, style = Digits)
                 Text(date, color = Dim, fontSize = 14.sp)
-                // Ближайший будильник в пределах суток — под датой, как на экране блокировки iPhone
-                alarm?.takeIf { it.triggerAt - now in 1..86_400_000L }?.let { a ->
-                    Row(
-                        Modifier.padding(top = 3.dp).clickable { openAlarm(context, a) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Ios.alarm, null, tint = AlarmTint, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text(tr("${wakeTime(context, a.triggerAt)} · через ${durationWords(a.triggerAt - now)}",
-                            "${wakeTime(context, a.triggerAt)} · in ${durationWords(a.triggerAt - now)}"),
-                            color = AlarmTint, fontSize = 13.sp, maxLines = 1)
+                // Ближайший будильник в пределах суток — под датой, как на экране блокировки iPhone;
+                // если будильника нет, здесь же можно поставить новый
+                if (s.cardAlarm) {
+                    val upcoming = alarm?.takeIf { it.triggerAt - now in 1..86_400_000L }
+                    val canCreate = remember { Controls.clockBridge?.isSupported(context) == true }
+                    if (upcoming != null || canCreate) {
+                        Row(
+                            Modifier.padding(top = 3.dp).clickable {
+                                if (upcoming != null) openAlarm(context, upcoming) else openAlarmDraft()
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Ios.alarm, null, tint = if (upcoming != null) AlarmTint else Dim, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                if (upcoming != null) tr("${wakeTime(context, upcoming.triggerAt)} · через ${durationWords(upcoming.triggerAt - now)}",
+                                    "${wakeTime(context, upcoming.triggerAt)} · in ${durationWords(upcoming.triggerAt - now)}")
+                                else tr("Поставить будильник", "Set an alarm"),
+                                color = if (upcoming != null) AlarmTint else Dim, fontSize = 13.sp, maxLines = 1,
+                            )
+                        }
                     }
                 }
             }

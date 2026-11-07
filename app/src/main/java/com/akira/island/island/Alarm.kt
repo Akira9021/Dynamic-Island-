@@ -10,7 +10,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,19 +23,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -43,19 +53,25 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.akira.island.core.AlarmDraft
 import com.akira.island.core.AlarmInfo
 import com.akira.island.core.Controls
+import com.akira.island.core.IslandBus
 import com.akira.island.core.Lang
 import com.akira.island.core.Notice
 import com.akira.island.core.Tints
+import com.akira.island.core.system.shiftAlarmTime
+import com.akira.island.core.system.toggleAlarmDay
 import com.akira.island.core.tr
 import com.akira.island.data.IslandSettings
 import java.text.SimpleDateFormat
@@ -258,16 +274,24 @@ fun AlarmCompact(a: AlarmInfo, s: IslandSettings) {
 
 /**
  * Раскрытый будильник: слева циферблат сна, справа «Подъём · завтра», крупное время звонка
- * и сколько осталось спать. Нажатие открывает будильники «Часов».
+ * и сколько осталось спать. Нажатие на циферблат открывает карточку нового будильника,
+ * на остальное — будильники «Часов». Пока будильник звонит, здесь кнопки «Отложить» и «Стоп».
  */
 @Composable
 fun AlarmExpanded(a: AlarmInfo, s: IslandSettings) {
     val context = LocalContext.current
+    val ringing by IslandBus.ringingAlarms.collectAsState()
+    if (ringing.isNotEmpty()) {
+        AlarmRinging(a)
+        return
+    }
     val now = rememberWallNow(15_000)
     val left = (a.triggerAt - now).coerceAtLeast(0)
     val wake = isWakeUp(a.triggerAt)
     Row(Modifier.fillMaxWidth().clickable { openAlarm(context, a) }, verticalAlignment = Alignment.CenterVertically) {
-        SleepDial(now, a.triggerAt, Modifier.size(96.dp), animate = !s.reduceEffects)
+        SleepDial(now, a.triggerAt, Modifier.size(96.dp).clickable {
+            if (Controls.clockBridge?.isSupported(context) == true) openAlarmDraft()
+        }, animate = !s.reduceEffects)
         Spacer(Modifier.width(18.dp))
         Column(Modifier.weight(1f)) {
             Text("${if (wake) tr("Подъём", "Wake up") else tr("Будильник", "Alarm")} · ${alarmDay(a.triggerAt, now)}",
@@ -283,6 +307,155 @@ fun AlarmExpanded(a: AlarmInfo, s: IslandSettings) {
             }
         }
     }
+}
+
+/** Звонящий будильник: те же кнопки, что у таймера, — «Отложить» и «Стоп». */
+@Composable
+private fun AlarmRinging(a: AlarmInfo) {
+    val context = LocalContext.current
+    val haptic = rememberHaptic()
+    val wobble = rememberInfiniteTransition(label = "alarmBell")
+    val angle = wobble.animateFloat(-14f, 14f, infiniteRepeatable(tween(120), RepeatMode.Reverse), label = "bell")
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(50.dp).clip(CircleShape).background(AlarmTint.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+            Icon(Ios.alarm, null, tint = AlarmTint, modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = angle.value })
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(tr("Будильник", "Alarm"), color = AlarmTint, fontSize = 15.sp)
+            Text(wakeTime(context, a.triggerAt), color = AlarmTint, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, style = Digits, maxLines = 1)
+        }
+        PillButton(Ios.bell, tr("Отложить", "Snooze"), bg = Color.White.copy(alpha = 0.18f)) {
+            haptic()
+            Controls.snoozeAlarm(context, null)
+        }
+        Spacer(Modifier.width(8.dp))
+        PillButton(Ios.stop, tr("Стоп", "Stop"), bg = AlarmTint, fg = Color.Black) {
+            haptic()
+            Controls.stopAlarm(context, null)
+        }
+    }
+}
+
+/**
+ * Карточка нового будильника: часы и минуты стрелками, дни недели кружками и подпись.
+ * Пока «Часы» не подтвердили будильник, внизу видна подсказка с кнопкой «Открыть Часы».
+ */
+@Composable
+fun AlarmCreateCard() {
+    val context = LocalContext.current
+    val draft by IslandBus.alarmDraft.collectAsState()
+    val creating by IslandBus.alarmCreating.collectAsState()
+    val failed by IslandBus.alarmCreateFailed.collectAsState()
+    val d = draft ?: return
+    if (Controls.clockBridge?.isSupported(context) != true) return
+    val close = {
+        IslandBus.alarmDraft.value = null
+        IslandBus.alarmCreateFailed.value = false
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Новый будильник", "New alarm"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f))
+            RoundButton(Ios.close, size = 32.dp, bg = Color.Transparent, fg = Dim, iconScale = 0.4f) { close() }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            TimeStepper(tr("Часы", "Hours"), d.hour) { delta ->
+                val (h, m) = shiftAlarmTime(d.hour, d.minute, delta * 60)
+                IslandBus.alarmDraft.value = d.copy(hour = h, minute = m)
+            }
+            TimeStepper(tr("Минуты", "Minutes"), d.minute) { delta ->
+                val (h, m) = shiftAlarmTime(d.hour, d.minute, delta * 5)
+                IslandBus.alarmDraft.value = d.copy(hour = h, minute = m)
+            }
+            Spacer(Modifier.weight(1f))
+            Text(tr("Один раз", "Once"), color = Dim, fontSize = 12.sp, maxLines = 1)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (i in 0..6) {
+                val on = d.daysMask?.let { (it shr i) and 1 == 1 } == true
+                Box(
+                    Modifier.size(30.dp).clip(CircleShape)
+                        .background(if (on) AlarmTint else Color.White.copy(alpha = 0.12f))
+                        .clickable { IslandBus.alarmDraft.value = d.copy(daysMask = toggleAlarmDay(d.daysMask, i)) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(dayShort(i), color = if (on) Color.Black else Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(19.dp))
+                .background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 14.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            BasicTextField(
+                value = d.label,
+                onValueChange = { v -> IslandBus.alarmDraft.value = d.copy(label = v.take(40)) },
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
+                cursorBrush = SolidColor(AlarmTint),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    Box {
+                        if (d.label.isEmpty()) Text(tr("Подпись", "Label"), color = Dim, fontSize = 15.sp)
+                        inner()
+                    }
+                },
+            )
+        }
+        if (failed) {
+            Spacer(Modifier.height(8.dp))
+            Text(tr("Будильник не появился в «Часах»", "The alarm did not appear in Clock"), color = Tints.Red, fontSize = 13.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PillButton(Ios.alarm, if (creating) tr("Создаю…", "Creating…") else tr("Создать", "Create"),
+                bg = if (creating) AlarmTint.copy(alpha = 0.35f) else AlarmTint, fg = Color.Black) {
+                if (!creating) Controls.startAlarm(context, d.hour, d.minute, d.daysMask, d.label)
+            }
+            if (failed) PillButton(Ios.close, tr("Открыть Часы", "Open Clock"), bg = Color.White.copy(alpha = 0.18f)) {
+                Controls.openClock(context)
+            }
+        }
+    }
+}
+
+/** Стрелки вокруг значения: часы идут по часу, минуты — по пять. */
+@Composable
+private fun TimeStepper(label: String, value: Int, onDelta: (Int) -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Dim, fontSize = 11.sp, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RoundButton(Ios.remove, size = 30.dp, bg = Color.White.copy(alpha = 0.14f), iconScale = 0.44f) { onDelta(-1) }
+            Text("%02d".format(value), color = Color.White, fontSize = 26.sp, style = Digits,
+                textAlign = TextAlign.Center, modifier = Modifier.width(42.dp))
+            RoundButton(Ios.add, size = 30.dp, bg = Color.White.copy(alpha = 0.14f), iconScale = 0.44f) { onDelta(1) }
+        }
+    }
+}
+
+/** Короткие дни недели; bit 0 — понедельник, как в [AlarmDraft.daysMask]. */
+private fun dayShort(i: Int): String = when (i) {
+    0 -> tr("Пн", "Mo")
+    1 -> tr("Вт", "Tu")
+    2 -> tr("Ср", "We")
+    3 -> tr("Чт", "Th")
+    4 -> tr("Пт", "Fr")
+    5 -> tr("Сб", "Sa")
+    else -> tr("Вс", "Su")
+}
+
+/** Открыть карточку нового будильника со временем на ближайший час вперёд. */
+fun openAlarmDraft() {
+    val cal = Calendar.getInstance()
+    val hour = (cal.get(Calendar.HOUR_OF_DAY) + 1) % 24
+    IslandBus.alarmCreateFailed.value = false
+    IslandBus.alarmCreating.value = false
+    IslandBus.alarmDraft.value = AlarmDraft(hour = hour, minute = 0)
 }
 
 /**

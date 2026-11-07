@@ -92,6 +92,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.akira.island.core.AlarmInfo
 import com.akira.island.core.BatteryInfo
 import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
@@ -155,9 +156,10 @@ fun IslandOverlay(
     val focus by IslandBus.focus.collectAsState()
     val calibrating by IslandBus.calibrating.collectAsState()
     val nextAlarm by IslandBus.nextAlarm.collectAsState()
+    val ringingAlarms by IslandBus.ringingAlarms.collectAsState()
     val egg by IslandBus.egg.collectAsState()
     val payReady by IslandBus.payReady.collectAsState()
-    // Будильник появляется в острове за 12 часов и уходит, когда прозвенел: просыпаемся ровно в эти два момента,
+    // Будильник появляется в острове за 12 часов и остаётся, пока звонит: просыпаемся ровно в эти моменты,
     // а не каждые полминуты. Пока телефон спит, ожидание стоит — поэтому со включением экрана пересчитываем
     val screenOn by IslandBus.screenOn.collectAsState()
     var alarmNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -240,9 +242,14 @@ fun IslandOverlay(
         if (s.cardMedia && m != null && !(s.hideWhenPlayerOpen && foreground == m.pkg)) persistent += Act.MediaA(m)
         if (s.cardProgress) progress.values.maxByOrNull { it.postTime }?.let { persistent += Act.ProgressA(it) }
         if (s.cardCharging && battery.charging) persistent += Act.ChargingA(battery)
-        // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь
-        val alarm = nextAlarm
-        if (s.cardAlarm && alarm != null && alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS) persistent += Act.AlarmA(alarm)
+        // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь.
+        // Пока он звонит, карточка остаётся с кнопками «Отложить» и «Стоп», даже если «Часы» уже
+        // убрали его из ближайших будильников
+        val alarmRinging = ringingAlarms.isNotEmpty()
+        val alarm = nextAlarm ?: if (alarmRinging) AlarmInfo(System.currentTimeMillis(), "", null) else null
+        if (s.cardAlarm && alarm != null && (alarmRinging || alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS)) {
+            persistent += Act.AlarmA(alarm)
+        }
 
         // Выбранная активность выходит вперёд, но звонящий таймер всегда главный
         val ringing = (persistent.firstOrNull() as? Act.TimerA)?.t?.ringing == true || call?.incoming == true

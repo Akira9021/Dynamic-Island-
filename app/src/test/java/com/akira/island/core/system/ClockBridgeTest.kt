@@ -127,4 +127,19 @@ class ClockBridgeTest {
     fun `nextAlarmAt - full week mask picks tomorrow`() {
         assertEquals(utc(6, 7, 30), nextAlarmAt(7, 30, 0b1111111, utc(5, 10, 0), utcZone))
     }
+
+    @Test
+    fun `shiftAlarmTime - crosses midnight both ways`() {
+        assertEquals(0 to 5, shiftAlarmTime(23, 55, 10))
+        assertEquals(23 to 50, shiftAlarmTime(0, 5, -15))
+        assertEquals(12 to 0, shiftAlarmTime(11, 45, 15))
+    }
+
+    @Test
+    fun `toggleAlarmDay - selects, deselects and clears the mask`() {
+        assertEquals(1, toggleAlarmDay(null, 0))
+        assertEquals(3, toggleAlarmDay(1, 1))
+        assertNull(toggleAlarmDay(1, 0))
+        assertNull(toggleAlarmDay(null, 9))
+    }
 }
