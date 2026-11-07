@@ -7,7 +7,7 @@
 ## [1.7.0] — 2026-10-28
 
 ### Полная логика Liquid-Glass-Android — тестовая ветка, 2026-11-07
-- Режим «Полная версия» портирует Regular-пайплайн `QWEA0/Liquid-Glass-Android`: SDF edge-compression, inverse-power falloff, adaptive lens, RGB-дисперсия вдоль нормали, vibrancy и парные specular-блики.
+- Режим «Полная версия» портирует Hero/Regular-пайплайн `QWEA0/Liquid-Glass-Android`: SDF edge-compression, adaptive lens, RGB-дисперсия вдоль нормали, per-pixel adaptive tint и парные specular-блики.
 - Добавлена «Кастомизация» с палитрой и силой цветового tint; геометрия линзы остаётся той же.
 - В примере используются оригинальные wallpaper, Regular/Clear и lens-detail изображения; MIT-лицензия сохранена в `docs/licenses`.
 - Раскрытый остров больше не сворачивается от касания вне карточки: можно открыть другое приложение и пользоваться им, пока карточка остаётся поверх. Внешние касания продлевают настроенный таймер бездействия.

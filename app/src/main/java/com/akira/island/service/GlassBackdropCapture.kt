@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityWindowInfo
 import androidx.annotation.RequiresApi
 import com.akira.island.island.GlassBackdropFrame
 import com.akira.island.island.GlassBackdropState
+import com.akira.island.island.blurGlassBackdrop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,7 +23,6 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -36,8 +36,8 @@ import kotlin.math.roundToInt
  *    overlay, so the refracted pixels are genuinely the content behind it.
  *
  * The screenshot API is throttled by the system (~3 requests per second), which
- * is enough for a status-bar island: the background there is mostly static. The
- * last frame is kept while the screen is off or power saving is on.
+ * is enough for a status-bar island: the background there is mostly static. In
+ * Battery Saver the capture cadence is reduced, but the glass remains rendered.
  */
 class GlassBackdropCapture(
     private val service: AccessibilityService,
@@ -48,8 +48,6 @@ class GlassBackdropCapture(
     private val generation = AtomicLong(0)
     private var job: Job? = null
     private var failures = 0
-    private var lastSignature = Long.MIN_VALUE
-    private var lastRect = Rect()
 
     @Volatile private var rect = Rect()
     @Volatile private var enabled = false
@@ -61,7 +59,7 @@ class GlassBackdropCapture(
                 if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     runCatching { captureOnce() }
                 }
-                delay(if (failures >= 3) 2_000L else 380L)
+                delay(if (failures >= 3) 2_000L else 420L)
             }
         }
     }
@@ -87,7 +85,7 @@ class GlassBackdropCapture(
     private suspend fun captureOnce() = mutex.withLock {
         val area = rect
         if (area.isEmpty) return@withLock
-        if (!service.let { runCatching { it.windows }.isSuccess }) return@withLock
+        if (!runCatching { service.windows }.isSuccess) return@withLock
 
         val window = findWindow(area) ?: return@withLock
         val bounds = Rect()
@@ -97,7 +95,9 @@ class GlassBackdropCapture(
         val shot = screenshot(window.id)
         if (shot == null) {
             failures++
-            if (failures == 1 || failures % 10 == 0) Log.w(TAG, "screenshot of window ${window.id} failed ($failures)")
+            if (failures == 1 || failures % 10 == 0) {
+                Log.w(TAG, "screenshot of window ${window.id} failed ($failures); caps=${service.serviceInfo?.capabilities}")
+            }
             return@withLock
         }
         val frame = try {
@@ -111,12 +111,8 @@ class GlassBackdropCapture(
         }
         failures = 0
 
-        // Do not rebuild the shader for a pixel-identical backdrop. The island
-        // moves constantly during animations, so the rect is part of the key.
-        val signature = signature(frame.sharp) xor area.hashCode().toLong()
-        if (signature == lastSignature && area == lastRect) return@withLock
-        lastSignature = signature
-        lastRect = Rect(area)
+        // Dynamic content must never be suppressed by a sparse bitmap hash:
+        // a small icon can move under the lens while missing all hash samples.
         withContext(Dispatchers.Main) { GlassBackdropState.publish(frame) }
     }
 
@@ -197,38 +193,14 @@ class GlassBackdropCapture(
         if (sharp !== piece) piece.recycle()
         // The shader addresses the bitmap in raw pixels; keep density from scaling it.
         sharp.density = Bitmap.DENSITY_NONE
-        val blurred = blur(sharp)
-        blurred.density = Bitmap.DENSITY_NONE
-        val isLight = meanLuminance(sharp) >= 0.52f
+        val blurred = blurGlassBackdrop(sharp)
         val screenRect = Rect(
             windowBounds.left + (left / scaleX).roundToInt(),
             windowBounds.top + (top / scaleY).roundToInt(),
             windowBounds.left + (right / scaleX).roundToInt(),
             windowBounds.top + (bottom / scaleY).roundToInt(),
         )
-        return GlassBackdropFrame(sharp, blurred, screenRect, generation.incrementAndGet(), isLight = isLight)
-    }
-
-    private fun meanLuminance(bitmap: Bitmap): Float {
-        var total = 0.0
-        var samples = 0
-        val stepX = max(1, bitmap.width / 32)
-        val stepY = max(1, bitmap.height / 16)
-        var y = 0
-        while (y < bitmap.height) {
-            var x = 0
-            while (x < bitmap.width) {
-                val pixel = bitmap.getPixel(x, y)
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-                total += (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
-                samples++
-                x += stepX
-            }
-            y += stepY
-        }
-        return if (samples == 0) 0f else (total / samples).toFloat()
+        return GlassBackdropFrame(sharp, blurred, screenRect, generation.incrementAndGet())
     }
 
     /** Keeps the texture small enough for a 60 fps shader on mid-range phones. */
@@ -241,89 +213,8 @@ class GlassBackdropCapture(
         return Bitmap.createScaledBitmap(source, w, h, true)
     }
 
-    /** Downscale + three box passes, then bilinear upscale: cheap frosted glass. */
-    private fun blur(source: Bitmap): Bitmap {
-        val w = max(1, source.width / BLUR_SCALE)
-        val h = max(1, source.height / BLUR_SCALE)
-        val small = Bitmap.createScaledBitmap(source, w, h, true)
-        val pixels = IntArray(w * h)
-        small.getPixels(pixels, 0, w, 0, 0, w, h)
-        // Upstream Regular blur is roughly 6-14 source pixels for this pill;
-        // avoid blurring away the very edge details the lens is meant to bend.
-        val radius = max(1, min(w, h) / 180)
-        repeat(3) { boxBlur(pixels, w, h, radius) }
-        small.setPixels(pixels, 0, w, 0, 0, w, h)
-        val out = Bitmap.createScaledBitmap(small, source.width, source.height, true)
-        small.recycle()
-        return out
-    }
-
-    /** Separable box blur with a sliding window; O(width * height) per pass. */
-    private fun boxBlur(pixels: IntArray, w: Int, h: Int, radius: Int) {
-        val window = radius * 2 + 1
-        val temp = IntArray(pixels.size)
-
-        for (y in 0 until h) {
-            val row = y * w
-            var r = 0
-            var g = 0
-            var b = 0
-            for (x in -radius..radius) {
-                val c = pixels[row + x.coerceIn(0, w - 1)]
-                r += (c ushr 16) and 0xFF
-                g += (c ushr 8) and 0xFF
-                b += c and 0xFF
-            }
-            for (x in 0 until w) {
-                temp[row + x] = (0xFF shl 24) or ((r / window) shl 16) or ((g / window) shl 8) or (b / window)
-                val out = pixels[row + (x - radius).coerceIn(0, w - 1)]
-                val into = pixels[row + (x + radius + 1).coerceIn(0, w - 1)]
-                r += ((into ushr 16) and 0xFF) - ((out ushr 16) and 0xFF)
-                g += ((into ushr 8) and 0xFF) - ((out ushr 8) and 0xFF)
-                b += (into and 0xFF) - (out and 0xFF)
-            }
-        }
-
-        for (x in 0 until w) {
-            var r = 0
-            var g = 0
-            var b = 0
-            for (y in -radius..radius) {
-                val c = temp[y.coerceIn(0, h - 1) * w + x]
-                r += (c ushr 16) and 0xFF
-                g += (c ushr 8) and 0xFF
-                b += c and 0xFF
-            }
-            for (y in 0 until h) {
-                pixels[y * w + x] = (0xFF shl 24) or ((r / window) shl 16) or ((g / window) shl 8) or (b / window)
-                val out = temp[(y - radius).coerceIn(0, h - 1) * w + x]
-                val into = temp[(y + radius + 1).coerceIn(0, h - 1) * w + x]
-                r += ((into ushr 16) and 0xFF) - ((out ushr 16) and 0xFF)
-                g += ((into ushr 8) and 0xFF) - ((out ushr 8) and 0xFF)
-                b += (into and 0xFF) - (out and 0xFF)
-            }
-        }
-    }
-
-    private fun signature(bitmap: Bitmap): Long {
-        var hash = 1_125_899_906_842_628_619L
-        val stepX = max(1, bitmap.width / 16)
-        val stepY = max(1, bitmap.height / 16)
-        var y = 0
-        while (y < bitmap.height) {
-            var x = 0
-            while (x < bitmap.width) {
-                hash = hash * 31 + bitmap.getPixel(x, y)
-                x += stepX
-            }
-            y += stepY
-        }
-        return hash
-    }
-
     private companion object {
         const val TAG = "GlassBackdrop"
         const val MAX_TEXTURE = 900
-        const val BLUR_SCALE = 2
     }
 }

@@ -57,6 +57,7 @@ uniform float2 uLightDir;
 uniform float uSpecStrength;
 uniform float uRimBandMax;
 uniform float4 uTint;
+uniform float uAdaptiveTint;
 uniform float uSaturation;
 
 float sdRoundedBox(float2 p, float2 halfSize, float radius) {
@@ -102,11 +103,12 @@ half4 main(float2 coord) {
     // back into a narrow, optically dense compression ring at the rim.
     float2 offset = n * (-slope * uRefractHeight);
     float2 screen = (uOrigin + coord - uBackOrigin) * uBackScale;
+    float2 bitmapOffset = offset * uBackScale;
     float2 lo = float2(0.5);
     float2 hi = max(uBackSize - 0.5, lo + 1.0);
-    float2 coordR = clamp(screen + offset * (1.0 - uDispersion * slope), lo, hi);
-    float2 coordG = clamp(screen + offset, lo, hi);
-    float2 coordB = clamp(screen + offset * (1.0 + uDispersion * slope), lo, hi);
+    float2 coordR = clamp(screen + bitmapOffset * (1.0 - uDispersion * slope), lo, hi);
+    float2 coordG = clamp(screen + bitmapOffset, lo, hi);
+    float2 coordB = clamp(screen + bitmapOffset * (1.0 + uDispersion * slope), lo, hi);
 
     half3 col = half3(uBlur.eval(coordR).r, uBlur.eval(coordG).g, uBlur.eval(coordB).b);
 
@@ -120,10 +122,21 @@ half4 main(float2 coord) {
     float amount = 1.0 + (uSaturation - 1.0) * mix(0.3, 1.0, room * highlight);
     c = clamp(mix(float3(lum), c, amount), float3(0.0), float3(1.0));
 
-    // Full = upstream Regular tint; Custom = the same optical lens with user's hue.
-    float3 absorbed = c * mix(float3(1.0), float3(uTint.rgb), 0.85);
-    float3 scattered = float3(uTint.rgb) * (0.38 * (1.0 - lum));
-    c = mix(c, clamp(absorbed + scattered, float3(0.0), float3(1.0)), uTint.a);
+    // Upstream hero uses per-pixel Regular adaptive tint. It shifts highlights
+    // toward white and shadows toward black; it never borrows the island fill.
+    if (uAdaptiveTint > 0.5) {
+        float localLum = dot(c, float3(0.2126, 0.7152, 0.0722));
+        float e = smoothstep(0.35, 0.75, localLum);
+        c = mix(c, float3(1.0 - e), 0.14 + 0.08 * e);
+    }
+
+    // Custom color is modeled as a lightly absorbing / scattering medium.
+    if (uTint.a > 0.002) {
+        float tintLum = dot(c, float3(0.2126, 0.7152, 0.0722));
+        float3 absorbed = c * mix(float3(1.0), float3(uTint.rgb), 0.85);
+        float3 scattered = float3(uTint.rgb) * (0.38 * (1.0 - tintLum));
+        c = mix(c, clamp(absorbed + scattered, float3(0.0), float3(1.0)), uTint.a);
+    }
 
     // The library's symmetric front/back specular lobes, driven by surface
     // normals and the gravity-mapped world light; no directionless outline.
@@ -231,9 +244,9 @@ internal fun Modifier.liquidGlassSurface(
                             val densityScale = this.density
                             // Upstream defaults: bevel=48px / refraction=160px, adaptively
                             // clamped for small controls so a pill isn't all bevel.
-                            val bevel = min(48f, shortSide * 0.30f).coerceAtLeast(2f)
+                            val bevel = min(56f, shortSide * 0.30f).coerceAtLeast(2f)
                             val refraction = min(
-                                160f,
+                                200f,
                                 0.70f * shortSide * min(1f, shortSide / (110f * densityScale)),
                             )
                             val rimBand = min(6f, shortSide * 0.05f).coerceAtLeast(2f)
@@ -253,21 +266,20 @@ internal fun Modifier.liquidGlassSurface(
                             shader.setFloatUniform("uBevel", bevel)
                             shader.setFloatUniform("uRefractHeight", refraction)
                             shader.setFloatUniform("uFalloff", 2f)
-                            shader.setFloatUniform("uDispersion", 0.10f)
+                            shader.setFloatUniform("uDispersion", 0.16f)
                             shader.setFloatUniform("uRimBandMax", rimBand)
-                            shader.setFloatUniform("uSaturation", 1.4f)
+                            shader.setFloatUniform("uSaturation", 1.5f)
                             val direction = if (reduceEffects) GlassTilt.Zero else tilt()
                             val lightX = 0.866f + if (reduceEffects) 0f else direction.x * 0.35f
                             val lightY = 0.5f - if (reduceEffects) 0f else direction.y * 0.35f
                             val lightLength = kotlin.math.sqrt(lightX * lightX + lightY * lightY).coerceAtLeast(0.001f)
                             shader.setFloatUniform("uLightDir", lightX / lightLength, lightY / lightLength)
                             shader.setFloatUniform("uSpecStrength", if (reduceEffects) 0f else 1f)
-                            val tint = if (glassMode == LiquidGlassMode.FULL) {
-                                if (frame.isLight) Color(0x33000000) else Color(0x24FFFFFF)
-                            } else {
+                            val tint = if (glassMode == LiquidGlassMode.CUSTOM)
                                 customTint.copy(alpha = customTintStrength.coerceIn(0f, 1f))
-                            }
+                            else Color.Transparent
                             shader.setFloatUniform("uTint", tint.red, tint.green, tint.blue, tint.alpha)
+                            shader.setFloatUniform("uAdaptiveTint", 1f)
                             paint.shader = shader
                             drawIntoCanvas { canvas ->
                                 val native = canvas.nativeCanvas

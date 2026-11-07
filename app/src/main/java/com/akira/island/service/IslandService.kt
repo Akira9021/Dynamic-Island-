@@ -291,11 +291,10 @@ class IslandService : AccessibilityService() {
         }
 
         // Живое преломление: снимок окна под островом нужен только при включённом стекле.
-        // В экономии заряда кадр замирает — последний снимок остаётся, новых не делаем.
+        // Battery Saver снижает частоту захвата, но не выключает материал.
         scope.launch {
-            combine(SettingsRepo.state, IslandBus.screenOn, IslandBus.powerSave) { saved, on, saving ->
-                val s = saved.forPowerSave(saving)
-                s.liquidGlass && s.glassShader && s.enabled && on && !saving
+            combine(SettingsRepo.state, IslandBus.screenOn) { saved, on ->
+                saved.liquidGlass && saved.glassShader && saved.enabled && on
             }
                 .distinctUntilChanged()
                 .collect { glassBackdrop?.setEnabled(it) }

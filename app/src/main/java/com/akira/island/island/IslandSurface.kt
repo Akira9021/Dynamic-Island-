@@ -34,7 +34,9 @@ fun Modifier.islandSurface(
         it.copy(alpha = it.alpha * outline.opacity / 100f)
     }
     return this
-        .then(if ((s.shadow || s.liquidGlass) && !s.reduceEffects) Modifier.shadow(if (s.liquidGlass) 16.dp else 10.dp, shape, clip = false) else Modifier)
+        // Match LiquidGlassView's default: the optical rim supplies depth; a
+        // separate drop shadow is opt-in, not forced by the Full material.
+        .then(if (s.shadow && !s.reduceEffects) Modifier.shadow(10.dp, shape, clip = false) else Modifier)
         .clip(shape)
         .then(
             if (s.liquidGlass) Modifier.liquidGlassSurface(

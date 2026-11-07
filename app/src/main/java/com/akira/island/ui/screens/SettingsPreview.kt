@@ -48,6 +48,7 @@ import com.akira.island.island.IslandType
 import com.akira.island.island.LocalGlassPreviewBackdrop
 import com.akira.island.island.PreviewScene
 import com.akira.island.island.islandSurface
+import com.akira.island.island.blurGlassBackdrop
 import com.akira.island.R
 import com.akira.island.ui.Ui
 
@@ -123,7 +124,7 @@ fun LiquidGlassDemo(settings: IslandSettings) {
     val density = LocalDensity.current
     val context = LocalContext.current
     val view = LocalView.current
-    val source = remember(context) { BitmapFactory.decodeResource(context.resources, R.drawable.liquid_glass_wallpaper) }
+    val source = remember(context) { BitmapFactory.decodeResource(context.resources, R.drawable.liquid_glass_control_center) }
     var sharp by remember { mutableStateOf<Bitmap?>(null) }
     var blurred by remember { mutableStateOf<Bitmap?>(null) }
     var frame by remember { mutableStateOf<GlassBackdropFrame?>(null) }
@@ -163,10 +164,7 @@ fun LiquidGlassDemo(settings: IslandSettings) {
                                 source, srcRect, Rect(0, 0, size.width, size.height), Paint(Paint.FILTER_BITMAP_FLAG),
                             )
                             bitmap.density = Bitmap.DENSITY_NONE
-                            val small = Bitmap.createScaledBitmap(bitmap, maxOf(1, size.width / 2), maxOf(1, size.height / 2), true)
-                            val blurBitmap = Bitmap.createScaledBitmap(small, size.width, size.height, true)
-                            small.recycle()
-                            blurBitmap.density = Bitmap.DENSITY_NONE
+                            val blurBitmap = blurGlassBackdrop(bitmap)
                             sharp = bitmap
                             blurred = blurBitmap
                         }
@@ -185,7 +183,6 @@ fun LiquidGlassDemo(settings: IslandSettings) {
                             if (frame?.screenRect != screenRect || frame?.sharp !== bitmap) {
                                 frame = GlassBackdropFrame(
                                     bitmap, blurBitmap, screenRect, ++generation, local = false,
-                                    isLight = averageLuminance(bitmap) >= 0.52f,
                                 )
                             }
                         }
@@ -256,26 +253,6 @@ fun LiquidGlassDemo(settings: IslandSettings) {
  */
 private val PreviewGlassBackdrop: GlassBackdropFrame by lazy { buildPreviewGlassBackdrop() }
 
-private fun averageLuminance(bitmap: Bitmap): Float {
-    var total = 0.0
-    var count = 0
-    val sx = maxOf(1, bitmap.width / 24)
-    val sy = maxOf(1, bitmap.height / 16)
-    var y = 0
-    while (y < bitmap.height) {
-        var x = 0
-        while (x < bitmap.width) {
-            val c = bitmap.getPixel(x, y)
-            total += (0.2126 * ((c shr 16) and 0xFF) +
-                0.7152 * ((c shr 8) and 0xFF) + 0.0722 * (c and 0xFF)) / 255.0
-            count++
-            x += sx
-        }
-        y += sy
-    }
-    return if (count == 0) 0f else (total / count).toFloat()
-}
-
 private fun buildPreviewGlassBackdrop(): GlassBackdropFrame {
     val w = 1024
     val h = 512
@@ -320,9 +297,6 @@ private fun buildPreviewGlassBackdrop(): GlassBackdropFrame {
     )
     canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
     sharp.density = Bitmap.DENSITY_NONE
-    val small = Bitmap.createScaledBitmap(sharp, w / 8, h / 8, true)
-    val blurred = Bitmap.createScaledBitmap(small, w, h, true)
-    small.recycle()
-    blurred.density = Bitmap.DENSITY_NONE
+    val blurred = blurGlassBackdrop(sharp)
     return GlassBackdropFrame(sharp, blurred, android.graphics.Rect(0, 0, w, h), 1L, local = true)
 }
