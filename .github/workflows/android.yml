@@ -12,10 +12,12 @@ on:
 permissions:
   contents: read
 
-# Отпечаток сертификата, которым подписан остров с 1.6.1. Если секрет подменят другим ключом,
-# сборка остановится: иначе у всех перестали бы ставиться обновления.
+# For the original repository the workflow defaults to its established release
+# certificate. Forks may override the expected certificate with a repository variable.
 env:
-  SIGNING_CERT_SHA256: c691aa99b1d38518d066066fcb31664374f6a21d65180f7c0565c37a073a12dd
+  # Original repository keeps its existing cert by default. A fork can set this
+  # variable to its own stable certificate without changing the upstream signer.
+  SIGNING_CERT_SHA256: ${{ vars.SIGNING_CERT_SHA256 || 'c691aa99b1d38518d066066fcb31664374f6a21d65180f7c0565c37a073a12dd' }}
 
 jobs:
   build:
@@ -73,10 +75,12 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'island' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.KEYSTORE_PASSWORD }}
           RELEASE: ${{ steps.ver.outputs.release }}
           UPDATE: ${{ steps.ver.outputs.update }}
         run: |
-          if [[ -z "$KEYSTORE_BASE64" || -z "$KEYSTORE_PASSWORD" ]]; then
+          if [[ -z "$KEYSTORE_BASE64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
             if [[ "$RELEASE" == true || "$UPDATE" == true ]]; then
               echo "::error::Нет секретов KEYSTORE_BASE64 и KEYSTORE_PASSWORD — релиз без подписи не выпускается"
               exit 1
@@ -89,7 +93,7 @@ jobs:
           trap 'rm -f "$ks"' EXIT
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$ks"
           # Сначала — тот ли ключ лежит в секрете
-          info=$(keytool -list -v -keystore "$ks" -storetype PKCS12 -storepass:env KEYSTORE_PASSWORD -alias island)
+          info=$(keytool -list -v -keystore "$ks" -storetype PKCS12 -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS")
           key=$(awk -F'SHA256: *' 'NF > 1 {gsub(":", "", $2); print tolower($2); exit}' <<<"$info")
           if [[ "$key" != "$SIGNING_CERT_SHA256" ]]; then
             echo "::error::В секрете KEYSTORE_BASE64 другой ключ ($key) — ожидался $SIGNING_CERT_SHA256"
@@ -99,8 +103,8 @@ jobs:
           echo "build-tools: $bt"
           mkdir -p out
           "$bt/zipalign" -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
-          "$bt/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-key-alias island \
-            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
+          "$bt/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD \
             --out out/DynamicIsland.apk "$RUNNER_TEMP/aligned.apk"
           # Потом — что APK подписан именно им (сертификат не секрет, его видно в логе)
           certs=$("$bt/apksigner" verify --verbose --print-certs out/DynamicIsland.apk)
@@ -110,6 +114,16 @@ jobs:
             echo "::error::APK подписан не тем ключом ($got) — ожидался $SIGNING_CERT_SHA256"
             exit 1
           fi
+          expected_app=$(grep -oP 'applicationId = "\K[^"]+' app/build.gradle.kts)
+          expected_code=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)
+          package_info=$("$bt/aapt" dump badging out/DynamicIsland.apk | grep '^package:')
+          actual_app=$(sed -n "s/.*name='\([^']*\)'.*/\1/p" <<<"$package_info")
+          actual_code=$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$package_info")
+          if [[ "$actual_app" != "$expected_app" || "$actual_code" != "$expected_code" ]]; then
+            echo "::error::APK identity/version mismatch: $actual_app/$actual_code; expected $expected_app/$expected_code"
+            exit 1
+          fi
+          echo "Verified package=$actual_app versionCode=$actual_code"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       # Тестовые APK лежат неделю: потом пропадают сами, а версии для всех — в релизах
@@ -146,10 +160,10 @@ jobs:
           {
             echo "## 🇬🇧 English"
             section CHANGELOG.en.md
-            printf '\n**Install:** download `DynamicIsland.apk` below and open it on your phone. A new version installs over the old one, your settings are kept. **Coming from 1.6.0 or older:** uninstall the old version first — once, because the app now has a new signing key.\n\n---\n\n'
+            printf '\n**Install:** download `DynamicIsland.apk` below and open it on your phone. Builds signed with the same key install as updates; switching between APKs signed with different keys requires uninstalling the previous version first.\n\n---\n\n'
             echo "## 🇷🇺 Русский"
             section CHANGELOG.md
-            printf '\n**Установка:** скачайте `DynamicIsland.apk` ниже и откройте на телефоне. Новая версия ставится поверх старой, настройки сохраняются. **С версии 1.6.0 и старше:** сначала удалите старую версию — один раз, потому что у приложения новый ключ подписи.\n'
+            printf '\n**Установка:** скачайте `DynamicIsland.apk` ниже и откройте на телефоне. Сборки с тем же ключом устанавливаются как обновление; при переходе между APK с разными ключами нужно сначала удалить предыдущую версию.\n'
           } > notes.md
           cat notes.md
 
