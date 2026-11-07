@@ -59,7 +59,10 @@ class GlassBackdropCapture(
                 if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     runCatching { captureOnce() }
                 }
-                delay(if (failures >= 3) 2_000L else 420L)
+                // The accessibility screenshot API is rate-limited to roughly
+                // three captures per second; 340 ms is the fastest sustainable
+                // cadence, so the backdrop updates in near real time.
+                delay(if (failures >= 3) 2_000L else 340L)
             }
         }
     }
