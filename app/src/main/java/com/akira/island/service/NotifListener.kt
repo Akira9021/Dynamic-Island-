@@ -15,6 +15,8 @@ import com.akira.island.core.ChronoInfo
 import com.akira.island.core.IslandBus
 import com.akira.island.core.LiveKind
 import com.akira.island.core.ProgressInfo
+import com.akira.island.core.system.isDismissLabel
+import com.akira.island.core.system.isSnoozeLabel
 import com.akira.island.data.SettingsRepo
 
 /**
@@ -41,6 +43,8 @@ class NotifListener : NotificationListenerService() {
         IslandBus.calls.value = emptyMap()
         IslandBus.live.value = emptyMap()
         IslandBus.ringingAlarms.value = emptySet()
+        IslandBus.ringingAlarmSnooze.value = null
+        IslandBus.ringingAlarmDismiss.value = null
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -100,6 +104,14 @@ object NotificationParser {
         val ringing = n.category == Notification.CATEGORY_ALARM && n.fullScreenIntent != null
         if (ringing != (sbn.key in IslandBus.ringingAlarms.value)) {
             IslandBus.ringingAlarms.value = if (ringing) IslandBus.ringingAlarms.value + sbn.key else IslandBus.ringingAlarms.value - sbn.key
+        }
+        // Кнопки звонящего будильника — запасной путь, если Clock app не слушает ACTION_DISMISS_ALARM / ACTION_SNOOZE_ALARM
+        if (ringing) {
+            val snooze = n.actions?.firstOrNull { isSnoozeLabel(it.title) }?.actionIntent
+            val dismiss = n.actions?.firstOrNull { isDismissLabel(it.title) }?.actionIntent
+            IslandBus.ringingAlarmSnooze.value = snooze
+            IslandBus.ringingAlarmDismiss.value = dismiss
+            android.util.Log.d("SysBridge", "ringingAlarm pkg=${sbn.packageName} snooze=${snooze != null} dismiss=${dismiss != null}")
         }
         IslandBus.calls.value = IslandBus.calls.value.toMutableMap().apply {
             if (call != null) put(sbn.key, call) else remove(sbn.key)
@@ -225,7 +237,13 @@ object NotificationParser {
         if (key in IslandBus.progress.value) IslandBus.progress.value = IslandBus.progress.value - key
         if (key in IslandBus.chrono.value) IslandBus.chrono.value = IslandBus.chrono.value - key
         if (key in IslandBus.live.value) IslandBus.live.value = IslandBus.live.value - key
-        if (key in IslandBus.ringingAlarms.value) IslandBus.ringingAlarms.value = IslandBus.ringingAlarms.value - key
+        if (key in IslandBus.ringingAlarms.value) {
+            IslandBus.ringingAlarms.value = IslandBus.ringingAlarms.value - key
+            if (IslandBus.ringingAlarms.value.isEmpty()) {
+                IslandBus.ringingAlarmSnooze.value = null
+                IslandBus.ringingAlarmDismiss.value = null
+            }
+        }
     }
 
     fun icon(context: Context, pkg: String): ImageBitmap? = icons.getOrPut(pkg) {

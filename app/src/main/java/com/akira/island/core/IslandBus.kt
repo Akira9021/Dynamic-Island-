@@ -43,6 +43,13 @@ object IslandBus {
     val nextAlarm = MutableStateFlow<AlarmInfo?>(null)
     /** Звонящие будильники и таймеры других приложений («Часы»): ключи их уведомлений */
     val ringingAlarms = MutableStateFlow<Set<String>>(emptySet())
+    /** Кнопки «Отложить» / «Выключить» звонящего будильника из его уведомления — запасной путь, если Clock app игнорирует intent */
+    val ringingAlarmSnooze = MutableStateFlow<android.app.PendingIntent?>(null)
+    val ringingAlarmDismiss = MutableStateFlow<android.app.PendingIntent?>(null)
+    /** Будильник не появился в системных «Часах» после создания — показать подсказку в карточке */
+    val alarmCreateFailed = MutableStateFlow(false)
+    /** Черновик нового будильника: открытая карточка создания */
+    val alarmDraft = MutableStateFlow<AlarmDraft?>(null)
     val torch = MutableStateFlow(TorchState())
     val timer = MutableStateFlow<TimerState?>(null)
     val stopwatch = MutableStateFlow<StopwatchState?>(null)
@@ -104,3 +111,14 @@ object IslandBus {
 
 /** Команды службе: скриншот без острова, блокировка экрана, выключение острова (для банков). */
 enum class ServiceCommand { SCREENSHOT, LOCK, TURN_OFF }
+
+/**
+ * Черновик будильника, который заполняют в острове: час, минуты, битовая маска дней
+ * (0 = понедельник … 6 = воскресенье, null или 0 — один раз) и подпись.
+ */
+data class AlarmDraft(
+    val hour: Int,
+    val minute: Int,
+    val daysMask: Int? = null,
+    val label: String = "",
+)
