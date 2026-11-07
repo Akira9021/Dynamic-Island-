@@ -1,10 +1,12 @@
 package com.akira.island.ui.screens
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
+import android.graphics.Rect
 import android.graphics.Shader
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -22,8 +24,12 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -34,6 +40,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import com.akira.island.core.tr
 import com.akira.island.data.IslandSettings
+import com.akira.island.data.LiquidGlassMode
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.AppearancePreview
 import com.akira.island.island.GlassBackdropFrame
@@ -41,6 +48,7 @@ import com.akira.island.island.IslandType
 import com.akira.island.island.LocalGlassPreviewBackdrop
 import com.akira.island.island.PreviewScene
 import com.akira.island.island.islandSurface
+import com.akira.island.R
 import com.akira.island.ui.Ui
 
 /** Pinned local examples do not post events or change any live playback/notification state. */
@@ -111,34 +119,94 @@ fun SettingsPreview(
 
 /** A large, colourful sample of the material, closer to the Apple reference shots. */
 @Composable
-fun LiquidGlassDemo() {
+fun LiquidGlassDemo(settings: IslandSettings) {
     val density = LocalDensity.current
-    val settings = remember {
-        IslandSettings(liquidGlass = true, glassShader = true, glassOpacity = 60, shadow = false)
-    }
-    CompositionLocalProvider(LocalGlassPreviewBackdrop provides PreviewGlassBackdrop) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF151419))) {
-            Text(
-                "Liquid Glass",
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 12.sp,
-                modifier = Modifier.padding(12.dp),
-            )
-            Box(Modifier.fillMaxWidth().height(195.dp).clip(RoundedCornerShape(24.dp))) {
-                Image(
-                    bitmap = PreviewGlassBackdrop.sharp.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopStart,
-                )
+    val context = LocalContext.current
+    val view = LocalView.current
+    val source = remember(context) { BitmapFactory.decodeResource(context.resources, R.drawable.liquid_glass_wallpaper) }
+    var sharp by remember { mutableStateOf<Bitmap?>(null) }
+    var blurred by remember { mutableStateOf<Bitmap?>(null) }
+    var frame by remember { mutableStateOf<GlassBackdropFrame?>(null) }
+    var generation by remember { mutableLongStateOf(0L) }
+    val demoSettings = settings.copy(liquidGlass = true, glassShader = true, shadow = false)
+
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF151419))) {
+        Text(
+            tr("Полный пример материала", "Full material showcase"),
+            color = Color.White.copy(alpha = 0.75f),
+            fontSize = 12.sp,
+            modifier = Modifier.padding(12.dp),
+        )
+        CompositionLocalProvider(LocalGlassPreviewBackdrop provides frame) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(195.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .onSizeChanged { size ->
+                        if (size.width > 0 && size.height > 0 &&
+                            (sharp?.width != size.width || sharp?.height != size.height)
+                        ) {
+                            val srcAspect = source.width.toFloat() / source.height
+                            val dstAspect = size.width.toFloat() / size.height
+                            val srcRect = if (srcAspect > dstAspect) {
+                                val cropWidth = (source.height * dstAspect).toInt().coerceAtLeast(1)
+                                val left = (source.width - cropWidth) / 2
+                                Rect(left, 0, left + cropWidth, source.height)
+                            } else {
+                                val cropHeight = (source.width / dstAspect).toInt().coerceAtLeast(1)
+                                val top = (source.height - cropHeight) / 2
+                                Rect(0, top, source.width, top + cropHeight)
+                            }
+                            val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
+                            Canvas(bitmap).drawBitmap(
+                                source, srcRect, Rect(0, 0, size.width, size.height), Paint(Paint.FILTER_BITMAP_FLAG),
+                            )
+                            bitmap.density = Bitmap.DENSITY_NONE
+                            val small = Bitmap.createScaledBitmap(bitmap, maxOf(1, size.width / 2), maxOf(1, size.height / 2), true)
+                            val blurBitmap = Bitmap.createScaledBitmap(small, size.width, size.height, true)
+                            small.recycle()
+                            blurBitmap.density = Bitmap.DENSITY_NONE
+                            sharp = bitmap
+                            blurred = blurBitmap
+                        }
+                    }
+                    .onGloballyPositioned { coordinates ->
+                        val bitmap = sharp
+                        val blurBitmap = blurred
+                        if (bitmap != null && blurBitmap != null) {
+                            val origin = IntArray(2)
+                            view.getLocationOnScreen(origin)
+                            val bounds = coordinates.boundsInWindow()
+                            val screenRect = Rect(
+                                (bounds.left + origin[0]).toInt(), (bounds.top + origin[1]).toInt(),
+                                (bounds.right + origin[0]).toInt(), (bounds.bottom + origin[1]).toInt(),
+                            )
+                            if (frame?.screenRect != screenRect || frame?.sharp !== bitmap) {
+                                frame = GlassBackdropFrame(
+                                    bitmap, blurBitmap, screenRect, ++generation, local = false,
+                                    isLight = averageLuminance(bitmap) >= 0.52f,
+                                )
+                            }
+                        }
+                    },
+            ) {
+                val backdrop = sharp
+                if (backdrop != null) {
+                    Image(
+                        bitmap = backdrop.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.FillBounds,
+                    )
+                }
                 Box(
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp)
-                        .size(250.dp, 130.dp)
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(12.dp)
+                            .size(250.dp, 130.dp)
                         .islandSurface(
-                            settings,
+                            demoSettings,
                             card = false,
                             shape = RoundedCornerShape(36.dp),
                             cornerPx = { with(density) { 36.dp.toPx() } },
@@ -149,6 +217,35 @@ fun LiquidGlassDemo() {
                 }
             }
         }
+            Text(
+                if (settings.glassMode == LiquidGlassMode.FULL)
+                tr("SDF-преломление · RGB-дисперсия · Regular material", "SDF lens · RGB dispersion · Regular material")
+            else tr("Та же линза с выбранным цветным тинтом", "Same lens with your selected colour tint"),
+            color = Color.White.copy(alpha = 0.68f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+        )
+        Image(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.liquid_glass_hero_lens),
+            contentDescription = tr("Пример эффекта из Liquid-Glass-Android", "Liquid-Glass-Android reference render"),
+            modifier = Modifier.fillMaxWidth().height(112.dp).padding(horizontal = 8.dp).clip(RoundedCornerShape(16.dp)),
+            contentScale = ContentScale.Crop,
+        )
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.liquid_glass_regular),
+                contentDescription = tr("Пример Regular из библиотеки", "Library Regular material reference"),
+                modifier = Modifier.weight(1f).height(82.dp).clip(RoundedCornerShape(14.dp)),
+                contentScale = ContentScale.Crop,
+            )
+            Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.liquid_glass_clear),
+                contentDescription = tr("Пример Clear из библиотеки", "Library Clear material reference"),
+                modifier = Modifier.weight(1f).height(82.dp).clip(RoundedCornerShape(14.dp)),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -158,6 +255,26 @@ fun LiquidGlassDemo() {
  * depending on the accessibility screenshot.
  */
 private val PreviewGlassBackdrop: GlassBackdropFrame by lazy { buildPreviewGlassBackdrop() }
+
+private fun averageLuminance(bitmap: Bitmap): Float {
+    var total = 0.0
+    var count = 0
+    val sx = maxOf(1, bitmap.width / 24)
+    val sy = maxOf(1, bitmap.height / 16)
+    var y = 0
+    while (y < bitmap.height) {
+        var x = 0
+        while (x < bitmap.width) {
+            val c = bitmap.getPixel(x, y)
+            total += (0.2126 * ((c shr 16) and 0xFF) +
+                0.7152 * ((c shr 8) and 0xFF) + 0.0722 * (c and 0xFF)) / 255.0
+            count++
+            x += sx
+        }
+        y += sy
+    }
+    return if (count == 0) 0f else (total / count).toFloat()
+}
 
 private fun buildPreviewGlassBackdrop(): GlassBackdropFrame {
     val w = 1024

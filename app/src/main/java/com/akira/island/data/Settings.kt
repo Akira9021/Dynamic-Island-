@@ -45,6 +45,15 @@ enum class Elasticity(private val ru: String, private val en: String, val dampin
 }
 
 @Serializable
+enum class LiquidGlassMode(private val ru: String, private val en: String) {
+    FULL("Полная версия", "Full Liquid Glass"),
+    CUSTOM("Кастомизация", "Customisation"),
+    ;
+
+    val title: String get() = tr(ru, en)
+}
+
+@Serializable
 enum class TapAction(private val ru: String, private val en: String) {
     EXPAND("Раскрыть капсулу", "Expand the capsule"),
     OPEN_APP("Открыть приложение", "Open the app"),
@@ -287,11 +296,15 @@ data class IslandSettings(
     /** Какую версию остров уже видел: после обновления он один раз показывает «Обновлено» */
     val islandVersion: String = "",
 
-    // Liquid Glass: полупрозрачное стекло с бликами вместо чёрной заливки. По умолчанию выключено
+    // Liquid Glass: shader-derived SDF refraction, dispersion and specular material.
     val liquidGlass: Boolean = false,
+    /** Tint strength for the CUSTOM glass mode; FULL uses the upstream Regular defaults. */
     val glassOpacity: Int = 60,
     /** Живое преломление настоящего фона под островом (AGSL, Android 13+, снимок окна — Android 14+). */
     val glassShader: Boolean = true,
+    /** Full reproduces the upstream Regular material; Custom adds a user-selected glass tint. */
+    val glassMode: LiquidGlassMode = LiquidGlassMode.FULL,
+    val glassCustomTint: Long = 0xFF0A84FF,
 
     // Анимации
     val expandStyle: ExpandStyle = ExpandStyle.FRUIT,

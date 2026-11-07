@@ -199,13 +199,36 @@ class GlassBackdropCapture(
         sharp.density = Bitmap.DENSITY_NONE
         val blurred = blur(sharp)
         blurred.density = Bitmap.DENSITY_NONE
+        val isLight = meanLuminance(sharp) >= 0.52f
         val screenRect = Rect(
             windowBounds.left + (left / scaleX).roundToInt(),
             windowBounds.top + (top / scaleY).roundToInt(),
             windowBounds.left + (right / scaleX).roundToInt(),
             windowBounds.top + (bottom / scaleY).roundToInt(),
         )
-        return GlassBackdropFrame(sharp, blurred, screenRect, generation.incrementAndGet())
+        return GlassBackdropFrame(sharp, blurred, screenRect, generation.incrementAndGet(), isLight = isLight)
+    }
+
+    private fun meanLuminance(bitmap: Bitmap): Float {
+        var total = 0.0
+        var samples = 0
+        val stepX = max(1, bitmap.width / 32)
+        val stepY = max(1, bitmap.height / 16)
+        var y = 0
+        while (y < bitmap.height) {
+            var x = 0
+            while (x < bitmap.width) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                total += (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+                samples++
+                x += stepX
+            }
+            y += stepY
+        }
+        return if (samples == 0) 0f else (total / samples).toFloat()
     }
 
     /** Keeps the texture small enough for a 60 fps shader on mid-range phones. */
@@ -225,7 +248,9 @@ class GlassBackdropCapture(
         val small = Bitmap.createScaledBitmap(source, w, h, true)
         val pixels = IntArray(w * h)
         small.getPixels(pixels, 0, w, 0, 0, w, h)
-        val radius = max(2, min(w, h) / 60)
+        // Upstream Regular blur is roughly 6-14 source pixels for this pill;
+        // avoid blurring away the very edge details the lens is meant to bend.
+        val radius = max(1, min(w, h) / 180)
         repeat(3) { boxBlur(pixels, w, h, radius) }
         small.setPixels(pixels, 0, w, 0, 0, w, h)
         val out = Bitmap.createScaledBitmap(small, source.width, source.height, true)

@@ -35,6 +35,10 @@ private val fillColors = listOf(0xFF000000, 0xFF111114, 0xFF1C1C22, 0xFF26233A, 
     0xFF2B1730, 0xFF3A1A1A, 0xFF2E2A1A, 0xFF3D3D45, 0xFFF2F2F7, 0xFFC6C3F7)
 private val lineColors = listOf(0xFF3A3A40, 0xFF8E8E93, 0xFFFFFFFF, 0xFFC6C3F7, 0xFF0A84FF, 0xFF64D2FF,
     0xFF34C759, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF2D92, 0xFFBF5AF2)
+private val glassColors = listOf(
+    0xFF0A84FF, 0xFF64D2FF, 0xFF34C759, 0xFFFF9F0A,
+    0xFFFF453A, 0xFFFF2D92, 0xFFBF5AF2, 0xFFFFFFFF,
+).map { it.toLong() }
 
 @Composable
 fun ColorsScreen(onBack: () -> Unit) {
@@ -109,14 +113,33 @@ fun ColorsScreen(onBack: () -> Unit) {
 
         SectionHeader(tr("Материал и эффекты", "Material and effects"))
         SettingsHint(tr("Общие для капсулы и карточек. Пример сверху показывает выбранный вид.", "Shared by the capsule and cards. The preview above shows the selected appearance."))
-        LiquidGlassDemo()
+        LiquidGlassDemo(s)
         ChoiceStrip(listOf(false, true), s.liquidGlass, { if (it) tr("Стекло", "Glass") else tr("Обычная заливка", "Plain fill") }) {
             SettingsRepo.update { copy(liquidGlass = it) }
         }
-        GroupSlider(Pos.Single, Icons.Rounded.Opacity, if (s.liquidGlass) tr("Плотность стекла", "Glass density") else tr("Непрозрачность заливки", "Fill opacity"),
-            (if (s.liquidGlass) s.glassOpacity else s.islandOpacity).toFloat(), if (s.liquidGlass) 40f..100f else 20f..100f,
-            "${if (s.liquidGlass) s.glassOpacity else s.islandOpacity}%", color = Tile.Teal) { v ->
-            SettingsRepo.update { if (liquidGlass) copy(glassOpacity = v.toInt()) else copy(islandOpacity = v.toInt()) }
+        if (s.liquidGlass) ChoiceStrip(LiquidGlassMode.entries, s.glassMode, { it.title }) { mode ->
+            SettingsRepo.update { copy(glassMode = mode) }
+        }
+        if (s.liquidGlass && s.glassMode == LiquidGlassMode.CUSTOM) {
+            SettingsHint(tr("Выберите оттенок стекла и силу тонировки. Преломление, дисперсия и блики остаются как в полной версии.",
+                "Choose a glass tint and strength. Refraction, dispersion and specular stay identical to Full mode."))
+            Swatches(glassColors, s.glassCustomTint) { tint ->
+                SettingsRepo.update { copy(glassCustomTint = tint) }
+            }
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Сила цвета стекла", "Glass tint strength"),
+                s.glassOpacity.toFloat(), 0f..70f, "${s.glassOpacity}%", color = Tile.Teal) { value ->
+                SettingsRepo.update { copy(glassOpacity = value.toInt()) }
+            }
+        } else if (s.liquidGlass) {
+            SettingsHint(tr(
+                "Полная версия повторяет Regular material из Liquid-Glass-Android: SDF-линза, сжатие края, RGB-дисперсия и парные блики.",
+                "Full mode follows Liquid-Glass-Android Regular: SDF lens, edge compression, RGB dispersion and paired specular rims.",
+            ))
+        } else {
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Непрозрачность заливки", "Fill opacity"),
+                s.islandOpacity.toFloat(), 20f..100f, "${s.islandOpacity}%", color = Tile.Teal) { value ->
+                SettingsRepo.update { copy(islandOpacity = value.toInt()) }
+            }
         }
         if (s.liquidGlass) GroupToggle(
             Pos.Single,

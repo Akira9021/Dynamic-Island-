@@ -23,6 +23,8 @@ class GlassBackdropFrame(
     val generation: Long,
     /** Preview frames are addressed in island-local pixels, not screen pixels. */
     val local: Boolean = false,
+    /** Mean backdrop luminance, used by the upstream Regular material's adaptive tint. */
+    val isLight: Boolean = false,
 )
 
 /** Synthetic backdrop for the settings previews; the real overlay uses [GlassBackdropState]. */

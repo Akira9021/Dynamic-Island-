@@ -40,7 +40,9 @@ fun Modifier.islandSurface(
             if (s.liquidGlass) Modifier.liquidGlassSurface(
                 shape = shape,
                 base = base,
-                density = s.glassOpacity / 100f,
+                glassMode = s.glassMode,
+                customTint = Color(s.glassCustomTint),
+                customTintStrength = s.glassOpacity / 100f,
                 tilt = { if (s.reduceEffects) GlassTilt.Zero else tilt() },
                 sheen = { if (s.reduceEffects) -1f else sheen() },
                 backdrop = {

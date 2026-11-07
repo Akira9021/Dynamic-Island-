@@ -8,6 +8,11 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Full Liquid-Glass-Android logic — test branch, 2026-11-07
+- “Full” mode ports `QWEA0/Liquid-Glass-Android` Regular: SDF edge compression, inverse-power falloff, adaptive lens sizing, normal-aligned RGB dispersion, vibrancy and paired specular highlights.
+- Added a “Custom tint” mode with a colour palette and tint strength; it keeps the same lens geometry.
+- The showcase uses the repository's original wallpaper, Regular/Clear and lens-detail images; the MIT license is retained in `docs/licenses`.
+
 ### Real Liquid Glass shader — test branch, 2026-11-06
 - The glass material is now an AGSL shader: superellipse SDF, Snell refraction, dispersion, Fresnel and a directional glare.
 - The backdrop under the island is captured with accessibility `takeScreenshotOfWindow` (Android 14+), blurred and fed to the shader; older versions keep the Compose material.

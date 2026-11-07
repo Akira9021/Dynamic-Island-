@@ -6,6 +6,11 @@
 
 ## [1.7.0] — 2026-10-28
 
+### Полная логика Liquid-Glass-Android — тестовая ветка, 2026-11-07
+- Режим «Полная версия» портирует Regular-пайплайн `QWEA0/Liquid-Glass-Android`: SDF edge-compression, inverse-power falloff, adaptive lens, RGB-дисперсия вдоль нормали, vibrancy и парные specular-блики.
+- Добавлена «Кастомизация» с палитрой и силой цветового tint; геометрия линзы остаётся той же.
+- В примере используются оригинальные wallpaper, Regular/Clear и lens-detail изображения; MIT-лицензия сохранена в `docs/licenses`.
+
 ### Настоящий шейдер Liquid Glass — тестовая ветка, 2026-11-06
 - Материал стекла переписан на AGSL: суперэллипс-SDF, преломление по Снеллиусу, дисперсия, Fresnel и направленный блик.
 - Фон под островом снимается через accessibility `takeScreenshotOfWindow` (Android 14+), размывается и подаётся в шейдер; на старых версиях остаётся Compose-материал.
