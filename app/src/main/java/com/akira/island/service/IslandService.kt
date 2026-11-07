@@ -393,16 +393,14 @@ class IslandService : AccessibilityService() {
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
     }
 
-    /**
-     * Внешние касания проходят в приложение под overlay и больше не сворачивают
-     * раскрытую карточку. Они продлевают настраиваемый таймер бездействия.
-     * Если открыт ответ на уведомление, сохраняем прежнее правило для клавиатуры.
-     */
+    /** Outside taps collapse by default; the Gestures setting can keep the island open. */
     private fun onOutsideTouch() {
         IslandBus.lastTouch = SystemClock.elapsedRealtime()
         if (IslandBus.reply.value != null) {
-            if (!keyboardShown()) IslandBus.reply.value = null
+            if (keyboardShown()) return
+            IslandBus.reply.value = null
         }
+        if (!SettingsRepo.current.keepExpandedOnOutsideTouch) Controls.collapse()
     }
 
     /** Видна ли клавиатура. Если список окон недоступен, считаем, что видна, — так ввод не оборвётся. */

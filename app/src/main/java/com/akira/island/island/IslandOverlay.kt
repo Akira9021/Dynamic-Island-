@@ -863,10 +863,9 @@ private fun GraphicsLayerScope.blurLayer(dp: Float, cache: BlurEffectCache) {
 }
 
 private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettings) {
-    if (expanded) {
-        Controls.collapse()
-        return
-    }
+    // A tap on the expanded surface is just interaction with the card, not a
+    // dismiss gesture. Collapse remains available via swipe-up or outside tap.
+    if (expanded) return
     if (s.tapAction == TapAction.SCROLL_TOP) {
         perform(context, s.tapAction, act)
         return

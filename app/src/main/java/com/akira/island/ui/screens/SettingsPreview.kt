@@ -215,9 +215,11 @@ fun LiquidGlassDemo(settings: IslandSettings) {
             }
         }
             Text(
-                if (settings.glassMode == LiquidGlassMode.FULL)
-                tr("SDF-преломление · RGB-дисперсия · Regular material", "SDF lens · RGB dispersion · Regular material")
-            else tr("Та же линза с выбранным цветным тинтом", "Same lens with your selected colour tint"),
+                when (settings.glassMode) {
+                    LiquidGlassMode.FULL -> tr("SDF-преломление · RGB-дисперсия · Regular material", "SDF lens · RGB dispersion · Regular material")
+                    LiquidGlassMode.DARK -> tr("Та же линза с тёмной тонировкой", "Same lens with a dark tint")
+                    LiquidGlassMode.CUSTOM -> tr("Та же линза с выбранным цветным тинтом", "Same lens with your selected colour tint")
+                },
             color = Color.White.copy(alpha = 0.68f),
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),

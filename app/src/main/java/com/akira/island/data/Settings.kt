@@ -47,6 +47,7 @@ enum class Elasticity(private val ru: String, private val en: String, val dampin
 @Serializable
 enum class LiquidGlassMode(private val ru: String, private val en: String) {
     FULL("Полная версия", "Full Liquid Glass"),
+    DARK("Тёмное стекло", "Dark glass"),
     CUSTOM("Кастомизация", "Customisation"),
     ;
 
@@ -421,6 +422,8 @@ data class IslandSettings(
     val idleClockBattery: Boolean = false,
     val preferMusic: Boolean = false,
     val swipeActivities: Boolean = false,
+    /** Keep the expanded island open when the user taps or interacts outside it. */
+    val keepExpandedOnOutsideTouch: Boolean = false,
     val vinylArt: Boolean = false,
     val hideWhenSourceOpen: Boolean = false,
     val collapseOnShade: Boolean = false,

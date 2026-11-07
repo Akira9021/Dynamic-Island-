@@ -16,6 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Slider
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -45,6 +48,7 @@ fun ColorsScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
     var card by rememberSaveable { mutableStateOf(false) }
     var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
+    var showGlassTintPicker by remember { mutableStateOf(false) }
     Page(tr("Цвет и рамка", "Color and border"), onBack, preview = {
         SettingsPreview(card, scene, onScene = { scene = it })
     }) {
@@ -121,13 +125,25 @@ fun ColorsScreen(onBack: () -> Unit) {
             SettingsRepo.update { copy(glassMode = mode) }
         }
         if (s.liquidGlass && s.glassMode == LiquidGlassMode.CUSTOM) {
-            SettingsHint(tr("Выберите оттенок стекла и силу тонировки. Преломление, дисперсия и блики остаются как в полной версии.",
-                "Choose a glass tint and strength. Refraction, dispersion and specular stay identical to Full mode."))
+            SettingsHint(tr("Выберите готовый оттенок или задайте любой цвет. Преломление, дисперсия и блики остаются как в полной версии.",
+                "Choose a preset or any custom colour. Refraction, dispersion and highlights stay the same as Full mode."))
             Swatches(glassColors, s.glassCustomTint) { tint ->
                 SettingsRepo.update { copy(glassCustomTint = tint) }
             }
+            TextButton(onClick = { showGlassTintPicker = true }) {
+                Box(Modifier.size(20.dp).clip(CircleShape).background(Color(s.glassCustomTint)))
+                Spacer(Modifier.width(8.dp))
+                Text(tr("Выбрать любой цвет…", "Choose any colour…"), color = Ui.Primary)
+            }
             GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Сила цвета стекла", "Glass tint strength"),
-                s.glassOpacity.toFloat(), 0f..70f, "${s.glassOpacity}%", color = Tile.Teal) { value ->
+                s.glassOpacity.toFloat(), 0f..85f, "${s.glassOpacity}%", color = Tile.Teal) { value ->
+                SettingsRepo.update { copy(glassOpacity = value.toInt()) }
+            }
+        } else if (s.liquidGlass && s.glassMode == LiquidGlassMode.DARK) {
+            SettingsHint(tr("Тёмная нейтральная линза затемняет фон и сохраняет то же преломление.",
+                "A neutral dark lens dims the backdrop while keeping the same refraction."))
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Сила затемнения", "Dark tint strength"),
+                s.glassOpacity.toFloat(), 0f..85f, "${s.glassOpacity}%", color = Tile.Gray) { value ->
                 SettingsRepo.update { copy(glassOpacity = value.toInt()) }
             }
         } else if (s.liquidGlass) {
@@ -160,6 +176,15 @@ fun ColorsScreen(onBack: () -> Unit) {
             v -> SettingsRepo.update { copy(shadow = v) }
         }
 
+        if (showGlassTintPicker) GlassTintPickerDialog(
+            initialColor = s.glassCustomTint,
+            onDismiss = { showGlassTintPicker = false },
+            onPick = { color ->
+                SettingsRepo.update { copy(glassCustomTint = color) }
+                showGlassTintPicker = false
+            },
+        )
+
         SectionHeader(tr("Основные кнопки", "Main controls"))
         ChoiceStrip(listOf(false, true), s.actionColorEnabled, { if (it) tr("Свой цвет", "Custom color") else tr("Стандартные цвета", "Default colors") }) {
             enabled -> card = true; scene = PreviewScene.TIMER; SettingsRepo.update { copy(actionColorEnabled = enabled) }
@@ -170,6 +195,41 @@ fun ColorsScreen(onBack: () -> Unit) {
         SettingsHint(tr("Показаны кнопки таймера. Цвета ответа на сообщения настраиваются в «Уведомлениях»; красный и зелёный у звонков сохраняются.",
             "The preview shows timer controls. Reply colors are set in Notifications; red and green call controls keep their meaning."))
     }
+}
+
+@Composable
+private fun GlassTintPickerDialog(initialColor: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    val hsv = remember(initialColor) {
+        FloatArray(3).also { values ->
+            android.graphics.Color.colorToHSV((initialColor and 0xFFFFFFFFL).toInt(), values)
+        }
+    }
+    var hue by remember(initialColor) { mutableFloatStateOf(hsv[0]) }
+    var saturation by remember(initialColor) { mutableFloatStateOf(hsv[1]) }
+    var brightness by remember(initialColor) { mutableFloatStateOf(hsv[2]) }
+    val colorLong = (android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness)).toLong() and 0xFFFFFFFFL)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Цвет стекла", "Glass colour"), color = Ui.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(Color(colorLong)))
+                    Spacer(Modifier.width(12.dp))
+                    Text("#%06X".format(colorLong and 0xFFFFFF), color = Ui.Sub)
+                }
+                Text(tr("Оттенок", "Hue"), color = Ui.Text)
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
+                Text(tr("Насыщенность", "Saturation"), color = Ui.Text)
+                Slider(value = saturation, onValueChange = { saturation = it }, valueRange = 0f..1f)
+                Text(tr("Яркость", "Brightness"), color = Ui.Text)
+                Slider(value = brightness, onValueChange = { brightness = it }, valueRange = 0f..1f)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(colorLong) }) { Text(tr("Готово", "Done")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
+    )
 }
 
 @Composable

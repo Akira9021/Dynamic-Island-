@@ -32,8 +32,8 @@ fun GesturesScreen(onBack: () -> Unit) {
     var dialog by remember { mutableStateOf<Which?>(null) }
 
     Page(tr("Жесты", "Gestures"), onBack,
-        subtitle = tr("Раскрытый остров сворачивается нажатием или касанием за его пределами",
-            "The expanded island collapses with a tap or a touch outside it")) {
+        subtitle = tr("Настройте нажатия, свайпы и поведение острова при касании снаружи",
+            "Configure taps, swipes and what happens when you touch outside the island")) {
         SectionHeader(tr("Нажатия", "Taps"))
         Group {
             GroupItem(Pos.First, Icons.Rounded.TouchApp, tr("Одиночное нажатие", "Single tap"), s.tapAction.title,
@@ -46,6 +46,20 @@ fun GesturesScreen(onBack: () -> Unit) {
         if (s.tapAction == TapAction.SCROLL_TOP || s.doubleTapAction == TapAction.SCROLL_TOP || s.longPressAction == TapAction.SCROLL_TOP) {
             SettingsHint(tr("Работает только в приложениях, которые предоставляют прокрутку вертикальных списков. Для длинного списка может понадобиться повторить жест.",
                 "Works only in apps that expose vertical list scrolling. Long lists may need the gesture again."))
+        }
+        SectionHeader(tr("Касание вне острова", "Touching outside the island"))
+        Group {
+            GroupToggle(
+                Pos.Single,
+                Icons.Rounded.TouchApp,
+                tr("Оставлять открытым", "Keep expanded"),
+                tr("Касание экрана вне острова не свернёт открытую карточку и сбросит таймер бездействия.",
+                    "Touching elsewhere won't collapse the expanded island and will reset its idle timer."),
+                s.keepExpandedOnOutsideTouch,
+                color = Tile.Teal,
+            ) { enabled ->
+                SettingsRepo.update { copy(keepExpandedOnOutsideTouch = enabled) }
+            }
         }
         SectionHeader(tr("Свайпы", "Swipes"))
         Group {

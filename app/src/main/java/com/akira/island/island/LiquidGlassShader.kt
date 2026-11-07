@@ -200,8 +200,17 @@ internal fun Modifier.liquidGlassSurface(
             isFilterBitmap = true
         }
     }
-    val fallbackBase = if (glassMode == LiquidGlassMode.CUSTOM) customTint else base
-    val fallbackDensity = if (glassMode == LiquidGlassMode.CUSTOM) customTintStrength.coerceIn(0.4f, 1f) else 0.68f
+    val darkTint = Color(0xFF111318)
+    val fallbackBase = when (glassMode) {
+        LiquidGlassMode.DARK -> darkTint
+        LiquidGlassMode.CUSTOM -> customTint
+        LiquidGlassMode.FULL -> base
+    }
+    val fallbackDensity = when (glassMode) {
+        LiquidGlassMode.DARK -> customTintStrength.coerceIn(0f, 0.85f)
+        LiquidGlassMode.CUSTOM -> customTintStrength.coerceIn(0f, 0.85f)
+        LiquidGlassMode.FULL -> 0.68f
+    }
     return this
         .onGloballyPositioned { coordinates ->
             val bounds = coordinates.boundsInWindow()
@@ -275,11 +284,13 @@ internal fun Modifier.liquidGlassSurface(
                             val lightLength = kotlin.math.sqrt(lightX * lightX + lightY * lightY).coerceAtLeast(0.001f)
                             shader.setFloatUniform("uLightDir", lightX / lightLength, lightY / lightLength)
                             shader.setFloatUniform("uSpecStrength", if (reduceEffects) 0f else 1f)
-                            val tint = if (glassMode == LiquidGlassMode.CUSTOM)
-                                customTint.copy(alpha = customTintStrength.coerceIn(0f, 1f))
-                            else Color.Transparent
+                            val tint = when (glassMode) {
+                                LiquidGlassMode.DARK -> darkTint.copy(alpha = customTintStrength.coerceIn(0f, 0.85f))
+                                LiquidGlassMode.CUSTOM -> customTint.copy(alpha = customTintStrength.coerceIn(0f, 1f))
+                                LiquidGlassMode.FULL -> Color.Transparent
+                            }
                             shader.setFloatUniform("uTint", tint.red, tint.green, tint.blue, tint.alpha)
-                            shader.setFloatUniform("uAdaptiveTint", 1f)
+                            shader.setFloatUniform("uAdaptiveTint", if (glassMode == LiquidGlassMode.DARK) 0f else 1f)
                             paint.shader = shader
                             drawIntoCanvas { canvas ->
                                 val native = canvas.nativeCanvas
