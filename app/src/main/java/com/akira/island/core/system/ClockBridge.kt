@@ -51,7 +51,11 @@ interface ClockBridge {
 class SystemClockBridge(private val context: Context) : ClockBridge {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
 
-    override fun isSupported(context: Context): Boolean = resolveClockPackage(context) != null
+    override fun isSupported(context: Context): Boolean {
+        val supported = resolveClockPackage(context) != null
+        debug(context, "SysBridge isSupported=$supported")
+        return supported
+    }
 
     override fun canScheduleExactAlarms(context: Context): Boolean =
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -98,18 +102,28 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
             label?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
-        return start(context, intent)
+        val ok = start(context, intent)
+        debug(context, "SysBridge createTimer pkg=$pkg seconds=${seconds}s ok=$ok")
+        return ok
     }
 
     override fun nextAlarm(context: Context): AlarmInfo? = alarmManager?.nextAlarmClock?.let { info ->
         val pkg = info.showIntent?.creatorPackage
-        if (pkg.isNullOrBlank()) null else AlarmInfo(info.triggerTime, pkg, info.showIntent)
+        if (pkg.isNullOrBlank()) {
+            debug(context, "SysBridge nextAlarm=null")
+            null
+        } else {
+            debug(context, "SysBridge nextAlarm=$pkg triggerAt=${info.triggerTime}")
+            AlarmInfo(info.triggerTime, pkg, info.showIntent)
+        }
     }
 
     override fun dismissAlarm(context: Context, alarm: AlarmInfo?): Boolean {
-        val pendingIntent = alarm?.show ?: return false
-        alarmManager?.cancel(pendingIntent)
-        return true
+        val pkg = alarm?.pkg?.takeIf { it.isNotBlank() } ?: resolveClockPackage(context) ?: return false
+        val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
+            setPackage(pkg)
+        }
+        return start(context, intent)
     }
 
     override fun snoozeAlarm(context: Context, alarm: AlarmInfo?, minutes: Int): Boolean {
@@ -135,5 +149,11 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
         true
     } catch (e: Exception) {
         false
+    }
+
+    private fun debug(context: Context, msg: String) {
+        if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            android.util.Log.d("SysBridge", msg)
+        }
     }
 }
