@@ -57,4 +57,44 @@ class ClockBridgeTest {
     fun `pickClockPackage - empty candidates fall back to null`() {
         assertNull(pickClockPackage(null, emptyList(), "com.akira.island"))
     }
+
+    @Test
+    fun `isSnoozeLabel - english and russian snooze labels`() {
+        assertTrue(isSnoozeLabel("Snooze"))
+        assertTrue(isSnoozeLabel("Snooze 10 min"))
+        assertTrue(isSnoozeLabel("Отложить"))
+        assertTrue(isSnoozeLabel("Postpone"))
+        assertTrue(isSnoozeLabel("Delay"))
+    }
+
+    @Test
+    fun `isSnoozeLabel - dismiss labels are not snooze`() {
+        assertFalse(isSnoozeLabel("Dismiss"))
+        assertFalse(isSnoozeLabel("Выключить"))
+        assertFalse(isSnoozeLabel(null))
+    }
+
+    @Test
+    fun `isDismissLabel - english and russian dismiss labels`() {
+        assertTrue(isDismissLabel("Dismiss"))
+        assertTrue(isDismissLabel("Stop"))
+        assertTrue(isDismissLabel("Cancel alarm"))
+        assertTrue(isDismissLabel("Отклонить"))
+        assertTrue(isDismissLabel("Отменить"))
+        assertTrue(isDismissLabel("Удалить"))
+        assertTrue(isDismissLabel("Остановить"))
+        assertTrue(isDismissLabel("Выключить"))
+    }
+
+    @Test
+    fun `isDismissLabel - snooze labels are not dismiss`() {
+        assertFalse(isDismissLabel("Snooze"))
+        assertFalse(isDismissLabel("Отложить"))
+        assertFalse(isDismissLabel(""))
+    }
+
+    @Test
+    fun `snoozeDurationMs - ten minutes`() {
+        assertEquals(600_000L, snoozeDurationMs())
+    }
 }

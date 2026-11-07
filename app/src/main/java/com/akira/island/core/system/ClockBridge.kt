@@ -1,11 +1,13 @@
 package com.akira.island.core.system
 
+import android.app.ActivityOptions
 import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.AlarmClock
 import com.akira.island.core.AlarmInfo
-
 /**
  * Giorni selezionati nell'UI dell'isola (bit i, 0 = lunedì … 6 = domenica). Restituisce i valori
  * [AlarmClock.EXTRA_DAYS] dell'Intent (numeralazione Calendar: domenica = 1 … sabato = 7), oppure null
@@ -17,6 +19,33 @@ fun alarmDaysFor(selected: Int?): List<Int>? {
     val days = (0..6).filter { (selected shr it) and 1 == 1 }.map { if (it == 6) 1 else it + 2 }
     return days.ifEmpty { null }
 }
+
+/**
+ * Posticipo (snooze) di un allarme: durata costante in minuti, poi in millisecondi — e la passiamo a
+ * [AlarmClock.EXTRA_ALARM_SNOOZE_DURATION] dell'Intent di posticipo.
+ */
+const val ALARM_SNOOZE_MINUTES = 10L
+
+/** Parole che significano «поставить на потом» (snooze) per il tasto della notifica/будильника. */
+private val snoozeRoots = listOf("snooze", "отлож", "postpon", "delay")
+
+/** Parole che significano «снять / отменить» (dismiss) per il tasto della notifica/будильника. */
+private val dismissRoots = listOf("dismiss", "cancel", "stop", "clear", "delete", "remove", "отклон", "reject", "отмен", "удалить", "останов", "выключ")
+
+/** Logcat-канale del sistema bridge: tutta la diagnostica vive qui, senza spazzare il resto. */
+private const val SYS_TAG = "SysBridge"
+
+fun isSnoozeLabel(label: CharSequence?): Boolean {
+    val words = label?.toString()?.lowercase()?.split(Regex("[^\\p{L}]+"))?.filter { it.isNotEmpty() } ?: return false
+    return words.any { w -> snoozeRoots.any { w.startsWith(it) } }
+}
+
+fun isDismissLabel(label: CharSequence?): Boolean {
+    val words = label?.toString()?.lowercase()?.split(Regex("[^\\p{L}]+"))?.filter { it.isNotEmpty() } ?: return false
+    return words.any { w -> dismissRoots.any { w.startsWith(it) } }
+}
+
+fun snoozeDurationMs(): Long = ALARM_SNOOZE_MINUTES * 60_000L
 
 /**
  * Pacchetto dell'app «OClock» a cui indirizzare gli intent AlarmClock: preferisce il creatore della
@@ -43,8 +72,9 @@ interface ClockBridge {
     fun createAlarm(context: Context, hour: Int, minutes: Int, days: Int?, label: String?): Boolean
     fun createTimer(context: Context, seconds: Long, label: String?): Boolean
     fun nextAlarm(context: Context): AlarmInfo?
-    fun dismissAlarm(context: Context, alarm: AlarmInfo?): Boolean
-    fun snoozeAlarm(context: Context, alarm: AlarmInfo?, minutes: Int): Boolean
+    fun clockPackage(context: Context): String?
+    fun dismissAlarm(context: Context, alarm: AlarmInfo?, fallbackIntent: PendingIntent?): Boolean
+    fun snoozeAlarm(context: Context, alarm: AlarmInfo?, minutes: Int, fallbackIntent: PendingIntent?): Boolean
     fun dismissTimer(context: Context, seconds: Long): Boolean
 }
 
@@ -82,7 +112,7 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
     }
 
     override fun createAlarm(context: Context, hour: Int, minutes: Int, days: Int?, label: String?): Boolean {
-        val pkg = resolveClockPackage(context) ?: return false
+        val pkg = resolveClockPackage(context) ?: return false.also { debug(context, "SysBridge createAlarm pkg=null") }
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             setPackage(pkg)
             putExtra(AlarmClock.EXTRA_HOUR, hour)
@@ -91,7 +121,9 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
             label?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
-        return start(context, intent)
+        val ok = start(context, intent)
+        debug(context, "SysBridge createAlarm pkg=$pkg hour=$hour min=$minutes days=$days ok=$ok")
+        return ok
     }
 
     override fun createTimer(context: Context, seconds: Long, label: String?): Boolean {
@@ -118,21 +150,39 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
         }
     }
 
-    override fun dismissAlarm(context: Context, alarm: AlarmInfo?): Boolean {
-        val pkg = alarm?.pkg?.takeIf { it.isNotBlank() } ?: resolveClockPackage(context) ?: return false
+    override fun clockPackage(context: Context): String? {
+        val pkg = resolveClockPackage(context)
+        debug(context, "SysBridge clockPackage=$pkg")
+        return pkg
+    }
+
+    override fun dismissAlarm(context: Context, alarm: AlarmInfo?, fallbackIntent: PendingIntent?): Boolean {
+        val pkg = alarm?.pkg?.takeIf { it.isNotBlank() } ?: resolveClockPackage(context)
+        if (pkg == null) {
+            debug(context, "SysBridge dismissAlarm pkg=null fallback=${fallbackIntent != null}")
+            return sendPending(context, fallbackIntent, "dismissAlarm")
+        }
         val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
             setPackage(pkg)
         }
-        return start(context, intent)
+        val ok = start(context, intent)
+        debug(context, "SysBridge dismissAlarm pkg=$pkg ok=$ok fallback=${!ok && fallbackIntent != null}")
+        return ok || sendPending(context, fallbackIntent, "dismissAlarm")
     }
 
-    override fun snoozeAlarm(context: Context, alarm: AlarmInfo?, minutes: Int): Boolean {
-        val pkg = resolveClockPackage(context) ?: return false
+    override fun snoozeAlarm(context: Context, alarm: AlarmInfo?, minutes: Int, fallbackIntent: PendingIntent?): Boolean {
+        val pkg = alarm?.pkg?.takeIf { it.isNotBlank() } ?: resolveClockPackage(context)
+        if (pkg == null) {
+            debug(context, "SysBridge snoozeAlarm pkg=null fallback=${fallbackIntent != null}")
+            return sendPending(context, fallbackIntent, "snoozeAlarm")
+        }
         val intent = Intent(AlarmClock.ACTION_SNOOZE_ALARM).apply {
             setPackage(pkg)
             putExtra(AlarmClock.EXTRA_ALARM_SNOOZE_DURATION, minutes)
         }
-        return start(context, intent)
+        val ok = start(context, intent)
+        debug(context, "SysBridge snoozeAlarm pkg=$pkg minutes=$minutes ok=$ok fallback=${!ok && fallbackIntent != null}")
+        return ok || sendPending(context, fallbackIntent, "snoozeAlarm")
     }
 
     override fun dismissTimer(context: Context, seconds: Long): Boolean {
@@ -151,9 +201,29 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
         false
     }
 
+    /**
+     * Esegue l'azione di una notifica (PendingIntent) quando il Clock app ignora l'intent AlarmClock.
+     * Da Android 14 serve la variante con le opzioni: la versione senza Bundle viene bloccata.
+     */
+    private fun sendPending(context: Context, pi: PendingIntent?, where: String): Boolean {
+        if (pi == null) return false
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                pi.send(context, 0, null, null, null, null, ActivityOptions.makeBasic().toBundle())
+            } else {
+                pi.send()
+            }
+            debug(context, "SysBridge $where pendingIntent=sent")
+            true
+        } catch (e: Exception) {
+            debug(context, "SysBridge $where pendingIntent=failed ${e.javaClass.simpleName}")
+            false
+        }
+    }
+
     private fun debug(context: Context, msg: String) {
         if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-            android.util.Log.d("SysBridge", msg)
+            android.util.Log.d(SYS_TAG, msg)
         }
     }
 }
