@@ -90,7 +90,8 @@ object Controls {
     fun startSystemTimer(context: Context, seconds: Int, label: String? = null): Boolean {
         val bridge = clockBridge
         if (bridge != null) {
-            val created = bridge.createTimer(context, seconds * 1000L, label)
+            // EXTRA_LENGTH di AlarmClock è in secondi, non millisecondi
+            val created = bridge.createTimer(context, seconds.toLong(), label)
             if (created) {
                 IslandBus.timer.value = TimerState(
                     seconds * 1000L,
