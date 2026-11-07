@@ -99,9 +99,10 @@ object NotificationParser {
         val call = if (n.category == Notification.CATEGORY_CALL && !isMedia) parseCall(context, sbn, title) else null
         // Какой канал присылает всплывающую плашку звонка или будильника — для экрана «Системные плашки»
         SystemBanners.onPosted(sbn, incomingCall = call?.incoming == true)
-        // Звонящий будильник или таймер «Часов» — у него полноэкранный сигнал; остров включит экран сам,
-        // даже если всплывающие плашки «Часов» выключены
-        val ringing = n.category == Notification.CATEGORY_ALARM && n.fullScreenIntent != null
+        // Звонящий будильник или таймер «Часов»: полноэкранный сигнал или постоянное уведомление
+        // (некоторые прошивки, например Vivo, обходятся без fullScreenIntent), а «предстоящие» — нет
+        val ringing = n.category == Notification.CATEGORY_ALARM &&
+            (n.fullScreenIntent != null || n.flags and Notification.FLAG_ONGOING_EVENT != 0)
         if (ringing != (sbn.key in IslandBus.ringingAlarms.value)) {
             IslandBus.ringingAlarms.value = if (ringing) IslandBus.ringingAlarms.value + sbn.key else IslandBus.ringingAlarms.value - sbn.key
         }

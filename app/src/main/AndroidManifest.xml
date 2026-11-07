@@ -10,8 +10,10 @@
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <!-- Alarm: impostare sveglie/timer via AlarmClock (core/system/ClockBridge) -->
+    <!-- Alarm: impostare sveglie/timer via AlarmClock (core/system/ClockBridge).
+         AOSP e molti OEM proteggono l'activity con com.android.alarm.permission.SET_ALARM -->
     <uses-permission android:name="android.permission.SET_ALARM" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- …и включает экран, когда звонит -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />

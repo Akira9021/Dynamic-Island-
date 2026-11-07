@@ -181,14 +181,11 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
     }
 
     override fun nextAlarm(context: Context): AlarmInfo? = alarmManager?.nextAlarmClock?.let { info ->
+        // showIntent может отсутствовать (некоторые прошивки не кладут его в AlarmClockInfo) —
+        // это не повод скрывать будильник: время срабатывания всё равно известно
         val pkg = info.showIntent?.creatorPackage
-        if (pkg.isNullOrBlank()) {
-            debug(context, "SysBridge nextAlarm=null")
-            null
-        } else {
-            debug(context, "SysBridge nextAlarm=$pkg triggerAt=${info.triggerTime}")
-            AlarmInfo(info.triggerTime, pkg, info.showIntent)
-        }
+        debug(context, "SysBridge nextAlarm=$pkg triggerAt=${info.triggerTime}")
+        AlarmInfo(info.triggerTime, pkg, info.showIntent)
     }
 
     override fun clockPackage(context: Context): String? {

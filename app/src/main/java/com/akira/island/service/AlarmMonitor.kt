@@ -43,8 +43,13 @@ class AlarmMonitor(private val context: Context) {
 
     private fun refresh(announce: Boolean) {
         val info = runCatching { alarms?.nextAlarmClock }.getOrNull()
-        val next = info?.takeIf { a -> a.showIntent?.creatorPackage?.let { ClockApps.isAlarmApp(context, it) } == true }
-            ?.let { AlarmInfo(it.triggerTime, it.showIntent?.creatorPackage, it.showIntent) }
+        // Будильник от «Часов» узнаём по создателю showIntent; если прошивка его не положила,
+        // будильник всё равно показываем — время срабатывания известно
+        val next = info?.let { a ->
+            val pkg = a.showIntent?.creatorPackage
+            if (pkg != null && !ClockApps.isAlarmApp(context, pkg)) null
+            else AlarmInfo(a.triggerTime, pkg, a.showIntent)
+        }
         val prev = IslandBus.nextAlarm.value
         IslandBus.nextAlarm.value = next
         if (!announce || next == null || prev?.triggerAt == next.triggerAt) return
