@@ -48,6 +48,8 @@ object IslandBus {
     val ringingAlarmDismiss = MutableStateFlow<android.app.PendingIntent?>(null)
     /** Будильник не появился в системных «Часах» после создания — показать подсказку в карточке */
     val alarmCreateFailed = MutableStateFlow(false)
+    /** Идёт создание будильника и его проверка в «Часах» — кнопка в карточке ждёт */
+    val alarmCreating = MutableStateFlow(false)
     /** Черновик нового будильника: открытая карточка создания */
     val alarmDraft = MutableStateFlow<AlarmDraft?>(null)
     val torch = MutableStateFlow(TorchState())

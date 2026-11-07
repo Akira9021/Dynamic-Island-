@@ -97,4 +97,34 @@ class ClockBridgeTest {
     fun `snoozeDurationMs - ten minutes`() {
         assertEquals(600_000L, snoozeDurationMs())
     }
+
+    // 5 января 2026 — понедельник
+    private fun utc(day: Int, hour: Int, minute: Int): Long =
+        java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            set(2026, java.util.Calendar.JANUARY, day, hour, minute, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+    private val utcZone = java.util.TimeZone.getTimeZone("UTC")
+
+    @Test
+    fun `nextAlarmAt - one-shot later today stays today`() {
+        assertEquals(utc(5, 18, 30), nextAlarmAt(18, 30, null, utc(5, 10, 0), utcZone))
+    }
+
+    @Test
+    fun `nextAlarmAt - one-shot time already passed goes to tomorrow`() {
+        assertEquals(utc(6, 7, 30), nextAlarmAt(7, 30, null, utc(5, 10, 0), utcZone))
+    }
+
+    @Test
+    fun `nextAlarmAt - weekday mask moves to the next matching day`() {
+        // понедельник, 07:30 уже прошло → следующий понедельник
+        assertEquals(utc(12, 7, 30), nextAlarmAt(7, 30, 1, utc(5, 10, 0), utcZone))
+    }
+
+    @Test
+    fun `nextAlarmAt - full week mask picks tomorrow`() {
+        assertEquals(utc(6, 7, 30), nextAlarmAt(7, 30, 0b1111111, utc(5, 10, 0), utcZone))
+    }
 }

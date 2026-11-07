@@ -48,6 +48,34 @@ fun isDismissLabel(label: CharSequence?): Boolean {
 fun snoozeDurationMs(): Long = ALARM_SNOOZE_MINUTES * 60_000L
 
 /**
+ * Ближайшее срабатывание будильника (epoch ms) для часа, минут и маски дней, начиная с [now]:
+ * тот же расчёт, что делает «Часы» при постановке будильника. Нужен, чтобы после создания
+ * сверить с [AlarmManager.getNextAlarmClock] — поставился ли будильник на самом деле.
+ */
+fun nextAlarmAt(
+    hour: Int,
+    minutes: Int,
+    daysMask: Int?,
+    now: Long,
+    zone: java.util.TimeZone = java.util.TimeZone.getDefault(),
+): Long {
+    val cal = java.util.Calendar.getInstance(zone).apply {
+        timeInMillis = now
+        set(java.util.Calendar.HOUR_OF_DAY, hour.coerceIn(0, 23))
+        set(java.util.Calendar.MINUTE, minutes.coerceIn(0, 59))
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    if (cal.timeInMillis <= now) cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+    val days = alarmDaysFor(daysMask) ?: return cal.timeInMillis
+    repeat(8) {
+        if (cal.get(java.util.Calendar.DAY_OF_WEEK) in days) return cal.timeInMillis
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+    }
+    return cal.timeInMillis
+}
+
+/**
  * Pacchetto dell'app «OClock» a cui indirizzare gli intent AlarmClock: preferisce il creatore della
  * prossima sveglia ([nextAlarmOwner]), poi il primo tra i candidati, sempre escludendo il nostro package.
  */
@@ -69,7 +97,7 @@ fun pickClockPackage(nextAlarmOwner: String?, candidates: List<String>, selfPack
 interface ClockBridge {
     fun isSupported(context: Context): Boolean
     fun canScheduleExactAlarms(context: Context): Boolean
-    fun createAlarm(context: Context, hour: Int, minutes: Int, days: Int?, label: String?): Boolean
+    fun createAlarm(context: Context, hour: Int, minutes: Int, days: List<Int>?, label: String?): Boolean
     fun createTimer(context: Context, seconds: Long, label: String?): Boolean
     fun nextAlarm(context: Context): AlarmInfo?
     fun clockPackage(context: Context): String?
@@ -111,13 +139,13 @@ class SystemClockBridge(private val context: Context) : ClockBridge {
         return pickClockPackage(null, packages, context.packageName)
     }
 
-    override fun createAlarm(context: Context, hour: Int, minutes: Int, days: Int?, label: String?): Boolean {
+    override fun createAlarm(context: Context, hour: Int, minutes: Int, days: List<Int>?, label: String?): Boolean {
         val pkg = resolveClockPackage(context) ?: return false.also { debug(context, "SysBridge createAlarm pkg=null") }
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             setPackage(pkg)
             putExtra(AlarmClock.EXTRA_HOUR, hour)
             putExtra(AlarmClock.EXTRA_MINUTES, minutes)
-            days?.let { putExtra(AlarmClock.EXTRA_DAYS, ArrayList<Int>(listOf(it))) }
+            days?.let { putExtra(AlarmClock.EXTRA_DAYS, ArrayList(it)) }
             label?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
