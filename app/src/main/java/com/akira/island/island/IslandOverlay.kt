@@ -835,7 +835,7 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
         is Act.Idle -> if (s.idleExpand) Controls.expand(act.id)
         // Оплата: нажатие открывает приложение оплаты (окно Google открывать нечего)
         is Act.PayA -> if (act.pkg != PayMonitor.GMS) Controls.openApp(context, act.pkg)
-        is Act.TimerA -> if (act.t.ringing) Controls.cancelTimer() else perform(context, s.tapAction, act)
+        is Act.TimerA -> if (act.t.ringing) Controls.stopTimer(context) else perform(context, s.tapAction, act)
         is Act.CallA -> if (act.c.incoming) {
             Controls.openCall(context, act.c)
         } else {

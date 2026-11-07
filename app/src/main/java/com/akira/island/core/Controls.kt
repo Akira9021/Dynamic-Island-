@@ -115,6 +115,27 @@ object Controls {
         if (IslandBus.focus.value == "timer") collapse()
     }
 
+    /**
+     * Ferma il timer: se esiste nell'app «Часы» (fromSystem) lo rimuove dall'allarme di sistema
+     * tramite ACTION_DISMISS_TIMER; altrimenti lo annulla internamente.
+     */
+    fun stopTimer(context: Context): Boolean {
+        val t = IslandBus.timer.value ?: return false
+        if (t.fromSystem) {
+            val bridge = clockBridge
+            if (bridge != null) {
+                val ok = bridge.dismissTimer(context, t.totalMs / 1000L)
+                if (ok) {
+                    IslandBus.timer.value = null
+                    if (IslandBus.focus.value == "timer") collapse()
+                    return true
+                }
+            }
+        }
+        cancelTimer()
+        return true
+    }
+
     // Секундомер
 
     fun startStopwatch() {

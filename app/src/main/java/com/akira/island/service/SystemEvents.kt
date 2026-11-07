@@ -223,7 +223,7 @@ class SystemEvents(private val context: Context) {
                 if (keyguard?.isDeviceSecure == true) IslandBus.locked.value = true
                 IslandBus.reply.value = null
                 // Как на iPhone: кнопка питания выключает звонящий таймер
-                if (IslandBus.timer.value?.ringing == true) Controls.cancelTimer()
+                if (IslandBus.timer.value?.ringing == true) Controls.stopTimer(context)
                 Controls.collapse()
             }
 

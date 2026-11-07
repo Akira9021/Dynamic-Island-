@@ -118,6 +118,7 @@ private val Dim = Color.White.copy(alpha = 0.55f)
 
 @Composable
 fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp) {
+    val context = LocalContext.current
     // Фонарик, как в iOS 18, — не широкая плашка, а высокая карточка с лучом
     if (act is Act.TorchA) {
         TorchCard(act.t, s)
@@ -127,7 +128,7 @@ fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: Batte
     Box(Modifier.width(width).padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
         when (act) {
             is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
-            is Act.TimerA -> TimerExpanded(act.t, s)
+            is Act.TimerA -> TimerExpanded(context, act.t, s)
             is Act.StopwatchA -> StopwatchExpanded(act.w)
             is Act.TorchA -> Unit
             is Act.ChronoA -> ChronoExpanded(act.c)
@@ -346,7 +347,7 @@ private fun SeekBar(
 
 /** Таймер как на iPhone: слева оранжевая «пауза» и серый крестик, справа «Таймер» и крупное время. */
 @Composable
-private fun TimerExpanded(t: TimerState, s: IslandSettings) {
+private fun TimerExpanded(context: Context, t: TimerState, s: IslandSettings) {
     val now = rememberNow(200)
     if (t.ringing) {
         val wobble = rememberInfiniteTransition(label = "bell")
@@ -362,7 +363,7 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
                 Text(tr("Таймер", "Timer"), color = Tints.Orange, fontSize = 15.sp)
                 Text(tr("Время вышло", "Time's up"), color = Tints.Orange, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
             }
-            PillButton(Ios.stop, tr("Стоп", "Stop"), bg = Tints.Orange, fg = Color.Black) { Controls.cancelTimer() }
+            PillButton(Ios.stop, tr("Стоп", "Stop"), bg = Tints.Orange, fg = Color.Black) { Controls.stopTimer(context) }
         }
         return
     }
@@ -374,7 +375,7 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
             if (t.paused) Controls.resumeTimer() else Controls.pauseTimer()
         }
         Spacer(Modifier.width(12.dp))
-        RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.cancelTimer() }
+        RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.stopTimer(context) }
         Spacer(Modifier.weight(1f))
         Text(if (t.paused) tr("Пауза", "Paused") else tr("Таймер", "Timer"), color = color, fontSize = 15.sp, modifier = Modifier.padding(top = 14.dp))
         Spacer(Modifier.width(8.dp))
