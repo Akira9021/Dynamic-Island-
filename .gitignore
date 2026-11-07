@@ -6,6 +6,7 @@ local.properties
 *.jks
 *.p12
 *.keystore
+keystore.properties
 .idea/
 *.iml
 .DS_Store

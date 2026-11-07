@@ -8,6 +8,18 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Full Liquid-Glass-Android logic — test branch, 2026-11-07
+- “Full” mode ports `QWEA0/Liquid-Glass-Android` Hero/Regular: SDF edge compression, adaptive lens sizing, normal-aligned RGB dispersion, per-pixel adaptive tint and paired specular highlights.
+- Added a “Custom tint” mode with a colour palette and tint strength; it keeps the same lens geometry.
+- The showcase uses the repository's original wallpaper, Regular/Clear and lens-detail images; the MIT license is retained in `docs/licenses`.
+- Tapping outside an expanded island no longer collapses it. Open another app and keep using it while the island stays on top; outside touches also extend the configured idle-collapse timer.
+
+### Real Liquid Glass shader — test branch, 2026-11-06
+- The glass material is now an AGSL shader: superellipse SDF, Snell refraction, dispersion, Fresnel and a directional glare.
+- The backdrop under the island is captured with accessibility `takeScreenshotOfWindow` (Android 14+), blurred and fed to the shader; older versions keep the Compose material.
+- New “Live refraction” switch in Appearance → Material and effects; 60 % density by default. Clear, colourful glass with a thin bright rim, strong lensing and dispersion; a large Liquid Glass sample on a colourful backdrop was added to settings.
+- Details and limitations: [docs/LIQUID-GLASS-SHADER.md](docs/LIQUID-GLASS-SHADER.md).
+
 ### Recording, settings and security review — test branch, 2026-11-06
 - Liquid expansion defaults to on; an explicitly saved off preference is preserved.
 - Voice, screen and camera video recording have distinct presentation. Fixed foreground recording detection, pause/resume and elapsed time; Stop requires a real action supplied by the recording app.

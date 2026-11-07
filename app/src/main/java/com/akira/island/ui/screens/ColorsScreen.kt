@@ -16,6 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Slider
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -35,12 +38,17 @@ private val fillColors = listOf(0xFF000000, 0xFF111114, 0xFF1C1C22, 0xFF26233A, 
     0xFF2B1730, 0xFF3A1A1A, 0xFF2E2A1A, 0xFF3D3D45, 0xFFF2F2F7, 0xFFC6C3F7)
 private val lineColors = listOf(0xFF3A3A40, 0xFF8E8E93, 0xFFFFFFFF, 0xFFC6C3F7, 0xFF0A84FF, 0xFF64D2FF,
     0xFF34C759, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF2D92, 0xFFBF5AF2)
+private val glassColors = listOf(
+    0xFF0A84FF, 0xFF64D2FF, 0xFF34C759, 0xFFFF9F0A,
+    0xFFFF453A, 0xFFFF2D92, 0xFFBF5AF2, 0xFFFFFFFF,
+).map { it.toLong() }
 
 @Composable
 fun ColorsScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
     var card by rememberSaveable { mutableStateOf(false) }
     var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
+    var showGlassTintPicker by remember { mutableStateOf(false) }
     Page(tr("Цвет и рамка", "Color and border"), onBack, preview = {
         SettingsPreview(card, scene, onScene = { scene = it })
     }) {
@@ -109,14 +117,57 @@ fun ColorsScreen(onBack: () -> Unit) {
 
         SectionHeader(tr("Материал и эффекты", "Material and effects"))
         SettingsHint(tr("Общие для капсулы и карточек. Пример сверху показывает выбранный вид.", "Shared by the capsule and cards. The preview above shows the selected appearance."))
+        LiquidGlassDemo(s)
         ChoiceStrip(listOf(false, true), s.liquidGlass, { if (it) tr("Стекло", "Glass") else tr("Обычная заливка", "Plain fill") }) {
             SettingsRepo.update { copy(liquidGlass = it) }
         }
-        GroupSlider(Pos.Single, Icons.Rounded.Opacity, if (s.liquidGlass) tr("Плотность стекла", "Glass density") else tr("Непрозрачность заливки", "Fill opacity"),
-            (if (s.liquidGlass) s.glassOpacity else s.islandOpacity).toFloat(), if (s.liquidGlass) 40f..100f else 20f..100f,
-            "${if (s.liquidGlass) s.glassOpacity else s.islandOpacity}%", color = Tile.Teal) { v ->
-            SettingsRepo.update { if (liquidGlass) copy(glassOpacity = v.toInt()) else copy(islandOpacity = v.toInt()) }
+        if (s.liquidGlass) ChoiceStrip(LiquidGlassMode.entries, s.glassMode, { it.title }) { mode ->
+            SettingsRepo.update { copy(glassMode = mode) }
         }
+        if (s.liquidGlass && s.glassMode == LiquidGlassMode.CUSTOM) {
+            SettingsHint(tr("Выберите готовый оттенок или задайте любой цвет. Преломление, дисперсия и блики остаются как в полной версии.",
+                "Choose a preset or any custom colour. Refraction, dispersion and highlights stay the same as Full mode."))
+            Swatches(glassColors, s.glassCustomTint) { tint ->
+                SettingsRepo.update { copy(glassCustomTint = tint) }
+            }
+            TextButton(onClick = { showGlassTintPicker = true }) {
+                Box(Modifier.size(20.dp).clip(CircleShape).background(Color(s.glassCustomTint)))
+                Spacer(Modifier.width(8.dp))
+                Text(tr("Выбрать любой цвет…", "Choose any colour…"), color = Ui.Primary)
+            }
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Сила цвета стекла", "Glass tint strength"),
+                s.glassOpacity.toFloat(), 0f..85f, "${s.glassOpacity}%", color = Tile.Teal) { value ->
+                SettingsRepo.update { copy(glassOpacity = value.toInt()) }
+            }
+        } else if (s.liquidGlass && s.glassMode == LiquidGlassMode.DARK) {
+            SettingsHint(tr("Тёмная нейтральная линза затемняет фон и сохраняет то же преломление.",
+                "A neutral dark lens dims the backdrop while keeping the same refraction."))
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Сила затемнения", "Dark tint strength"),
+                s.glassOpacity.toFloat(), 0f..85f, "${s.glassOpacity}%", color = Tile.Gray) { value ->
+                SettingsRepo.update { copy(glassOpacity = value.toInt()) }
+            }
+        } else if (s.liquidGlass) {
+            SettingsHint(tr(
+                "Полная версия повторяет Regular material из Liquid-Glass-Android: SDF-линза, сжатие края, RGB-дисперсия и парные блики.",
+                "Full mode follows Liquid-Glass-Android Regular: SDF lens, edge compression, RGB dispersion and paired specular rims.",
+            ))
+        } else {
+            GroupSlider(Pos.Single, Icons.Rounded.Opacity, tr("Непрозрачность заливки", "Fill opacity"),
+                s.islandOpacity.toFloat(), 20f..100f, "${s.islandOpacity}%", color = Tile.Teal) { value ->
+                SettingsRepo.update { copy(islandOpacity = value.toInt()) }
+            }
+        }
+        if (s.liquidGlass) GroupToggle(
+            Pos.Single,
+            Icons.Rounded.AutoAwesome,
+            tr("Живое преломление", "Live refraction"),
+            tr(
+                "Шейдер преломляет настоящий фон под островом. Нужны спец. возможности; снимок окна — Android 14+.",
+                "The shader bends the real backdrop. Requires accessibility; window capture needs Android 14+.",
+            ),
+            s.glassShader,
+            color = Tile.Purple,
+        ) { v -> SettingsRepo.update { copy(glassShader = v) } }
         GroupSlider(Pos.Single, Icons.Rounded.Gradient, tr("Затемнение снизу", "Bottom shading"), s.bottomGradient.toFloat(), 0f..80f, "${s.bottomGradient}%", color = Tile.Indigo) {
             v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
         }
@@ -124,6 +175,15 @@ fun ColorsScreen(onBack: () -> Unit) {
         GroupToggle(Pos.Single, Icons.Rounded.Tonality, tr("Тень", "Shadow"), tr("Заметна на светлом фоне; режим «Уменьшить эффекты» отключает её.", "Visible on light backgrounds; Reduce effects disables it."), s.shadow, color = Tile.Gray) {
             v -> SettingsRepo.update { copy(shadow = v) }
         }
+
+        if (showGlassTintPicker) GlassTintPickerDialog(
+            initialColor = s.glassCustomTint,
+            onDismiss = { showGlassTintPicker = false },
+            onPick = { color ->
+                SettingsRepo.update { copy(glassCustomTint = color) }
+                showGlassTintPicker = false
+            },
+        )
 
         SectionHeader(tr("Основные кнопки", "Main controls"))
         ChoiceStrip(listOf(false, true), s.actionColorEnabled, { if (it) tr("Свой цвет", "Custom color") else tr("Стандартные цвета", "Default colors") }) {
@@ -135,6 +195,41 @@ fun ColorsScreen(onBack: () -> Unit) {
         SettingsHint(tr("Показаны кнопки таймера. Цвета ответа на сообщения настраиваются в «Уведомлениях»; красный и зелёный у звонков сохраняются.",
             "The preview shows timer controls. Reply colors are set in Notifications; red and green call controls keep their meaning."))
     }
+}
+
+@Composable
+private fun GlassTintPickerDialog(initialColor: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    val hsv = remember(initialColor) {
+        FloatArray(3).also { values ->
+            android.graphics.Color.colorToHSV((initialColor and 0xFFFFFFFFL).toInt(), values)
+        }
+    }
+    var hue by remember(initialColor) { mutableFloatStateOf(hsv[0]) }
+    var saturation by remember(initialColor) { mutableFloatStateOf(hsv[1]) }
+    var brightness by remember(initialColor) { mutableFloatStateOf(hsv[2]) }
+    val colorLong = (android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness)).toLong() and 0xFFFFFFFFL)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Цвет стекла", "Glass colour"), color = Ui.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(Color(colorLong)))
+                    Spacer(Modifier.width(12.dp))
+                    Text("#%06X".format(colorLong and 0xFFFFFF), color = Ui.Sub)
+                }
+                Text(tr("Оттенок", "Hue"), color = Ui.Text)
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
+                Text(tr("Насыщенность", "Saturation"), color = Ui.Text)
+                Slider(value = saturation, onValueChange = { saturation = it }, valueRange = 0f..1f)
+                Text(tr("Яркость", "Brightness"), color = Ui.Text)
+                Slider(value = brightness, onValueChange = { brightness = it }, valueRange = 0f..1f)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(colorLong) }) { Text(tr("Готово", "Done")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
+    )
 }
 
 @Composable

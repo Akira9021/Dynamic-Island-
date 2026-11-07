@@ -50,6 +50,7 @@ import com.akira.island.data.LandscapeMode
 import com.akira.island.data.LockScreenMode
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Egg
+import com.akira.island.island.GlassBackdropState
 import com.akira.island.island.ISLAND_PAD_DP
 import com.akira.island.island.IslandOverlay
 import com.akira.island.island.IslandTheme
@@ -98,6 +99,7 @@ class IslandService : AccessibilityService() {
     private var payReader: PayScreenReader? = null
     private var scrollToTop: ScrollToTop? = null
     private var alarmMonitor: AlarmMonitor? = null
+    private var glassBackdrop: GlassBackdropCapture? = null
     private var screenEvents = false
     private var connected = false
     private val keyguard by lazy { getSystemService(KeyguardManager::class.java) }
@@ -205,6 +207,7 @@ class IslandService : AccessibilityService() {
         runCatching { displays?.registerDisplayListener(displayListener, handler) }
 
         createWindows()
+        glassBackdrop = GlassBackdropCapture(this, scope).also { it.start() }
         KeepAliveService.sync(this)
         IslandTile.refresh(this)
         events = SystemEvents(this).also { runCatching { it.start() } }
@@ -285,6 +288,16 @@ class IslandService : AccessibilityService() {
                 if (IslandBus.screenOn.value) UpdateChecker.check(this@IslandService, force = false, announce = true)
                 delay(60 * 60 * 1000L)
             }
+        }
+
+        // Живое преломление: снимок окна под островом нужен только при включённом стекле.
+        // Battery Saver снижает частоту захвата, но не выключает материал.
+        scope.launch {
+            combine(SettingsRepo.state, IslandBus.screenOn) { saved, on ->
+                saved.liquidGlass && saved.glassShader && saved.enabled && on
+            }
+                .distinctUntilChanged()
+                .collect { glassBackdrop?.setEnabled(it) }
         }
 
         // Датчик не нужен при выключенном экране, статичных эффектах и экономии заряда.
@@ -380,18 +393,14 @@ class IslandService : AccessibilityService() {
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
     }
 
-    /**
-     * Касание мимо раскрытого острова сворачивает его, мимо поля ответа — закрывает ввод.
-     * Нажатия на клавиатуру тоже приходят сюда как «мимо» (она — отдельное окно), а где именно
-     * коснулись, система не сообщает. Поэтому, пока клавиатура на экране, ввод не закрываем:
-     * его закрывает «Назад» (клавиатура прячется) или смахивание плашки вверх.
-     */
+    /** Outside taps collapse by default; the Gestures setting can keep the island open. */
     private fun onOutsideTouch() {
+        IslandBus.lastTouch = SystemClock.elapsedRealtime()
         if (IslandBus.reply.value != null) {
-            if (!keyboardShown()) IslandBus.reply.value = null
-            return
+            if (keyboardShown()) return
+            IslandBus.reply.value = null
         }
-        if (IslandBus.expanded.value) Controls.collapse()
+        if (!SettingsRepo.current.keepExpandedOnOutsideTouch) Controls.collapse()
     }
 
     /** Видна ли клавиатура. Если список окон недоступен, считаем, что видна, — так ввод не оборвётся. */
@@ -499,7 +508,27 @@ class IslandService : AccessibilityService() {
         handler.postAtTime(touchUpdate, minOf(now + TOUCH_QUIET_MS, touchSince + TOUCH_MAX_WAIT_MS))
     }
 
+    /**
+     * The whole display band in screen pixels. Capturing the full-width band instead of
+     * the current island rectangle means an expanding island never runs past the texture
+     * and shows smeared edge pixels while the next screenshot arrives.
+     */
+    private fun updateGlassRect() {
+        val capture = glassBackdrop ?: return
+        val view = display
+        if (!visible || view == null || view.width <= 0 || view.height <= 0) {
+            capture.updateRect(android.graphics.Rect())
+            return
+        }
+        val origin = IntArray(2)
+        view.getLocationOnScreen(origin)
+        capture.updateRect(android.graphics.Rect(
+            origin[0], origin[1], origin[0] + view.width, origin[1] + view.height,
+        ))
+    }
+
     private fun updateTouchWindow() {
+        updateGlassRect()
         val view = touch ?: return
         val area = when {
             body.isEmpty -> bubble
@@ -763,6 +792,9 @@ class IslandService : AccessibilityService() {
         handler.removeCallbacks(showAgain)
         handler.removeCallbacks(touchUpdate)
         runCatching { displays?.unregisterDisplayListener(displayListener) }
+        glassBackdrop?.stop()
+        glassBackdrop = null
+        GlassBackdropState.clear()
         IslandBus.egg.value = false
         setTiltEnabled(false)
         IslandBus.serviceRunning.value = false
