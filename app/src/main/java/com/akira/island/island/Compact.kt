@@ -100,6 +100,7 @@ import com.akira.island.core.MediaInfo
 import com.akira.island.core.Notice
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
+import com.akira.island.core.formatChargeTime
 import com.akira.island.core.formatDuration
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
@@ -235,10 +236,19 @@ fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
         is Act.ChargingA -> CompactRow(h, gap, side * 1.6f,
             left = { Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(icon)) },
             right = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TimeText("${act.b.level}%", Tints.Green, 15)
-                    Spacer(Modifier.width(5.dp))
-                    BatteryGlyph(act.b.level, Tints.Green, Modifier.size(h * 0.6f, h * 0.3f))
+                val showTime = SettingsRepo.current.showChargeTime
+                val timeMinutes = act.b.chargeTimeMinutes
+                val level = act.b.level
+                // Show original (percentage + battery) if: setting off, 100%/FULL, or estimate not ready
+                val showOriginal = !showTime || level >= 100 || timeMinutes == null
+                if (showOriginal) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TimeText("$level%", Tints.Green, 15)
+                        Spacer(Modifier.width(5.dp))
+                        BatteryGlyph(level, Tints.Green, Modifier.size(h * 0.6f, h * 0.3f))
+                    }
+                } else {
+                    TimeText(formatChargeTime(timeMinutes), Tints.Green, 15)
                 }
             },
         )

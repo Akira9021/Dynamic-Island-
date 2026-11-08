@@ -13,6 +13,11 @@ import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.os.SystemClock
 
+import com.akira.island.core.system.ALARM_SNOOZE_MINUTES
+import com.akira.island.core.system.ClockBridge
+import com.akira.island.core.system.alarmDaysFor
+import com.akira.island.core.system.nextAlarmAt
+
 /** Команды, которые капсула отдаёт системе: плеер, таймер, фонарик, громкость. */
 object Controls {
     @Volatile
@@ -23,6 +28,9 @@ object Controls {
     var torchOff: () -> Unit = {}
     var torchLevel: (Int) -> Unit = {}
 
+    /** Системный мост к приложению «Часы» (AlarmClock intents / AlarmManager). Без него таймеры острова живут только внутри. */
+    var clockBridge: ClockBridge? = null
+
     fun expand(id: String) {
         IslandBus.focus.value = id
         IslandBus.expanded.value = true
@@ -31,6 +39,10 @@ object Controls {
     fun collapse() {
         IslandBus.expanded.value = false
         IslandBus.focus.value = null
+        if (IslandBus.alarmDraft.value != null) {
+            IslandBus.alarmDraft.value = null
+            IslandBus.alarmCreateFailed.value = false
+        }
     }
 
     // Плеер
@@ -70,6 +82,29 @@ object Controls {
         IslandBus.timer.value = TimerState(total, SystemClock.elapsedRealtime() + total)
     }
 
+    /**
+     * Таймер через системный Clock: создаётся в приложении «Часы» через AlarmClock.ACTION_SET_TIMER
+     * (с системным звуком и завершением). Если подходящей «Часов» нет — остров ставит свой таймер
+     * как fallback. Возвращает true, если таймер создан системой.
+     */
+    fun startSystemTimer(context: Context, seconds: Int, label: String? = null): Boolean {
+        val bridge = clockBridge
+        if (bridge != null) {
+            // EXTRA_LENGTH di AlarmClock è in secondi, non millisecondi
+            val created = bridge.createTimer(context, seconds.toLong(), label)
+            if (created) {
+                IslandBus.timer.value = TimerState(
+                    seconds * 1000L,
+                    SystemClock.elapsedRealtime() + seconds * 1000L,
+                    fromSystem = true,
+                )
+                return true
+            }
+        }
+        startTimerSeconds(seconds)
+        return false
+    }
+
     fun pauseTimer() {
         val t = IslandBus.timer.value ?: return
         if (t.pausedLeft == null && !t.ringing) {
@@ -87,6 +122,107 @@ object Controls {
         IslandBus.timer.value = null
         if (IslandBus.focus.value == "timer") collapse()
     }
+
+    /**
+     * Ferma il timer: se esiste nell'app «Часы» (fromSystem) lo rimuove dall'allarme di sistema
+     * tramite ACTION_DISMISS_TIMER; altrimenti lo annulla internamente.
+     */
+    fun stopTimer(context: Context): Boolean {
+        val t = IslandBus.timer.value ?: return false
+        if (t.fromSystem) {
+            val bridge = clockBridge
+            if (bridge != null) {
+                val ok = bridge.dismissTimer(context, t.totalMs / 1000L)
+                if (ok) {
+                    IslandBus.timer.value = null
+                    if (IslandBus.focus.value == "timer") collapse()
+                    return true
+                }
+            }
+        }
+        cancelTimer()
+        return true
+    }
+
+    // Будильники
+
+    /**
+     * Ставит будильник в системных «Часах» через [ClockBridge.createAlarm] и примерно через 3 секунды
+     * сверяет ближайший будильник с ожидаемым временем: не появился — показываем в карточке подсказку
+     * «открыть Часы». Возвращает false сразу, если будильник создать не удалось.
+     */
+    fun startAlarm(context: Context, hour: Int, minutes: Int, daysMask: Int?, label: String?): Boolean {
+        val bridge = clockBridge ?: return false
+        IslandBus.alarmCreateFailed.value = false
+        IslandBus.alarmCreating.value = true
+        val clean = label?.trim()?.takeIf { it.isNotEmpty() }
+        val ok = bridge.createAlarm(context, hour, minutes, alarmDaysFor(daysMask), clean)
+        debugAlarm("startAlarm hour=$hour min=$minutes days=$daysMask created=$ok")
+        if (!ok) {
+            IslandBus.alarmCreating.value = false
+            IslandBus.alarmCreateFailed.value = true
+            return false
+        }
+        val expected = nextAlarmAt(hour, minutes, daysMask, System.currentTimeMillis())
+        IslandBus.scope.launch {
+            delay(ALARM_VERIFY_MS)
+            val next = bridge.nextAlarm(context)
+            IslandBus.nextAlarm.value = next
+            val exists = next != null && kotlin.math.abs(next.triggerAt - expected) <= ALARM_VERIFY_SLACK_MS
+            debugAlarm("startAlarm verify expected=$expected next=${next?.triggerAt} exists=$exists")
+            IslandBus.alarmCreateFailed.value = !exists
+            IslandBus.alarmCreating.value = false
+            if (exists) IslandBus.alarmDraft.value = null
+        }
+        return true
+    }
+
+    /** Остановить звонящий будильник: intent AlarmClock, иначе кнопка «Выключить» из уведомления «Часов». */
+    fun stopAlarm(context: Context, alarm: AlarmInfo?): Boolean {
+        val bridge = clockBridge ?: return false
+        val ok = bridge.dismissAlarm(context, alarm ?: IslandBus.nextAlarm.value, IslandBus.ringingAlarmDismiss.value)
+        debugAlarm("stopAlarm ok=$ok")
+        if (ok) afterAlarmRang(bridge, context)
+        return ok
+    }
+
+    /** Отложить звонящий будильник на [ALARM_SNOOZE_MINUTES]: intent AlarmClock, иначе кнопка из уведомления. */
+    fun snoozeAlarm(context: Context, alarm: AlarmInfo?): Boolean {
+        val bridge = clockBridge ?: return false
+        val ok = bridge.snoozeAlarm(
+            context, alarm ?: IslandBus.nextAlarm.value, ALARM_SNOOZE_MINUTES.toInt(), IslandBus.ringingAlarmSnooze.value,
+        )
+        debugAlarm("snoozeAlarm ok=$ok")
+        if (ok) afterAlarmRang(bridge, context)
+        return ok
+    }
+
+    private fun afterAlarmRang(bridge: ClockBridge, context: Context) {
+        IslandBus.ringingAlarmDismiss.value = null
+        IslandBus.ringingAlarmSnooze.value = null
+        IslandBus.scope.launch { IslandBus.nextAlarm.value = bridge.nextAlarm(context) }
+        if (IslandBus.focus.value == "alarm") collapse()
+    }
+
+    /** Открыть список будильников «Часов» — запасной путь, если создать будильник из острова не вышло. */
+    fun openClock(context: Context) {
+        val bridge = clockBridge
+        val pkg = bridge?.clockPackage(context)
+        debugAlarm("openClock pkg=$pkg")
+        val intent = Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (pkg != null) intent.setPackage(pkg)
+        val ok = runCatching { context.startActivity(intent) }.isSuccess
+        debugAlarm("openClock ok=$ok")
+        if (ok) collapse()
+    }
+
+    private fun debugAlarm(msg: String) {
+        android.util.Log.d("SysBridge", msg)
+    }
+
+    private const val ALARM_VERIFY_MS = 3_000L
+    /** «Часы» могут округлить время срабатывания — допускаем минуту расхождения при проверке */
+    private const val ALARM_VERIFY_SLACK_MS = 60_000L
 
     // Секундомер
 

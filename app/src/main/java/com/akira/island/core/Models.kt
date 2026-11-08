@@ -166,6 +166,11 @@ data class TimerState(
     val endAt: Long,
     val pausedLeft: Long? = null,
     val ringing: Boolean = false,
+    /**
+     * Создан через системный Clock (AlarmClock.ACTION_SET_TIMER): отсчёт и звук держит сама система,
+     * остров только показывает provisional-счётчик и убирает его, когда время вышло.
+     */
+    val fromSystem: Boolean = false,
 ) {
     fun left(now: Long): Long = pausedLeft ?: (endAt - now).coerceAtLeast(0)
     val paused: Boolean get() = pausedLeft != null && !ringing
@@ -176,7 +181,21 @@ data class StopwatchState(val startedAt: Long?, val accumulated: Long) {
     val running: Boolean get() = startedAt != null
 }
 
-data class BatteryInfo(val level: Int = -1, val charging: Boolean = false)
+/**
+ * Battery information with optional charge time estimate.
+ * @param level Battery level 0-100, -1 if unknown
+ * @param charging Whether the device is currently charging
+ * @param chargeTimeMinutes Estimated minutes to full charge, null if unknown or not charging
+ * @param chargeStartTimeElapsedRealtime ElapsedRealtime when charging started, 0 if not charging
+ * @param chargeProgress Monotonic ring progress 0..1 for the current charging session
+ */
+data class BatteryInfo(
+    val level: Int = -1,
+    val charging: Boolean = false,
+    val chargeTimeMinutes: Int? = null,
+    val chargeStartTimeElapsedRealtime: Long = 0,
+    val chargeProgress: Float = 0f,
+)
 
 /** Как событие выглядит в острове. */
 enum class NoticeStyle {
@@ -298,4 +317,24 @@ fun formatDuration(ms: Long): String {
     val m = (total % 3600) / 60
     val s = total % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+/**
+ * Format charge time in minutes to a human-readable string.
+ * Uses localized format: EN "1h 25m", "45m", "<1m" / RU "1 ч 25 мин", "45 мин", "<1 мин"
+ */
+fun formatChargeTime(minutes: Int): String {
+    return if (minutes <= 0) {
+        tr("<1 мин", "<1m")
+    } else if (minutes < 60) {
+        tr("%d мин", "%dm").format(minutes)
+    } else {
+        val h = minutes / 60
+        val m = minutes % 60
+        if (m > 0) {
+            tr("%d ч %d мин", "%dh %dm").format(h, m)
+        } else {
+            tr("%d ч", "%dh").format(h)
+        }
+    }
 }

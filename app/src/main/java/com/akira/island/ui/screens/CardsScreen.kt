@@ -5,10 +5,12 @@ import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.HourglassEmpty
 import androidx.compose.material.icons.rounded.KeyboardVoice
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.OfflineBolt
@@ -16,10 +18,14 @@ import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import com.akira.island.core.ChargeEtaLog
+import com.akira.island.core.ChargeTimeEstimator
 import com.akira.island.core.tr
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
 import com.akira.island.ui.Group
+import com.akira.island.ui.GroupItem
 import com.akira.island.ui.GroupToggle
 import com.akira.island.ui.IconAction
 import com.akira.island.ui.Page
@@ -31,6 +37,7 @@ import com.akira.island.ui.Tile
 @Composable
 fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
+    val context = LocalContext.current
     fun set(block: IslandSettings.() -> IslandSettings) = SettingsRepo.update(block)
 
     Page(tr("Динамические карточки", "Dynamic cards"), onBack,
@@ -73,9 +80,25 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
             GroupToggle(Pos.Middle, Icons.Rounded.OfflineBolt, tr("Индикатор зарядки", "Charging indicator"),
                 tr("Когда устройство заряжается", "When the device is charging"),
                 s.cardCharging, color = Tile.Green) { set { copy(cardCharging = it) } }
+            GroupToggle(Pos.Middle, Icons.Rounded.Timer, tr("Показывать время до полной зарядки", "Show time to full charge"),
+                tr("В капсуле зарядки показывать оценку времени до 100% вместо процента",
+                    "Show estimated time to full charge in the charging capsule instead of percentage"),
+                s.showChargeTime, color = Tile.Green) { set { copy(showChargeTime = it) } }
             GroupToggle(Pos.Last, Icons.Rounded.Downloading, tr("Индикатор прогресса", "Progress indicator"),
                 tr("Загрузки и отправка в Google Play, Telegram и других приложениях", "Downloads and uploads in Google Play, Telegram and other apps"),
                 s.cardProgress, color = Tile.Teal) { set { copy(cardProgress = it) } }
+        }
+
+        // Отладочная сборка: только здесь можно стереть статистику времени зарядки
+        if (ChargeEtaLog.isDebug(context)) {
+            Group {
+                GroupItem(Pos.Single, Icons.Rounded.DeleteSweep,
+                    tr("Сбросить историю зарядки", "Reset charge history"),
+                    tr("Только отладочная сборка: удаляет сохранённые секунды на процент",
+                        "Debug build only: clears the saved seconds per percent"),
+                    color = Tile.Red,
+                    onClick = { ChargeTimeEstimator.getInstance(context).clearLearnedTimes() })
+            }
         }
 
         SectionHeader(tr("В дороге", "On the road"))

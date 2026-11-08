@@ -110,6 +110,8 @@ data class IslandSettings(
     val cardProgress: Boolean = true,
     val cardTimer: Boolean = true,
     val cardCharging: Boolean = true,
+    /** В капсуле зарядки показывать оценку времени до 100% вместо процента */
+    val showChargeTime: Boolean = true,
     val cardCall: Boolean = true,
     val cardMessages: Boolean = true,
     /** Кнопки «Ответить» и «Пометить прочитанным» в карточке уведомления */

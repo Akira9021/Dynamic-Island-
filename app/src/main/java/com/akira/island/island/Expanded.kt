@@ -118,6 +118,7 @@ private val Dim = Color.White.copy(alpha = 0.55f)
 
 @Composable
 fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp) {
+    val context = LocalContext.current
     // Фонарик, как в iOS 18, — не широкая плашка, а высокая карточка с лучом
     if (act is Act.TorchA) {
         TorchCard(act.t, s)
@@ -125,9 +126,13 @@ fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: Batte
     }
     // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал
     Box(Modifier.width(width).padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
-        when (act) {
+        // Карточка нового будильника перекрывает активность острова, пока её не закроют
+        val draft by IslandBus.alarmDraft.collectAsState()
+        if (draft != null) {
+            AlarmCreateCard()
+        } else when (act) {
             is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
-            is Act.TimerA -> TimerExpanded(act.t, s)
+            is Act.TimerA -> TimerExpanded(context, act.t, s)
             is Act.StopwatchA -> StopwatchExpanded(act.w)
             is Act.TorchA -> Unit
             is Act.ChronoA -> ChronoExpanded(act.c)
@@ -346,7 +351,7 @@ private fun SeekBar(
 
 /** Таймер как на iPhone: слева оранжевая «пауза» и серый крестик, справа «Таймер» и крупное время. */
 @Composable
-private fun TimerExpanded(t: TimerState, s: IslandSettings) {
+private fun TimerExpanded(context: Context, t: TimerState, s: IslandSettings) {
     val now = rememberNow(200)
     if (t.ringing) {
         val wobble = rememberInfiniteTransition(label = "bell")
@@ -362,7 +367,7 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
                 Text(tr("Таймер", "Timer"), color = Tints.Orange, fontSize = 15.sp)
                 Text(tr("Время вышло", "Time's up"), color = Tints.Orange, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
             }
-            PillButton(Ios.stop, tr("Стоп", "Stop"), bg = Tints.Orange, fg = Color.Black) { Controls.cancelTimer() }
+            PillButton(Ios.stop, tr("Стоп", "Stop"), bg = Tints.Orange, fg = Color.Black) { Controls.stopTimer(context) }
         }
         return
     }
@@ -374,7 +379,7 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
             if (t.paused) Controls.resumeTimer() else Controls.pauseTimer()
         }
         Spacer(Modifier.width(12.dp))
-        RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.cancelTimer() }
+        RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.stopTimer(context) }
         Spacer(Modifier.weight(1f))
         Text(if (t.paused) tr("Пауза", "Paused") else tr("Таймер", "Timer"), color = color, fontSize = 15.sp, modifier = Modifier.padding(top = 14.dp))
         Spacer(Modifier.width(8.dp))
@@ -684,17 +689,27 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
             Column(Modifier.weight(1f)) {
                 Text(clockText(time, 36.sp), color = Color.White, fontSize = 36.sp, style = Digits)
                 Text(date, color = Dim, fontSize = 14.sp)
-                // Ближайший будильник в пределах суток — под датой, как на экране блокировки iPhone
-                alarm?.takeIf { it.triggerAt - now in 1..86_400_000L }?.let { a ->
-                    Row(
-                        Modifier.padding(top = 3.dp).clickable { openAlarm(context, a) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Ios.alarm, null, tint = AlarmTint, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text(tr("${wakeTime(context, a.triggerAt)} · через ${durationWords(a.triggerAt - now)}",
-                            "${wakeTime(context, a.triggerAt)} · in ${durationWords(a.triggerAt - now)}"),
-                            color = AlarmTint, fontSize = 13.sp, maxLines = 1)
+                // Ближайший будильник в пределах суток — под датой, как на экране блокировки iPhone;
+                // если будильника нет, здесь же можно поставить новый
+                if (s.cardAlarm) {
+                    val upcoming = alarm?.takeIf { it.triggerAt - now in 1..86_400_000L }
+                    val canCreate = remember { Controls.clockBridge?.isSupported(context) == true }
+                    if (upcoming != null || canCreate) {
+                        Row(
+                            Modifier.padding(top = 3.dp).clickable {
+                                if (upcoming != null) openAlarm(context, upcoming) else openAlarmDraft()
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Ios.alarm, null, tint = if (upcoming != null) AlarmTint else Dim, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                if (upcoming != null) tr("${wakeTime(context, upcoming.triggerAt)} · через ${durationWords(upcoming.triggerAt - now)}",
+                                    "${wakeTime(context, upcoming.triggerAt)} · in ${durationWords(upcoming.triggerAt - now)}")
+                                else tr("Поставить будильник", "Set an alarm"),
+                                color = if (upcoming != null) AlarmTint else Dim, fontSize = 13.sp, maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -735,7 +750,7 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                 }
                 Spacer(Modifier.width(8.dp))
                 PillButton(Ios.play, tr("Таймер", "Timer"), bg = Tints.Orange, fg = Color.Black) {
-                    Controls.startTimer(s.timerMinutes)
+                    Controls.startSystemTimer(context, s.timerMinutes * 60, null)
                     Controls.expand("timer")
                 }
             }
@@ -778,7 +793,7 @@ private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
                 Controls.collapse()
                 Controls.lockScreen()
             }
-            QuickAction.TIMER -> Controls.startTimer(SettingsRepo.current.timerMinutes)
+            QuickAction.TIMER -> Controls.startSystemTimer(context, SettingsRepo.current.timerMinutes * 60, null)
         }
     }
 }

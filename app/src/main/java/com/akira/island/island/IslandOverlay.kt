@@ -1,5 +1,6 @@
 package com.akira.island.island
 
+import com.akira.island.service.NotifListener
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
@@ -91,6 +92,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.akira.island.core.AlarmInfo
 import com.akira.island.core.BatteryInfo
 import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
@@ -154,9 +156,10 @@ fun IslandOverlay(
     val focus by IslandBus.focus.collectAsState()
     val calibrating by IslandBus.calibrating.collectAsState()
     val nextAlarm by IslandBus.nextAlarm.collectAsState()
+    val ringingAlarms by IslandBus.ringingAlarms.collectAsState()
     val egg by IslandBus.egg.collectAsState()
     val payReady by IslandBus.payReady.collectAsState()
-    // Будильник появляется в острове за 12 часов и уходит, когда прозвенел: просыпаемся ровно в эти два момента,
+    // Будильник появляется в острове за 12 часов и остаётся, пока звонит: просыпаемся ровно в эти моменты,
     // а не каждые полминуты. Пока телефон спит, ожидание стоит — поэтому со включением экрана пересчитываем
     val screenOn by IslandBus.screenOn.collectAsState()
     var alarmNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -239,9 +242,14 @@ fun IslandOverlay(
         if (s.cardMedia && m != null && !(s.hideWhenPlayerOpen && foreground == m.pkg)) persistent += Act.MediaA(m)
         if (s.cardProgress) progress.values.maxByOrNull { it.postTime }?.let { persistent += Act.ProgressA(it) }
         if (s.cardCharging && battery.charging) persistent += Act.ChargingA(battery)
-        // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь
-        val alarm = nextAlarm
-        if (s.cardAlarm && alarm != null && alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS) persistent += Act.AlarmA(alarm)
+        // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь.
+        // Пока он звонит, карточка остаётся с кнопками «Отложить» и «Стоп», даже если «Часы» уже
+        // убрали его из ближайших будильников
+        val alarmRinging = ringingAlarms.isNotEmpty()
+        val alarm = nextAlarm ?: if (alarmRinging) AlarmInfo(System.currentTimeMillis(), "", null) else null
+        if (s.cardAlarm && alarm != null && (alarmRinging || alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS)) {
+            persistent += Act.AlarmA(alarm)
+        }
 
         // Выбранная активность выходит вперёд, но звонящий таймер всегда главный
         val ringing = (persistent.firstOrNull() as? Act.TimerA)?.t?.ringing == true || call?.incoming == true
@@ -496,6 +504,9 @@ private fun IslandBody(
     }
     // Оттягивание вниз пальцем
     val pull = remember { Animatable(0f) }
+        // Смахивание уведомления вправо: насколько плашка уехала и насколько она видна
+    val noticeDrag = remember { Animatable(0f) }
+    val noticeAlpha = remember { Animatable(1f) }
 
     // Liquid Glass: при смене содержимого по стеклу пробегает блик, при наклоне телефона блики сдвигаются
     val tilt = IslandBus.glassTilt.collectAsState()
@@ -528,7 +539,11 @@ private fun IslandBody(
                 val bump = Egg.bump() * PayFx.pop.floatValue
                 scaleX = jellyX.value * (1f + 0.03f * pull.value) * bump
                 scaleY = jellyY.value * (1f + 0.08f * pull.value) * bump
-                translationX = shake.value.dp.toPx()
+                val nd = noticeDrag.value
+                translationX = shake.value.dp.toPx() + nd
+                // Уезжая вправо, плашка тает
+                val dragFade = if (nd > 0f) 1f - (nd / (size.width * 0.9f).coerceAtLeast(1f)).coerceIn(0f, 1f) else 1f
+                alpha = noticeAlpha.value * dragFade
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
@@ -602,21 +617,48 @@ private fun IslandBody(
                     onLongPress = onLong,
                 )
             }
-            .pointerInput(Unit) {
+              .pointerInput(Unit) {
                 val threshold = 36.dp.toPx()
                 val side = 56.dp.toPx()
                 var dx = 0f
                 var dy = 0f
+                // Смахивание вправо — только на той плашке, на которой начался жест
+                var startId: Any? = null
+                var startTime = 0L
+                fun onNotice(act: Act) =
+                    act is Act.NoticeA && act.id == startId && !isExpanded && IslandBus.reply.value == null
                 detectDragGestures(
                     onDragStart = {
                         dx = 0f
                         dy = 0f
+                        startId = current.id
+                        startTime = SystemClock.elapsedRealtime()
                     },
                     onDragEnd = {
                         scope.launch { pull.animateTo(0f, spring(dampingRatio = 0.45f)) }
                         val vertical = abs(dy) > abs(dx)
                         val act = current
+                        // Смахнули вправо: далеко или быстрым щелчком
+                        val swipedAway = onNotice(act) && !vertical && dx > side &&
+                            (dx > size.width * 0.3f || SystemClock.elapsedRealtime() - startTime < 300)
+                        val away = conf.screenWidthDp.dp.toPx()
+                        if (!swipedAway && noticeDrag.value != 0f) {
+                            scope.launch { noticeDrag.animateTo(0f, spring(dampingRatio = 0.6f)) }
+                        }
                         when {
+                            swipedAway -> {
+                                haptic()
+                                val key = (act as? Act.NoticeA)?.n?.message?.key
+                                scope.launch {
+                                    noticeDrag.animateTo(away, tween(160))
+                                    IslandBus.notice.value = null
+                                    if (key != null) NotifListener.dismiss(key)
+                                    // Остров возвращается на место уже невидимым и проявляется со следующим содержимым
+                                    noticeAlpha.snapTo(0f)
+                                    noticeDrag.snapTo(0f)
+                                    noticeAlpha.animateTo(1f, tween(220))
+                                }
+                            }
                             !isExpanded && vertical && dy > threshold && settings.swipeExpand && !act.transient &&
                                 (act !is Act.Idle || settings.idleExpand) -> {
                                 haptic()
@@ -645,13 +687,20 @@ private fun IslandBody(
                             }
                         }
                     },
-                    onDragCancel = { scope.launch { pull.animateTo(0f) } },
+                    onDragCancel = {
+                        scope.launch { pull.animateTo(0f) }
+                        scope.launch { noticeDrag.animateTo(0f, spring(dampingRatio = 0.6f)) }
+                    },
                     onDrag = { change, amount ->
                         change.consume()
                         dx += amount.x
                         dy += amount.y
                         if (!isExpanded && settings.swipeExpand) {
                             scope.launch { pull.snapTo((dy / (threshold * 3)).coerceIn(0f, 1f)) }
+                        }
+                        // Плашка уведомления едет за пальцем вправо
+                        if (onNotice(current) && abs(dx) > abs(dy)) {
+                            scope.launch { noticeDrag.snapTo(dx.coerceAtLeast(0f)) }
                         }
                     },
                 )
@@ -793,7 +842,7 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
         is Act.Idle -> if (s.idleExpand) Controls.expand(act.id)
         // Оплата: нажатие открывает приложение оплаты (окно Google открывать нечего)
         is Act.PayA -> if (act.pkg != PayMonitor.GMS) Controls.openApp(context, act.pkg)
-        is Act.TimerA -> if (act.t.ringing) Controls.cancelTimer() else perform(context, s.tapAction, act)
+        is Act.TimerA -> if (act.t.ringing) Controls.stopTimer(context) else perform(context, s.tapAction, act)
         is Act.CallA -> if (act.c.incoming) {
             Controls.openCall(context, act.c)
         } else {
@@ -823,6 +872,7 @@ private fun Bubble(act: Act, s: IslandSettings) {
     val haptic = rememberHaptic()
     val tilt = IslandBus.glassTilt.collectAsState()
     val now = rememberNow(500, active = act is Act.TimerA)
+    val wallNow = rememberWallNow(500)
     Box(
         Modifier
             .size(h)
@@ -860,7 +910,13 @@ private fun Bubble(act: Act, s: IslandSettings) {
             }
             is Act.CallA -> Icon(Ios.call, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
-            is Act.ChargingA -> Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
+            is Act.ChargingA -> {
+                val progress = act.b.chargeProgress.coerceIn(0f, 1f)
+                if (progress > 0f) {
+                    ProgressRing(progress, Tints.Green, Modifier.size(inner), stroke = 2.5.dp)
+                }
+                Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.5f))
+            }
             else -> Unit
         }
     }
