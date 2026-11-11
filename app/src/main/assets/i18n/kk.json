@@ -851,5 +851,18 @@
 "Waiting for step sensor data": "Қадам датчигінің деректері күтілуде",
 "Daily steps since enabling": "Қосылғаннан бергі күндік қадамдар",
 "Choose a city and enable weather in Extra controls": "«Қосымша басқару элементтері» бөлімінде қаланы таңдап, ауа райын қосыңыз",
-"Weather is not available yet": "Ауа райы әзірге қолжетімсіз"
+"Weather is not available yet": "Ауа райы әзірге қолжетімсіз",
+  "Text color": "Мәтін түсі",
+  "Custom text color": "Мәтіннің жеке түсі",
+  "Main text in the capsule, cards and Brief": "Капсуладағы, карточкалардағы және шолудағы негізгі мәтін",
+  "Changes appear immediately in the preview above. Status and button colors are preserved.": "Өзгерістер жоғарыдағы мысалда бірден көрінеді. Күйлер мен батырмалардың түстері сақталады.",
+  "Voice and video recording": "Дыбыс пен бейне жазу",
+  "Audio, screen and camera recording, independently of timers. Controls require actions from the recording app.": "Дыбысты, экранды және камераны таймерлерден тәуелсіз жазу. Басқару үшін жазу қолданбасы тиісті әрекеттерді ұсынуы керек.",
+  "Weather update failed. Check your connection.": "Ауа райын жаңарту мүмкін болмады. Байланысты тексеріңіз.",
+  "Loading weather…": "Ауа райы жүктелуде…",
+  "Refresh weather": "Ауа райын жаңарту",
+  "Pause recording": "Жазуды кідірту",
+  "Resume recording": "Жазуды жалғастыру",
+  "Couldn't pause recording": "Жазуды кідірту мүмкін болмады",
+  "Couldn't resume recording": "Жазуды жалғастыру мүмкін болмады"
 }

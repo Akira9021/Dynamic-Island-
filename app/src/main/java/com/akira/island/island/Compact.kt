@@ -61,7 +61,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -148,6 +147,11 @@ fun cameraInset(s: IslandSettings): Dp = s.height.dp * 0.5f + 11.5.dp
 
 @Composable
 fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {
+    IslandTextTheme(s) { CompactContentBody(act, s, wideWidth) }
+}
+
+@Composable
+private fun CompactContentBody(act: Act, s: IslandSettings, wideWidth: Dp) {
     val h = activeHeight(s)
     val gap = compactGap(s)
     val side = sideMax(s)
@@ -807,7 +811,7 @@ private fun CountPill(count: Int, open: Boolean, accent: Color, onClick: () -> U
         Modifier.height(24.dp).clip(CircleShape).background(accent).clickable(onClick = onClick).padding(start = 9.dp, end = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("$count", color = ink, fontSize = 13.sp, style = Digits, maxLines = 1)
+        Text("$count", color = ink, fontSize = 13.sp, style = Digits, maxLines = 1, customizable = false)
         Icon(Icons.Rounded.KeyboardArrowDown, null, tint = ink, modifier = Modifier.size(17.dp).graphicsLayer { rotationZ = rotation })
     }
 }

@@ -74,7 +74,6 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.draw.drawBehind
@@ -140,6 +139,11 @@ private val Dim = Color.White.copy(alpha = 0.55f)
 
 @Composable
 fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp) {
+    IslandTextTheme(s) { ExpandedContentBody(act, s, lyrics, battery, width) }
+}
+
+@Composable
+private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp) {
     // Фонарик, как в iOS 18, — не широкая плашка, а высокая карточка с лучом
     if (act is Act.TorchA) {
         TorchCard(act.t, s)
@@ -632,9 +636,10 @@ private fun ChronoExpanded(c: ChronoInfo, s: IslandSettings) {
     if (c.isRecording) {
         val now = rememberWallNow(1_000, active = c.pausedMs == null)
         val kind = c.recordingKind!!
+        fun openRecording() { if (!Controls.send(context, c.open)) Controls.openApp(context, c.pkg) }
         Column {
             Text(if (c.pausedMs != null) "${kind.title} · ${tr("Пауза", "Paused")}" else kind.title,
-                color = Tints.Gray, fontSize = 14.sp, modifier = Modifier.clickable { Controls.openApp(context, c.pkg) })
+                color = Tints.Gray, fontSize = 14.sp, modifier = Modifier.clickable { openRecording() })
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (kind == RecordingKind.VOICE) {
@@ -646,7 +651,20 @@ private fun ChronoExpanded(c: ChronoInfo, s: IslandSettings) {
                 Spacer(Modifier.width(12.dp))
                 Text(formatDuration(c.elapsed(now)), color = Tints.Red, fontSize = 22.sp, style = Digits,
                     maxLines = 1, softWrap = false)
-                Spacer(Modifier.width(12.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically) {
+                val action = if (c.pausedMs == null) c.pause else c.resume
+                if (action != null) {
+                    val label = if (c.pausedMs == null) tr("Приостановить запись", "Pause recording") else tr("Продолжить запись", "Resume recording")
+                    RoundButton(if (c.pausedMs == null) Ios.pause else Ios.play,
+                        modifier = Modifier.semantics { contentDescription = label }) {
+                        if (!Controls.send(context, action)) android.widget.Toast.makeText(context,
+                            if (c.pausedMs == null) tr("Не удалось приостановить запись", "Couldn't pause recording")
+                            else tr("Не удалось продолжить запись", "Couldn't resume recording"), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
                 if (c.stop != null) {
                     val label = tr("Остановить запись", "Stop recording")
                     Box(Modifier.size(44.dp).clip(CircleShape).border(3.dp, Color.White, CircleShape)
@@ -660,7 +678,7 @@ private fun ChronoExpanded(c: ChronoInfo, s: IslandSettings) {
                 } else {
                     val label = tr("Открыть приложение", "Open app")
                     RoundButton(Icons.Rounded.OpenInNew, modifier = Modifier.semantics { contentDescription = label }) {
-                        Controls.openApp(context, c.pkg)
+                        openRecording()
                     }
                 }
             }

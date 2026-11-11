@@ -66,4 +66,16 @@ class BriefPresentationTest {
             assertNull(result.weather)
         }
     }
+
+    @Test fun loadingErrorsAndTheSelectedCityAreAvailableOnlyWhileUnlockedAndEnabled() {
+        val visible = briefDetails(extras, false, null, null, now, weatherLoading = true, weatherError = "Offline")
+        assertTrue(visible.weatherLoading); assertEquals("Offline", visible.weatherError)
+        assertEquals("Test city", visible.weatherCity)
+        for (result in listOf(
+            briefDetails(extras, true, null, weather, now, true, "Offline"),
+            briefDetails(extras.copy(weatherEnabled = false), false, null, weather, now, true, "Offline"))) {
+            assertFalse(result.weatherLoading); assertNull(result.weatherError); assertNull(result.weatherCity)
+            assertNull(result.weather)
+        }
+    }
 }

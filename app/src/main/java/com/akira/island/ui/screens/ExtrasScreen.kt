@@ -96,11 +96,27 @@ fun ExtrasScreen(onBack: () -> Unit) {
                 tr("Приложения и контакты доступны после раскрытия пустого острова. Контакты скрыты на экране блокировки.", "Apps and contacts appear in the expanded idle island. Contacts are hidden on the lock screen."))
         }
         SectionHeader(tr("Погода", "Weather"))
+        val forecast by WeatherRepo.state.collectAsState()
+        val forecastLoading by WeatherRepo.loading.collectAsState()
+        val forecastError by WeatherRepo.error.collectAsState()
+        LaunchedEffect(s.weatherEnabled, s.weatherCity, s.latitude, s.longitude) {
+            if (s.weatherEnabled && s.weatherCity.isNotBlank()) WeatherRepo.refresh(force = false)
+        }
         GroupToggle(Pos.Single, Icons.Rounded.Cloud, if (s.briefEnabled) tr("Погода в сводке", "Weather in Brief") else tr("Карточка погоды", "Weather card"),
             s.weatherCity.ifBlank { tr("Сначала выберите город", "Choose a city first") }, s.weatherEnabled, color = Tile.Teal) {
             ExtrasRepo.update { copy(weatherEnabled = it && weatherCity.isNotBlank()) }
         }
         if (s.briefEnabled) SettingsHint(tr("Погода появится на странице сводки вместо отдельной карточки острова.", "Weather appears on the Brief page instead of a separate island card."))
+        if (s.weatherEnabled && s.weatherCity.isNotBlank()) {
+            forecast?.takeIf { it.city == s.weatherCity && System.currentTimeMillis() - it.updatedAt in 0..3_600_000L }?.let { weather ->
+                Text(String.format(java.util.Locale.ROOT, "%.0f°C", weather.temperature) + " · " + weather.summary(), color = Ui.Text)
+            }
+            if (forecastLoading) Text(tr("Загрузка погоды…", "Loading weather…"), color = Ui.Sub)
+            else forecastError?.let { Text(it, color = Ui.Sub) }
+            TextButton(enabled = !forecastLoading, onClick = { scope.launch { WeatherRepo.refresh() } }) {
+                Text(tr("Обновить погоду", "Refresh weather"))
+            }
+        }
         OutlinedTextField(query, { query = it.take(100) }, label = { Text(tr("Город", "City")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
         TextButton(enabled = !busy && query.trim().length >= 2, onClick = {
             scope.launch {

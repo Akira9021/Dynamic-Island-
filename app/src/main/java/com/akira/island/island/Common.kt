@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -403,7 +402,7 @@ fun PillButton(
         Icon(icon, null, tint = controlTint(fg), modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(6.dp))
         // Длинная подпись («Не беспокоить», «Без звука») чуть уменьшается, а не обрезается
-        FitText(text, controlTint(fg), 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false))
+        FitText(text, controlTint(fg), 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false), customizable = false)
     }
 }
 
@@ -477,6 +476,7 @@ fun FitText(
     weight: FontWeight,
     modifier: Modifier = Modifier,
     style: TextStyle = TextStyle.Default,
+    customizable: Boolean = true,
 ) {
     val measurer = rememberTextMeasurer()
     val base = LocalTextStyle.current.merge(style)
@@ -493,7 +493,7 @@ fun FitText(
         }
         // Тот же стиль, по которому мерили: шрифт темы и его межбуквенный интервал
         Text(text, color = color, fontSize = size, fontWeight = weight, maxLines = 1, softWrap = false,
-            overflow = TextOverflow.Ellipsis, style = base)
+            overflow = TextOverflow.Ellipsis, style = base, customizable = customizable)
     }
 }
 

@@ -102,6 +102,8 @@ data class ChronoInfo(
     val reset: PendingIntent? = null,
     /** Тип записи подтверждён уведомлением источника; заголовок сам по себе не делает таймер диктофоном. */
     val recordingKind: RecordingKind? = null,
+    /** Original notification destination; recording controls never replace missing actions with guessed intents. */
+    val open: PendingIntent? = null,
 ) {
     fun elapsed(nowWall: Long): Long = pausedMs ?: if (countDown) (base - nowWall).coerceAtLeast(0) else nowWall - base
 

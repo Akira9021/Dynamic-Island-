@@ -5,6 +5,42 @@ import org.junit.Test
 import com.akira.island.core.RecordingKind
 
 class RecordingNotificationsTest {
+    @Test fun russianPauseIsNeverAStopAction() {
+        assertTrue(isPauseRecordingAction("Приостановить запись"))
+        assertFalse(isStopRecordingAction("Приостановить запись"))
+        assertFalse(isFinishRecordingAction("com.google.android.apps.recorder", "Приостановить запись"))
+        assertTrue(isStopRecordingAction("Остановить запись"))
+    }
+    @Test fun pixelRecorderMediaTokenDoesNotHideConfirmedLiveRecording() {
+        assertEquals(RecordingKind.VOICE, classifyRecording("com.google.android.apps.recorder", "Recording", "00:12",
+            false, false, hasElapsedTime = true, hasPauseAction = true, foregroundService = true, mediaNotification = true).kind)
+        assertEquals(RecordingKind.VOICE, classifyRecording("com.google.android.apps.recorder", "Запись", "",
+            false, false, hasPauseAction = true, mediaNotification = true).kind)
+    }
+    @Test fun savedRecorderPlaybackAndMusicAreNeverLiveCapture() {
+        assertTrue(classifyRecording("com.google.android.apps.recorder", "Interview", "00:12",
+            true, true, hasElapsedTime = true, hasPauseAction = true, mediaNotification = true).playback)
+        assertFalse(classifyRecording("com.google.android.apps.recorder", "Recording 12", "00:12",
+            true, true, hasPauseAction = true, foregroundService = true, mediaNotification = true).recording)
+        assertFalse(classifyRecording("com.spotify.music", "Recording of the day", "00:12",
+            true, true, hasPauseAction = true, mediaNotification = true).recording)
+        assertFalse(classifyRecording("com.google.android.apps.recorder", "Playing recording", "00:12",
+            true, true, hasPauseAction = true, foregroundService = true, mediaNotification = true).recording)
+    }
+    @Test fun liveRecorderSpecificActionsWorkWithoutPersistentNotificationFlags() {
+        assertEquals(RecordingKind.VOICE, classifyRecording("com.google.android.apps.recorder", "Recorder", "",
+            false, false, hasPauseAction = true, hasRecordingAction = true, mediaNotification = true).kind)
+        assertFalse(classifyRecording("com.google.android.apps.recorder", "Recorder", "",
+            false, false, hasPauseAction = true).recording)
+    }
+    @Test fun recorderSaveIsAnExplicitFinishActionOnlyForTrustedRecorders() {
+        assertTrue(isFinishRecordingAction("com.google.android.apps.recorder", "Сохранить"))
+        assertTrue(isFinishRecordingAction("com.google.android.apps.recorder", "Save recording"))
+        assertFalse(isFinishRecordingAction("example.files", "Save recording"))
+        assertFalse(isFinishRecordingAction("com.google.android.apps.recorder", "Delete"))
+        assertTrue(isSpecificRecordingAction("Pause recording"))
+        assertFalse(isSpecificRecordingAction("Pause"))
+    }
     @Test fun oemRecorderWithJustTimeAndPauseIsRecognized() {
         assertEquals(RecordingKind.VOICE, classifyRecording("com.sec.android.app.voicenote", "00:12", "", true, false,
             hasElapsedTime = true, hasPauseAction = true).kind)

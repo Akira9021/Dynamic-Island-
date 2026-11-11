@@ -1,0 +1,328 @@
+{
+  "baseCommit": "30824f68f87c28c9ee266836d252a4c43a14fa95",
+  "branch": "test-1.7.0",
+  "sourceTreeSha256": "5fc96207b2651099e04e6d856981c334779cdac8ed6aca4561f1c07c124f0805",
+  "jvm": {
+    "tests": 119,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "Warning": 22
+  },
+  "android": {
+    "uniqueMethods": 38,
+    "latestResults": {
+      "com.akira.island.island.FollowupRegressionTest#liveMoscowWeatherRequest": 0,
+      "com.akira.island.island.FollowupRegressionTest#narrowRecorderSendsActualPauseResumeAndStopActions": 0,
+      "com.akira.island.island.FollowupRegressionTest#weatherAppearsAsItsOwnCardAndInBrief": 0,
+      "com.akira.island.island.FollowupRegressionTest#customTextReachesBothRenderersAndCanBeTurnedOff": 0,
+      "com.akira.island.island.FollowupRegressionTest#recorderRemainsVisibleWhenClockTimersAreDisabled": 0,
+      "com.akira.island.island.BriefPanelDeviceTest#narrowAndScaledClockPagesKeepTimeBatteryAndAlarmInsideTheCard": 0,
+      "com.akira.island.island.BriefPanelDeviceTest#weatherDistinguishesLoadingAndErrorsAndHidesRefreshWhileLocked": 0,
+      "com.akira.island.island.BriefPanelDeviceTest#optingOutRestoresTheExistingHeaderAndSingleStepsRow": 0,
+      "com.akira.island.island.BriefPanelDeviceTest#pagerSupportsSwipesAndButtonsAndLockImmediatelyRemovesPrivateContentAndActions": 0,
+      "com.akira.island.island.BriefPanelDeviceTest#ordinaryDigitalAndStepsPagesWrapTheirContentInsteadOfReserving240Dp": 0,
+      "com.akira.island.service.RecordingRoutingDeviceTest#pixelRecorderPlaybackChronometerIsNotShownAsActiveCapture": 0,
+      "com.akira.island.service.RecordingRoutingDeviceTest#recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent": 0,
+      "com.akira.island.service.RecordingRoutingDeviceTest#titlelessPixelRecordingCanExposeStatusOutsideTheMainTextField": 0,
+      "com.akira.island.service.RecordingRoutingDeviceTest#pixelRecorderWithMediaTokenKeepsRealPauseResumeSaveAndOpenIntents": 0,
+      "com.akira.island.service.RecordingRoutingDeviceTest#resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause": 0,
+      "com.akira.island.service.RecordingRoutingDeviceTest#foregroundRecorderWithoutAStopButtonTracksPauseAndFinish": 0,
+      "com.akira.island.service.MediaSessionLifecycleTest#confirmedCaptureDoesNotDuplicateMusicAndSavedPlaybackReturnsAfterCapture": 0,
+      "com.akira.island.service.MediaSessionLifecycleTest#progressNotificationsReuseTheSessionAndDoNotLoseCallbacks": 0,
+      "com.akira.island.island.FeedbackRegressionTest#playerTimestampsFitNarrowCardsAndLargeSystemText": 0,
+      "com.akira.island.island.FeedbackRegressionTest#settingsSearchOpensASectionAndKeepsTheQueryOnBack": 0,
+      "com.akira.island.island.FeedbackRegressionTest#idleTimerPickerDoesNotSqueezeItsCounter": 0,
+      "com.akira.island.island.FeedbackRegressionTest#detailedNotificationKeepsReplyAndReadWithoutThreeUtilityButtons": 0,
+      "com.akira.island.island.LiquidGlassRenderingTest#captureActualCapsuleMessageAndTimer": 0,
+      "com.akira.island.island.LiquidGlassRenderingTest#previewLightFollowsFingerWithoutChangingPhoneTilt": 0,
+      "com.akira.island.island.LiquidGlassRenderingTest#staticGlassIgnoresMotionAndKeepsCircleAndNotchClipped": 0,
+      "com.akira.island.island.LiquidGlassRenderingTest#densityReallyControlsTransparencyAndReflectionsNeverWashOutContent": 0,
+      "com.akira.island.island.NotificationLayoutDeviceTest#centeredAvatarStaysBelowTheCameraAndHonorsAvatarAppAndNone": 0,
+      "com.akira.island.island.NotificationLayoutDeviceTest#positionChoiceReplacesTheOldRightToggleAndPreservesIconMode": 0,
+      "com.akira.island.island.NotificationLayoutDeviceTest#compactCountDeduplicatesHistoryAndKeepsTextOutsideTheCameraGap": 0,
+      "com.akira.island.island.NotificationLayoutDeviceTest#centeredAvatarKeepsSensitiveContentPrivateOnTheLockScreen": 0,
+      "com.akira.island.island.MaintenanceUiTest#notchTopOffsetIsAvailableAndDoesNotOverwriteCapsulePlacement": 0,
+      "com.akira.island.island.MaintenanceUiTest#actualStopButtonSendsTheProvidedAction": 0,
+      "com.akira.island.island.MaintenanceUiTest#idleHidesAfterItsDeadlineAndCameraTapRestoresIt": 0,
+      "com.akira.island.island.MaintenanceUiTest#audioScreenAndCameraHaveDifferentPresentationsWithoutAFakeStopButton": 0,
+      "com.akira.island.ui.SettingsExperienceTest#systemEventsHaveOneHomeAndHardwareReadings": 0,
+      "com.akira.island.ui.SettingsExperienceTest#borderChoicesAreExclusiveAndPreviewStaysVisible": 0,
+      "com.akira.island.ui.SettingsExperienceTest#previewDoesNotReleaseOrHoldRealNotifications": 0,
+      "com.akira.island.service.MediaPauseDeviceTest#aPausedSessionStaysWhileOpenThenHidesAfterClosing": 0
+    },
+    "runs": [
+      {
+        "log": "followup-device-tests.log",
+        "results": [
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#liveMoscowWeatherRequest",
+            "code": -2
+          },
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#narrowRecorderSendsActualPauseResumeAndStopActions",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#weatherAppearsAsItsOwnCardAndInBrief",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#customTextReachesBothRenderersAndCanBeTurnedOff",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#recorderRemainsVisibleWhenClockTimersAreDisabled",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.BriefPanelDeviceTest#narrowAndScaledClockPagesKeepTimeBatteryAndAlarmInsideTheCard",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.BriefPanelDeviceTest#weatherDistinguishesLoadingAndErrorsAndHidesRefreshWhileLocked",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.BriefPanelDeviceTest#optingOutRestoresTheExistingHeaderAndSingleStepsRow",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.BriefPanelDeviceTest#pagerSupportsSwipesAndButtonsAndLockImmediatelyRemovesPrivateContentAndActions",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.BriefPanelDeviceTest#ordinaryDigitalAndStepsPagesWrapTheirContentInsteadOfReserving240Dp",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#pixelRecorderPlaybackChronometerIsNotShownAsActiveCapture",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#titlelessPixelRecordingCanExposeStatusOutsideTheMainTextField",
+            "code": -2
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#pixelRecorderWithMediaTokenKeepsRealPauseResumeSaveAndOpenIntents",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#foregroundRecorderWithoutAStopButtonTracksPauseAndFinish",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.MediaSessionLifecycleTest#confirmedCaptureDoesNotDuplicateMusicAndSavedPlaybackReturnsAfterCapture",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.MediaSessionLifecycleTest#progressNotificationsReuseTheSessionAndDoNotLoseCallbacks",
+            "code": 0
+          }
+        ]
+      },
+      {
+        "log": "followup-live-weather-trusted.log",
+        "results": [
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#liveMoscowWeatherRequest",
+            "code": 0
+          }
+        ]
+      },
+      {
+        "log": "followup-regression-tests.log",
+        "results": [
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#pixelRecorderPlaybackChronometerIsNotShownAsActiveCapture",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#recorderMislabelledAsNavigationKeepsItsTimerAndStopIntent",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#titlelessPixelRecordingCanExposeStatusOutsideTheMainTextField",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#pixelRecorderWithMediaTokenKeepsRealPauseResumeSaveAndOpenIntents",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.RecordingRoutingDeviceTest#foregroundRecorderWithoutAStopButtonTracksPauseAndFinish",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FeedbackRegressionTest#playerTimestampsFitNarrowCardsAndLargeSystemText",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FeedbackRegressionTest#settingsSearchOpensASectionAndKeepsTheQueryOnBack",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FeedbackRegressionTest#idleTimerPickerDoesNotSqueezeItsCounter",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FeedbackRegressionTest#detailedNotificationKeepsReplyAndReadWithoutThreeUtilityButtons",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.LiquidGlassRenderingTest#captureActualCapsuleMessageAndTimer",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.LiquidGlassRenderingTest#previewLightFollowsFingerWithoutChangingPhoneTilt",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.LiquidGlassRenderingTest#staticGlassIgnoresMotionAndKeepsCircleAndNotchClipped",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.LiquidGlassRenderingTest#densityReallyControlsTransparencyAndReflectionsNeverWashOutContent",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.NotificationLayoutDeviceTest#centeredAvatarStaysBelowTheCameraAndHonorsAvatarAppAndNone",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.NotificationLayoutDeviceTest#positionChoiceReplacesTheOldRightToggleAndPreservesIconMode",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.NotificationLayoutDeviceTest#compactCountDeduplicatesHistoryAndKeepsTextOutsideTheCameraGap",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.NotificationLayoutDeviceTest#centeredAvatarKeepsSensitiveContentPrivateOnTheLockScreen",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.MaintenanceUiTest#notchTopOffsetIsAvailableAndDoesNotOverwriteCapsulePlacement",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.MaintenanceUiTest#actualStopButtonSendsTheProvidedAction",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.MaintenanceUiTest#idleHidesAfterItsDeadlineAndCameraTapRestoresIt",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.MaintenanceUiTest#audioScreenAndCameraHaveDifferentPresentationsWithoutAFakeStopButton",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.ui.SettingsExperienceTest#systemEventsHaveOneHomeAndHardwareReadings",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.ui.SettingsExperienceTest#borderChoicesAreExclusiveAndPreviewStaysVisible",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.ui.SettingsExperienceTest#previewDoesNotReleaseOrHoldRealNotifications",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.service.MediaPauseDeviceTest#aPausedSessionStaysWhileOpenThenHidesAfterClosing",
+            "code": 0
+          }
+        ]
+      },
+      {
+        "log": "followup-final-color-weather.log",
+        "results": [
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#liveMoscowWeatherRequest",
+            "code": 0
+          },
+          {
+            "method": "com.akira.island.island.FollowupRegressionTest#customTextReachesBothRenderersAndCanBeTurnedOff",
+            "code": 0
+          }
+        ]
+      }
+    ],
+    "physicalPixel8ProTested": false,
+    "networkFixture": "Public managed environment CA installed in disposable Android 35 emulator; TLS verification enabled; APK trust unchanged"
+  },
+  "localApks": {
+    "app/build/outputs/apk/debug/app-debug.apk": {
+      "sha256": "712459f031e5cf0b3a3b96fc196c3050ac4ac10b6cb6d18de7314c4976a0ba7f",
+      "bytes": 19439069
+    },
+    "app/build/outputs/apk/release/app-release-unsigned.apk": {
+      "sha256": "61d63f903051ed5e2efc35a24c8659ee417fdf30441a4e39ddc12d98b0f18ef1",
+      "bytes": 2654949
+    },
+    "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": {
+      "sha256": "074697932aab9df5b6dcab7707915da4ae1181f8070f6005b61cdc53863c3546",
+      "bytes": 1195054
+    }
+  },
+  "scanner": {
+    "version": "1.1.0",
+    "groups": 9,
+    "errors": [
+      {
+        "code": 3,
+        "level": "warn",
+        "message": "Syntax error at line /workspace/setup-cache/security-source/java/com/akira/island/service/PayScreen.kt:26:\n `\"\"` was unexpected",
+        "path": "/workspace/setup-cache/security-source/java/com/akira/island/service/PayScreen.kt",
+        "spans": [
+          {
+            "end": {
+              "col": 79,
+              "line": 26,
+              "offset": 2
+            },
+            "file": "/workspace/setup-cache/security-source/java/com/akira/island/service/PayScreen.kt",
+            "start": {
+              "col": 77,
+              "line": 26,
+              "offset": 0
+            }
+          }
+        ],
+        "type": [
+          "PartialParsing",
+          [
+            {
+              "end": {
+                "col": 79,
+                "line": 26,
+                "offset": 2
+              },
+              "path": "/workspace/setup-cache/security-source/java/com/akira/island/service/PayScreen.kt",
+              "start": {
+                "col": 77,
+                "line": 26,
+                "offset": 0
+              }
+            }
+          ]
+        ]
+      }
+    ]
+  }
+}

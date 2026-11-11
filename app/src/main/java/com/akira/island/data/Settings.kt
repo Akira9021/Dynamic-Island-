@@ -198,6 +198,7 @@ data class IslandSettings(
     val cardTorch: Boolean = true,
     val cardProgress: Boolean = true,
     val cardTimer: Boolean = true,
+    val cardRecording: Boolean = true,
     val cardCharging: Boolean = true,
     val cardCall: Boolean = true,
     val cardMessages: Boolean = true,
@@ -276,6 +277,8 @@ data class IslandSettings(
     // Цвет кнопок в карточке уведомления
     val accentMode: AccentMode = AccentMode.DEFAULT,
     val accentColor: Long = 0xFF0A84FF,
+    val textColorEnabled: Boolean = false,
+    val textColor: Long = 0xFFFFFFFF,
 
     // Обновления из GitHub Releases
     val autoUpdateCheck: Boolean = true,

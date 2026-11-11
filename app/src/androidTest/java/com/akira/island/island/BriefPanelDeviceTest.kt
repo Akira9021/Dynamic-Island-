@@ -44,6 +44,8 @@ class BriefPanelDeviceTest {
     private var oldSteps: Long? = null
     private var oldAlarm: AlarmInfo? = null
     private var oldLocked = false
+    private var oldWeatherError: String? = null
+    private var oldWeatherLoading = false
     private val seed = object : ExternalResource() {
         override fun before() {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -51,6 +53,7 @@ class BriefPanelDeviceTest {
                 SettingsRepo.init(context); ExtrasRepo.init(context)
                 oldSettings = SettingsRepo.current; oldExtras = ExtrasRepo.state.value
                 oldSteps = StepRepo.count.value; oldWeather = WeatherRepo.state.value
+                oldWeatherError = WeatherRepo.error.value; oldWeatherLoading = WeatherRepo.loading.value
                 oldAlarm = IslandBus.nextAlarm.value; oldLocked = IslandBus.locked.value
                 SettingsRepo.update { IslandSettings(language = AppLanguage.EN, reduceEffects = true, autoUpdateCheck = false,
                     lastSeenVersion = UpdateChecker.currentVersion(context), quickActions = emptyList()) }
@@ -58,6 +61,7 @@ class BriefPanelDeviceTest {
                     weatherCity = "Private test city", latitude = 50.0, longitude = 30.0) }
                 StepRepo.count.value = 4_567
                 WeatherRepo.state.value = WeatherInfo("Private test city", 12.0, 0, System.currentTimeMillis())
+                WeatherRepo.error.value = null; WeatherRepo.loading.value = false
                 IslandBus.locked.value = false
                 IslandBus.nextAlarm.value = AlarmInfo(System.currentTimeMillis() + 3_600_000, null, null)
             }
@@ -66,6 +70,7 @@ class BriefPanelDeviceTest {
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 ExtrasRepo.update { oldExtras }; SettingsRepo.update { oldSettings }
                 StepRepo.count.value = oldSteps; WeatherRepo.state.value = oldWeather
+                WeatherRepo.error.value = oldWeatherError; WeatherRepo.loading.value = oldWeatherLoading
                 IslandBus.nextAlarm.value = oldAlarm; IslandBus.locked.value = oldLocked
             }
         }
@@ -170,5 +175,42 @@ class BriefPanelDeviceTest {
         compose.onNodeWithTag("brief-panel").assertIsDisplayed()
         compose.onNodeWithText("Steps today: 4567").assertDoesNotExist()
         compose.onAllNodesWithText("62%").assertCountEquals(1)
+    }
+
+    @Test fun ordinaryDigitalAndStepsPagesWrapTheirContentInsteadOfReserving240Dp() {
+        compose.runOnUiThread { IslandBus.nextAlarm.value = null }
+        content()
+        val density = compose.activity.resources.displayMetrics.density
+        var bounds = compose.onNodeWithTag("brief-panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("Default digital Brief should fit within 190dp, was ${bounds.height / density}", bounds.height <= 190 * density)
+        compose.onNodeWithTag("brief-clock").assertIsDisplayed()
+        compose.onNodeWithTag("brief-battery").assertIsDisplayed()
+        screenshot("compact-clock")
+        compose.onNodeWithTag("brief-next").performClick()
+        bounds = compose.onNodeWithTag("brief-panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("Steps should not reserve blank vertical space", bounds.height <= 190 * density)
+        compose.onNodeWithTag("brief-step-count").assertIsDisplayed()
+        screenshot("compact-steps")
+    }
+
+    @Test fun weatherDistinguishesLoadingAndErrorsAndHidesRefreshWhileLocked() {
+        compose.runOnUiThread {
+            WeatherRepo.state.value = null
+            WeatherRepo.error.value = "Weather update failed. Check your connection."
+        }
+        content()
+        compose.onNodeWithTag("brief-next").performClick()
+        compose.onNodeWithTag("brief-next").performClick()
+        compose.onNodeWithText("Weather update failed. Check your connection.").assertIsDisplayed()
+        compose.onNodeWithTag("brief-weather-refresh").assertIsEnabled().assertHasClickAction()
+        compose.onNodeWithTag("brief-weather-city").assertTextEquals("Private test city")
+        screenshot("weather-error")
+        compose.runOnIdle { WeatherRepo.error.value = null; WeatherRepo.loading.value = true }
+        compose.onNodeWithText("Loading weather…").assertIsDisplayed()
+        compose.onNodeWithTag("brief-weather-refresh").assertIsNotEnabled()
+        compose.runOnIdle { IslandBus.locked.value = true }
+        compose.onNodeWithTag("brief-weather-city").assertDoesNotExist()
+        compose.onNodeWithTag("brief-weather-refresh").assertDoesNotExist()
+        compose.onNodeWithText("Loading weather…").assertDoesNotExist()
     }
 }

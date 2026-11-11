@@ -851,5 +851,18 @@
 "Waiting for step sensor data": "Menunggu data sensor langkah",
 "Daily steps since enabling": "Langkah harian sejak diaktifkan",
 "Choose a city and enable weather in Extra controls": "Pilih kota dan aktifkan cuaca di Kontrol tambahan",
-"Weather is not available yet": "Cuaca belum tersedia"
+"Weather is not available yet": "Cuaca belum tersedia",
+  "Text color": "Warna teks",
+  "Custom text color": "Warna teks khusus",
+  "Main text in the capsule, cards and Brief": "Teks utama di kapsul, kartu, dan Ringkasan",
+  "Changes appear immediately in the preview above. Status and button colors are preserved.": "Perubahan langsung terlihat pada pratinjau di atas. Warna status dan tombol tetap dipertahankan.",
+  "Voice and video recording": "Perekaman suara dan video",
+  "Audio, screen and camera recording, independently of timers. Controls require actions from the recording app.": "Perekaman audio, layar, dan kamera, terpisah dari timer. Kontrol memerlukan tindakan dari aplikasi perekam.",
+  "Weather update failed. Check your connection.": "Pembaruan cuaca gagal. Periksa koneksi Anda.",
+  "Loading weather…": "Memuat cuaca…",
+  "Refresh weather": "Perbarui cuaca",
+  "Pause recording": "Jeda perekaman",
+  "Resume recording": "Lanjutkan perekaman",
+  "Couldn't pause recording": "Tidak dapat menjeda perekaman",
+  "Couldn't resume recording": "Tidak dapat melanjutkan perekaman"
 }

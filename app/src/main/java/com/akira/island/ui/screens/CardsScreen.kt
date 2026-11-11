@@ -69,6 +69,12 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
                 s.cardAlarm, color = Tile.Indigo) { set { copy(cardAlarm = it) } }
         }
 
+        SectionHeader(tr("Запись", "Recording"))
+        GroupToggle(Pos.Single, Icons.Rounded.KeyboardVoice, tr("Диктофон и запись видео", "Voice and video recording"),
+            tr("Звук, экран и камера — независимо от таймеров. Управление доступно, если его предоставляет приложение записи.",
+                "Audio, screen and camera recording, independently of timers. Controls require actions from the recording app."),
+            s.cardRecording, color = Tile.Pink) { set { copy(cardRecording = it) } }
+
         SectionHeader(tr("Система", "System"))
         Group {
             GroupToggle(Pos.First, Icons.Rounded.FlashlightOn, tr("Управление вспышкой", "Flashlight controls"),

@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -47,6 +48,26 @@ fun ColorsScreen(onBack: () -> Unit) {
         ChoiceStrip(listOf(false, true), card, { if (it) tr("Карточка", "Card") else tr("Капсула", "Capsule") }) { card = it }
         SettingsHint(if (card) tr("Карточка появляется при раскрытии острова и в уведомлениях.", "The card appears when the island expands and in notifications.")
             else tr("Капсула — небольшой остров вокруг камеры.", "The capsule is the small island around the camera."))
+
+        SectionHeader(tr("Цвет текста", "Text color"))
+        GroupToggle(Pos.Single, Icons.Rounded.FormatColorText, tr("Свой цвет текста", "Custom text color"),
+            tr("Основной текст капсулы, карточек и сводки", "Main text in the capsule, cards and Brief"),
+            s.textColorEnabled, color = Tile.Purple) { value -> SettingsRepo.update { copy(textColorEnabled = value) } }
+        if (s.textColorEnabled) {
+            Swatches(lineColors, s.textColor) { value -> SettingsRepo.update { copy(textColor = value) } }
+            var hex by rememberSaveable(s.textColor) { mutableStateOf("#%06X".format(s.textColor and 0xFFFFFF)) }
+            val valid = hex.removePrefix("#").let { it.length == 6 && it.all { digit -> digit in '0'..'9' || digit.lowercaseChar() in 'a'..'f' } }
+            OutlinedTextField(hex, { value ->
+                hex = value.take(7)
+                val raw = hex.removePrefix("#")
+                if (raw.length == 6) raw.toLongOrNull(16)?.let { rgb ->
+                    if (rgb in 0..0xFFFFFF) SettingsRepo.update { copy(textColor = 0xFF000000 or rgb) }
+                }
+            }, label = { Text("HEX · #RRGGBB") }, isError = hex.isNotEmpty() && !valid,
+                singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        SettingsHint(tr("Изменения сразу видны в примере сверху. Цвета статусов и кнопок сохраняются.",
+            "Changes appear immediately in the preview above. Status and button colors are preserved."))
 
         SectionHeader(tr("Заливка", "Fill"))
         if (card) ChoiceStrip(listOf(false, true), s.expandedColorEnabled,

@@ -851,5 +851,18 @@
 "Waiting for step sensor data": "Esperando datos del sensor de pasos",
 "Daily steps since enabling": "Pasos del día desde la activación",
 "Choose a city and enable weather in Extra controls": "Elige una ciudad y activa el tiempo en Controles adicionales",
-"Weather is not available yet": "El tiempo aún no está disponible"
+"Weather is not available yet": "El tiempo aún no está disponible",
+  "Text color": "Color del texto",
+  "Custom text color": "Color de texto personalizado",
+  "Main text in the capsule, cards and Brief": "Texto principal de la cápsula, las tarjetas y el resumen",
+  "Changes appear immediately in the preview above. Status and button colors are preserved.": "Los cambios aparecen inmediatamente en la vista previa de arriba. Se conservan los colores de los estados y los botones.",
+  "Voice and video recording": "Grabación de voz y vídeo",
+  "Audio, screen and camera recording, independently of timers. Controls require actions from the recording app.": "Grabación de audio, pantalla y cámara, independiente de los temporizadores. Los controles requieren acciones proporcionadas por la aplicación de grabación.",
+  "Weather update failed. Check your connection.": "No se pudo actualizar el tiempo. Comprueba la conexión.",
+  "Loading weather…": "Cargando el tiempo…",
+  "Refresh weather": "Actualizar el tiempo",
+  "Pause recording": "Pausar grabación",
+  "Resume recording": "Reanudar grabación",
+  "Couldn't pause recording": "No se pudo pausar la grabación",
+  "Couldn't resume recording": "No se pudo reanudar la grabación"
 }

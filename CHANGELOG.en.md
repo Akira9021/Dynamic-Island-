@@ -8,6 +8,13 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 ## [1.7.0] — 2026-10-28
 
+### Screenshot follow-up fixes — test branch, 2026-11-06
+- Weather retries promptly after errors, offers manual refresh and shows loading/error states. Standalone and Brief weather paths are checked separately.
+- Brief pages wrap their content without a fixed height or stretched empty space.
+- Google Recorder is no longer hidden by its media session or disabled clock timers. Real pause/resume actions, duplicate-player filtering and distinct Russian Pause/Stop commands.
+- Appearance → Color and border → Text color: palette and custom HEX, applied immediately in the existing live preview. Semantic status and button colors remain.
+- Validation and limitations: [follow-up report](docs/followup-1.7.0/README.md). No public release is published.
+
 ### Recording, settings and security review — test branch, 2026-11-06
 - Liquid expansion defaults to on; an explicitly saved off preference is preserved.
 - Voice, screen and camera video recording have distinct presentation. Fixed foreground recording detection, pause/resume and elapsed time; Stop requires a real action supplied by the recording app.

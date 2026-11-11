@@ -267,7 +267,8 @@ fun IslandOverlay(
         if (t != null && !t.ringing) persistent += Act.TimerA(t)
         if (s.cardLive) liveActive.maxByOrNull { it.postTime }?.let { persistent += Act.LiveA(it) }
         stopwatch?.let { persistent += Act.StopwatchA(it) }
-        if (s.cardTimer) chronoActive.maxByOrNull { it.postTime }?.let { persistent += Act.ChronoA(it) }
+        chronoActive.filter { if (it.recording) s.cardRecording else s.cardTimer }
+            .maxByOrNull { it.postTime }?.let { persistent += Act.ChronoA(it) }
         val m = media
         if (s.cardMedia && m != null && !(s.hideWhenPlayerOpen && foreground == m.pkg)) {
             val at = if (s.preferMusic && m.playing) persistent.indexOfFirst {
@@ -948,6 +949,11 @@ private fun Act.surfaceAccent(): Color? = when (this) {
 
 @Composable
 private fun Bubble(act: Act, s: IslandSettings) {
+    IslandTextTheme(s) { BubbleContent(act, s) }
+}
+
+@Composable
+private fun BubbleContent(act: Act, s: IslandSettings) {
     val h = activeHeight(s)
     val haptic = rememberHaptic()
     val tilt = IslandBus.glassTilt.collectAsState()
@@ -977,7 +983,8 @@ private fun Bubble(act: Act, s: IslandSettings) {
             }
             is Act.StopwatchA -> Icon(Ios.stopwatch, null, tint = Tints.Orange, modifier = Modifier.size(inner * 0.8f))
             is Act.TorchA -> Icon(Ios.flashlight, null, tint = Tints.Yellow, modifier = Modifier.size(inner * 0.75f))
-            is Act.ChronoA -> AppIcon(act.c.icon, inner, Ios.timer, Tints.Orange)
+            is Act.ChronoA -> AppIcon(act.c.icon, inner, act.c.recordingKind?.icon ?: Ios.timer,
+                if (act.c.recording) Tints.Red else Tints.Orange)
             is Act.ProgressA -> {
                 ProgressRing(act.p.fraction, Tints.Blue, Modifier.size(inner), stroke = 2.5.dp)
                 Icon(Ios.download, null, tint = Tints.Blue, modifier = Modifier.size(inner * 0.5f))

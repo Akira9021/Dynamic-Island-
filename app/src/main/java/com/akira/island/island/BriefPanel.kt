@@ -13,11 +13,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ProvideTextStyle
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,7 +66,9 @@ internal fun BriefPanel(
     val locked by IslandBus.locked.collectAsState()
     val steps by StepRepo.count.collectAsState()
     val weather by WeatherRepo.state.collectAsState()
-    val details = briefDetails(extras, locked, steps, weather, now)
+    val weatherLoading by WeatherRepo.loading.collectAsState()
+    val weatherError by WeatherRepo.error.collectAsState()
+    val details = briefDetails(extras, locked, steps, weather, now, weatherLoading, weatherError)
     val pager = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
     fun turnPage(delta: Int) {
@@ -77,8 +79,8 @@ internal fun BriefPanel(
     }
     val pageTitles = listOf(tr("Дата и время", "Date and time"), tr("Шаги сегодня", "Steps today"), tr("Погода", "Weather"))
     val pageDescription = trf("Страница {0} из {1}: {2}", "Page {0} of {1}: {2}", pager.currentPage + 1, 3, pageTitles[pager.currentPage])
-    // Text can grow with the system font setting without an unbounded pager measurement.
-    val pageHeight = (240f * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
+    // Pages wrap their content. A finite cross-axis cap also supports the outer vertical scroller.
+    val maxPageHeight = (480f * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
     // Keep line height relative when FitText reduces a clock or grows the step count.
     ProvideTextStyle(LocalTextStyle.current.copy(lineHeight = 1.2.em)) {
         Column(Modifier.fillMaxWidth().testTag("brief-panel")) {
@@ -105,20 +107,20 @@ internal fun BriefPanel(
             }
             HorizontalPager(
                 state = pager,
-                modifier = Modifier.fillMaxWidth().height(pageHeight).testTag("brief-pages"),
+                modifier = Modifier.fillMaxWidth().heightIn(max = maxPageHeight).testTag("brief-pages"),
                 key = { it },
             ) { page ->
                 Column(
-                    Modifier.fillMaxSize().padding(horizontal = 1.dp)
+                    Modifier.fillMaxWidth().padding(horizontal = 1.dp)
                         .clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.06f))
-                        .padding(10.dp).testTag("brief-page-$page"),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(8.dp).testTag("brief-page-$page"),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     FitText(pageTitles[page], Tints.Lavender, 13.sp, 9.sp, FontWeight.Medium.island, Modifier.fillMaxWidth())
                     when (page) {
                         0 -> BriefClockPage(s, extras.briefClockStyle, battery, now, time, date, alarm, locked)
                         1 -> BriefStepsPage(details)
-                        2 -> BriefWeatherPage(details)
+                        2 -> BriefWeatherPage(details) { scope.launch { WeatherRepo.refresh() } }
                     }
                 }
             }
@@ -164,7 +166,6 @@ private fun ColumnScope.BriefClockPage(
     }
     Text(date, color = Color.LightGray, fontSize = 13.sp, lineHeight = 17.sp,
         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
-    Spacer(Modifier.weight(1f))
     if (battery.level >= 0) Row(Modifier.testTag("brief-battery"), verticalAlignment = Alignment.CenterVertically) {
         if (!s.batteryPercentOnly) {
             BatteryGlyph(battery.level, when {
@@ -200,39 +201,60 @@ private fun ColumnScope.BriefStepsPage(details: BriefDetails) {
         BriefDataStatus.DISABLED -> BriefMessage(tr("Включите шагомер в дополнительной панели", "Enable the step counter in Extra controls"))
         BriefDataStatus.UNAVAILABLE -> BriefMessage(tr("Ожидание данных датчика шагов", "Waiting for step sensor data"))
         BriefDataStatus.READY -> {
-            Spacer(Modifier.weight(1f))
             FitText(NumberFormat.getIntegerInstance(Lang.locale).format(details.steps), Color.White, 44.sp, 12.sp,
                 FontWeight.Medium.island, Modifier.fillMaxWidth().testTag("brief-step-count"), Digits)
             Text(tr("Шаги за день с момента включения", "Daily steps since enabling"), color = Color.LightGray,
                 fontSize = 13.sp, lineHeight = 18.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun ColumnScope.BriefWeatherPage(details: BriefDetails) {
+private fun ColumnScope.BriefWeatherPage(details: BriefDetails, refresh: () -> Unit) {
+    if (details.weatherStatus != BriefDataStatus.HIDDEN && details.weatherStatus != BriefDataStatus.DISABLED) {
+        details.weatherCity?.let { city ->
+            Text(city, color = Color.White, fontSize = 14.sp, lineHeight = 18.sp,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("brief-weather-city"))
+        }
+    }
     when (details.weatherStatus) {
         BriefDataStatus.HIDDEN -> BriefMessage(tr("Разблокируйте телефон для просмотра", "Unlock your phone to view"))
         BriefDataStatus.DISABLED -> BriefMessage(tr("Выберите город и включите погоду в дополнительной панели", "Choose a city and enable weather in Extra controls"))
-        BriefDataStatus.UNAVAILABLE -> BriefMessage(tr("Погода пока недоступна", "Weather is not available yet"))
+        BriefDataStatus.UNAVAILABLE -> BriefMessage(when {
+            details.weatherLoading -> tr("Загрузка погоды…", "Loading weather…")
+            details.weatherError != null -> details.weatherError
+            else -> tr("Погода пока недоступна", "Weather is not available yet")
+        })
         BriefDataStatus.READY -> details.weather?.let { weather ->
-            Text(weather.city, color = Color.White, fontSize = 14.sp, lineHeight = 18.sp,
-                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("brief-weather-city"))
             FitText(String.format(Lang.locale, "%.0f°C", weather.temperature), Color.White, 38.sp, 12.sp,
                 FontWeight.Normal.island, Modifier.fillMaxWidth(), Digits)
             Text(weather.summary(), color = Color.LightGray, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.weight(1f))
-            FitText(tr("Обновлено", "Updated") + " " + DateFormat.getTimeFormat(LocalContext.current).format(Date(weather.updatedAt)),
-                Color.LightGray, 11.sp, 8.sp, FontWeight.Normal.island, Modifier.fillMaxWidth())
-            FitText("Open-Meteo · CC BY 4.0", Color.Gray, 10.sp, 8.sp, FontWeight.Normal.island, Modifier.fillMaxWidth())
+            if (details.weatherError != null) Text(details.weatherError, color = Color.LightGray,
+                fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
+    }
+    if (details.weatherStatus != BriefDataStatus.HIDDEN && details.weatherStatus != BriefDataStatus.DISABLED) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                details.weather?.let { weather ->
+                    FitText(if (details.weatherLoading) tr("Загрузка погоды…", "Loading weather…") else tr("Обновлено", "Updated"),
+                        Color.LightGray, 11.sp, 8.sp, FontWeight.Normal.island, Modifier.fillMaxWidth())
+                    FitText(DateFormat.getTimeFormat(LocalContext.current).format(Date(weather.updatedAt)),
+                        Color.LightGray, 11.sp, 8.sp, FontWeight.Normal.island, Modifier.fillMaxWidth(), Digits)
+                }
+            }
+            IconButton(onClick = refresh, enabled = !details.weatherLoading,
+                modifier = Modifier.size(40.dp).testTag("brief-weather-refresh")) {
+                Icon(Icons.Rounded.Refresh, tr("Обновить погоду", "Refresh weather"), tint = Color.White.copy(alpha = if (details.weatherLoading) 0.3f else 0.8f), modifier = Modifier.size(18.dp))
+            }
+        }
+        FitText("Open-Meteo · CC BY 4.0", Color.Gray, 10.sp, 8.sp, FontWeight.Normal.island, Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun ColumnScope.BriefMessage(message: String) {
-    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.CenterStart) {
         Text(message, color = Color.LightGray, fontSize = 14.sp, lineHeight = 20.sp,
             maxLines = 6, overflow = TextOverflow.Ellipsis)
     }

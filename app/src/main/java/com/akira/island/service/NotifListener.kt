@@ -192,18 +192,26 @@ object NotificationParser {
         }
         // Многие диктофоны дают только время/паузу. Android 14+ также допускает FGS-плашку без ongoing.
         // The recording name may contain a date/time; prefer the live status over its title.
-        val recordingElapsed = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT, Notification.EXTRA_BIG_TEXT, Notification.EXTRA_TITLE)
-            .firstNotNullOfOrNull { ClockScreenParser.find(ex.getCharSequence(it)) }
+        val recordingTexts = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT, Notification.EXTRA_BIG_TEXT,
+            Notification.EXTRA_INFO_TEXT, Notification.EXTRA_SUMMARY_TEXT)
+            .mapNotNull { ex.getCharSequence(it)?.toString() } +
+            ex.getCharSequenceArray(Notification.EXTRA_TEXT_LINES).orEmpty().map(CharSequence::toString)
+        val recordingElapsed = recordingTexts.firstNotNullOfOrNull { ClockScreenParser.find(it) }
+            ?: ClockScreenParser.parse(title.trim())
+        val recordingActions = n.actions.orEmpty().filter { it.actionIntent != null }
+        val recordingPause = recordingActions.firstOrNull { isPauseRecordingAction(it.title?.toString().orEmpty()) }?.actionIntent
+        val recordingResume = recordingActions.firstOrNull { isResumeRecordingAction(it.title?.toString().orEmpty()) }?.actionIntent
+        val recordingStop = recordingActions.firstOrNull { isFinishRecordingAction(sbn.packageName, it.title?.toString().orEmpty()) }?.actionIntent
         val recording = classifyRecording(sbn.packageName, title,
-            texts.mapNotNull { ex.getCharSequence(it)?.toString() }.joinToString(" "), ongoing,
-            n.actions?.any { isStopRecordingAction(it.title?.toString().orEmpty()) } == true,
+            recordingTexts.joinToString(" "), ongoing, recordingStop != null,
             hasChronometer = ticking, hasElapsedTime = recordingElapsed != null,
-            hasPauseAction = n.actions?.any { isPauseRecordingAction(it.title?.toString().orEmpty()) } == true,
-            hasResumeAction = n.actions?.any { isResumeRecordingAction(it.title?.toString().orEmpty()) } == true,
-            foregroundService = n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0, hasProgress = hasProgress)
-        val recorder = call == null && !isMedia && recording.recording
+            hasPauseAction = recordingPause != null, hasResumeAction = recordingResume != null,
+            foregroundService = n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0, hasProgress = hasProgress,
+            mediaNotification = isMedia,
+            hasRecordingAction = recordingActions.any { isSpecificRecordingAction(it.title?.toString().orEmpty()) })
+        val recorder = call == null && recording.recording
         // Неактивный (на паузе) таймер, который остров уже убрал, снова не показываем
-        val chrono = call == null && !isMedia && (ticking || pausedMs != null || runningMs != null || recorder) &&
+        val chrono = call == null && !recording.playback && (recorder || !isMedia && (ticking || pausedMs != null || runningMs != null)) &&
             !ClockControl.wasDismissed(sbn.key, pausedMs)
         if (clock && chrono) ClockControl.reader?.onNotificationChrono(sbn.packageName)
         if (pausedMs != null && chrono) ClockControl.dropPausedLater(sbn.key)
@@ -214,10 +222,10 @@ object NotificationParser {
                     pausedMs != null || runningMs != null -> looksLikeTimer(n, title)
                     else -> ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false)
                 }
-                val stop = n.actions?.firstOrNull { a ->
+                val stop = if (recorder) recordingStop ?: n.contentIntent.takeIf { recording.stopOnTap } else n.actions?.firstOrNull { a ->
                     val t = a.title?.toString()?.lowercase().orEmpty()
                     isStopRecordingAction(t)
-                }?.actionIntent ?: n.contentIntent.takeIf { recording.stopOnTap }
+                }?.actionIntent
                 val now = System.currentTimeMillis()
                 // Отсчёт: системный — от Notification.when; из текста — от прочитанного времени; у записи без
                 // отсчёта — от времени в тексте или с момента, как появилось уведомление
@@ -234,8 +242,9 @@ object NotificationParser {
                 put(sbn.key, ChronoInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), base, down, sbn.postTime, stop,
                     pausedMs = if (recorder && recording.paused) recordingElapsed
                         ?: IslandBus.chrono.value[sbn.key]?.elapsed(now) ?: (now - base).coerceAtLeast(0) else pausedMs,
-                    pause = buttons[ClockAction.PAUSE], resume = buttons[ClockAction.START],
-                    reset = buttons[ClockAction.RESET], recordingKind = recording.kind.takeIf { recorder }))
+                    pause = if (recorder) recordingPause else buttons[ClockAction.PAUSE],
+                    resume = if (recorder) recordingResume else buttons[ClockAction.START],
+                    reset = buttons[ClockAction.RESET], recordingKind = recording.kind.takeIf { recorder }, open = n.contentIntent))
             } else {
                 remove(sbn.key)
             }

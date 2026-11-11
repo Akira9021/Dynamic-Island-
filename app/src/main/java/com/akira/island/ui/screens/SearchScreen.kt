@@ -56,6 +56,7 @@ private fun searchCatalog(): List<SearchItem> {
         SearchItem(tr("Положение и размер", "Position and size"), appearance, Screen.SIZE, "камера вырез капля отступ сверху смещение notch camera ширина высота top offset position width height"),
         SearchItem(tr("Размер и форма", "Size and shape"), appearance, Screen.LOOK, "радиус скругление углы карточка текст icons radius rounded corners card scale"),
         SearchItem(tr("Цвет и рамка", "Color and border"), appearance, Screen.COLORS, "заливка контур стороны прозрачность тень градиент fill outline opacity shadow gradient"),
+        SearchItem(tr("Цвет текста", "Text color"), appearance, Screen.COLORS, "цвет шрифт текст капсула карточка сводка font text color capsule card brief"),
         SearchItem("Liquid Glass", appearance, Screen.COLORS, "стекло плотность блики прозрачность glass reflections density material"),
         SearchItem(tr("Шрифт острова", "Island font"), appearance, Screen.FONT, "системный жирный начертание текст font bold typeface text"),
         SearchItem(tr("Раскрытие острова", "Island expansion"), appearance, Screen.ANIM, "жидкое анимация пружина упругость скорость liquid expansion animation spring motion speed elasticity"),

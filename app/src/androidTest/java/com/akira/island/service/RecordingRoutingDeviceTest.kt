@@ -3,6 +3,7 @@ package com.akira.island.service
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.session.MediaSession
 import android.os.Process
 import android.os.SystemClock
 import android.service.notification.StatusBarNotification
@@ -15,6 +16,101 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class RecordingRoutingDeviceTest {
+    @Test fun pixelRecorderWithMediaTokenKeepsRealPauseResumeSaveAndOpenIntents() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val saved = IslandBus.chrono.value
+        val savedLive = IslandBus.live.value
+        val savedProgress = IslandBus.progress.value
+        val session = MediaSession(context, "pixel-recorder-regression")
+        val pkg = "com.google.android.apps.recorder"
+        fun intent(id: Int) = PendingIntent.getBroadcast(context, id, Intent("pixel-recorder-test-$id").setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE)
+        val pause = intent(161); val resume = intent(162); val save = intent(163); val open = intent(164)
+        fun notification(title: String, paused: Boolean, finished: Boolean = false): StatusBarNotification {
+            val builder = Notification.Builder(context, "pixel-recorder-test").setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentTitle(title).setContentText("00:12").setWhen(0).setContentIntent(open)
+                .setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken))
+            if (!finished) {
+                builder.addAction(Notification.Action.Builder(null, if (paused) "Resume recording" else "Pause recording", if (paused) resume else pause).build())
+                builder.addAction(Notification.Action.Builder(null, "Save", save).build())
+            }
+            val n = builder.build().apply { flags = flags or Notification.FLAG_FOREGROUND_SERVICE }
+            return StatusBarNotification(pkg, pkg, 161, "pixel", Process.myUid(), 0, 0, n, Process.myUserHandle(), System.currentTimeMillis())
+        }
+        try {
+            val running = notification("Recording", false)
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, running, initial = true) }
+            val first = IslandBus.chrono.value[running.key]!!
+            assertEquals(com.akira.island.core.RecordingKind.VOICE, first.recordingKind)
+            assertEquals(pause, first.pause); assertNull(first.resume)
+            assertEquals(save, first.stop); assertEquals(open, first.open)
+            assertFalse(first.countDown); assertFalse(first.screenRecording)
+            val paused = notification("Recording paused", true)
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, paused, initial = true) }
+            val frozen = IslandBus.chrono.value[paused.key]!!
+            assertEquals(12_000L, frozen.pausedMs)
+            assertEquals(resume, frozen.resume); assertNull(frozen.pause); assertEquals(save, frozen.stop)
+            val resumed = notification("Recording", false)
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, resumed, initial = true) }
+            assertNull(IslandBus.chrono.value[resumed.key]!!.pausedMs)
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, notification("Recording saved", false, true), initial = true) }
+            assertFalse("A finished recording must leave the island", IslandBus.chrono.value.containsKey(running.key))
+        } finally {
+            instrumentation.runOnMainSync {
+                session.release(); IslandBus.chrono.value = saved; IslandBus.live.value = savedLive; IslandBus.progress.value = savedProgress
+            }
+        }
+    }
+
+    @Test fun pixelRecorderPlaybackChronometerIsNotShownAsActiveCapture() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val saved = IslandBus.chrono.value
+        val savedLive = IslandBus.live.value
+        val savedProgress = IslandBus.progress.value
+        val session = MediaSession(context, "pixel-playback-regression")
+        val action = PendingIntent.getBroadcast(context, 165, Intent("pixel-playback-test").setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE)
+        val pkg = "com.google.android.apps.recorder"
+        val n = Notification.Builder(context, "pixel-playback-test").setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle("Recording 12").setContentText("00:12").setOngoing(true)
+            .setWhen(System.currentTimeMillis() - 12_000).setUsesChronometer(true)
+            .setCategory(Notification.CATEGORY_TRANSPORT).setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken))
+            .addAction(Notification.Action.Builder(null, "Pause", action).build())
+            .addAction(Notification.Action.Builder(null, "Stop", action).build()).build()
+        val sbn = StatusBarNotification(pkg, pkg, 165, "pixel-playback", Process.myUid(), 0, 0, n, Process.myUserHandle(), System.currentTimeMillis())
+        try {
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, sbn, initial = true) }
+            assertFalse("Listening to a saved recording must not create a recording timer", IslandBus.chrono.value.containsKey(sbn.key))
+        } finally {
+            instrumentation.runOnMainSync { session.release(); IslandBus.chrono.value = saved; IslandBus.live.value = savedLive; IslandBus.progress.value = savedProgress }
+        }
+    }
+
+    @Test fun titlelessPixelRecordingCanExposeStatusOutsideTheMainTextField() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val saved = IslandBus.chrono.value
+        val savedLive = IslandBus.live.value
+        val savedProgress = IslandBus.progress.value
+        val pause = PendingIntent.getBroadcast(context, 166, Intent("pixel-titleless-test").setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE)
+        val pkg = "com.google.android.apps.recorder"
+        val n = Notification.Builder(context, "pixel-titleless-test").setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle("").setWhen(0).addAction(Notification.Action.Builder(null, "Приостановить запись", pause).build()).build()
+        n.extras.putCharSequence(Notification.EXTRA_INFO_TEXT, "Идёт запись")
+        n.extras.putCharSequenceArray(Notification.EXTRA_TEXT_LINES, arrayOf("00:12"))
+        val sbn = StatusBarNotification(pkg, pkg, 166, "pixel-titleless", Process.myUid(), 0, 0, n, Process.myUserHandle(), System.currentTimeMillis())
+        try {
+            instrumentation.runOnMainSync { NotificationParser.onPosted(context, sbn, initial = true) }
+            val chrono = IslandBus.chrono.value[sbn.key]!!
+            assertEquals(com.akira.island.core.RecordingKind.VOICE, chrono.recordingKind)
+            assertEquals(pause, chrono.pause)
+            assertNull(chrono.stop)
+            assertTrue(chrono.elapsed(System.currentTimeMillis()) in 12_000L..13_000L)
+        } finally {
+            instrumentation.runOnMainSync { IslandBus.chrono.value = saved; IslandBus.live.value = savedLive; IslandBus.progress.value = savedProgress }
+        }
+    }
+
     @Test fun resumingARecorderWithoutAnElapsedFieldDoesNotCountThePause() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

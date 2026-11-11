@@ -93,6 +93,12 @@ class MediaMonitor(private val context: Context) {
                 if (m != null && (enabled && IslandBus.lyrics.value?.key != m.key || !enabled)) loadLyrics(m)
             }
         }
+        // Some recorders expose a MediaSession while capturing. Their confirmed recording belongs
+        // to Chrono, not to a second music card. Reconsider playback as soon as capture ends.
+        scope.launch {
+            IslandBus.chrono.map { entries -> entries.values.filter { it.isRecording }.map { it.pkg }.toSet() }
+                .distinctUntilChanged().collect { refresh() }
+        }
     }
 
     fun stop() {
@@ -170,7 +176,8 @@ class MediaMonitor(private val context: Context) {
     }
 
     private fun refresh() {
-        val controllers = bound.map { it.first }
+        val recordingPackages = IslandBus.chrono.value.values.asSequence().filter { it.isRecording }.map { it.pkg }.toSet()
+        val controllers = bound.map { it.first }.filterNot { it.packageName in recordingPackages }
         val previous = current?.let { cur -> controllers.firstOrNull { it.sessionToken == cur.sessionToken } }
         val chosen = previous?.takeIf(::isPlaying)
             ?: controllers.firstOrNull { isPlaying(it) }
