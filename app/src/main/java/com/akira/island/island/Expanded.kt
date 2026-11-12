@@ -297,7 +297,7 @@ private fun MediaLyrics(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, clock:
     val status by IslandBus.lyricsStatus.collectAsState()
     if (lines != null) {
         Spacer(Modifier.height(14.dp))
-        KaraokeLine(lines, m.positionAt(clock.value), s)
+        KaraokeLine(lines, m.positionAt(clock.value), s, m.playing, m.durationMs)
     } else if (s.lyricsEnabled && status?.first == m.key) {
         Spacer(Modifier.height(12.dp))
         Text(if (status?.second == LyricsStatus.LOADING) tr("Ищу текст песни…", "Looking for lyrics…") else tr("Текст песни не найден", "No lyrics found"),
@@ -395,10 +395,10 @@ private fun CallExpanded(c: CallInfo) {
 }
 
 /**
- * Целая строка плавно сменяется по настоящим LRC-меткам, без побуквенной заливки.
+ * Мягкая непрерывная подсветка внутри строки и плавная смена по настоящим LRC-меткам.
  */
 @Composable
-private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
+private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings, playing: Boolean, durationMs: Long) {
     if (!lyrics.synced) {
         Text(tr("Текст без синхронизации", "Unsynced lyrics"), color = Dim, fontSize = 11.sp)
         Text(lyrics.lines.joinToString("\n") { it.text }, color = Color.White.copy(alpha = 0.8f),
@@ -423,12 +423,13 @@ private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
         },
         label = "lyrics",
     ) { line ->
-        Text(
-            text = line.third,
-            color = Color.White,
-            fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        val interval = remember(line) {
+            val start = lyrics.lines.getOrNull(line.second)?.timeMs ?: 0L
+            val end = if (line.second < 0) start else lyrics.lines.getOrNull(line.second + 1)?.timeMs ?: durationMs
+            start to end
+        }
+        SmoothKaraokeText(line.third, pos, interval.first, interval.second, playing,
+            current = line.first == lyrics.key && line.second == index, settings = s)
     }
 }
 

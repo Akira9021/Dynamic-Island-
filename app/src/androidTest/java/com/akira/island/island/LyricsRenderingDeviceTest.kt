@@ -10,11 +10,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.PixelMap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -83,7 +86,7 @@ class LyricsRenderingDeviceTest {
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    @Test fun fullLineHasOneCustomColorThroughoutItsTimestampInterval() {
+    @Test fun karaokeFrontIsSoftContinuousAndKeepsTheCustomTextHue() {
         val custom = 0xFFFFCF73L
         settings.value = settings.value.copy(textColorEnabled = true, textColor = custom)
         content()
@@ -91,11 +94,22 @@ class LyricsRenderingDeviceTest {
         assertEquals(FIRST, first.layoutInput.text.text)
         assertTrue("A whole line must not contain per-letter color spans", first.layoutInput.text.spanStyles.isEmpty())
         assertEquals(Color(custom), first.layoutInput.style.color)
-        compose.runOnIdle { media.value = media.value.copy(positionMs = 18_000) }
+        compose.runOnIdle { media.value = media.value.copy(positionMs = 19_000) }
+        val full = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        compose.runOnIdle { media.value = media.value.copy(positionMs = 14_250) }
+        val middle = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        var softPixels = 0
+        for (y in 0 until full.height) for (x in 0 until full.width) {
+            if (full[x, y].red > 0.98f && middle[x, y].red in 0.45f..0.9f) softPixels++
+        }
+        assertTrue("The wave front must contain a soft band inside full glyphs", softPixels > 12)
+        compose.runOnIdle { media.value = media.value.copy(positionMs = 14_270) }
+        val advanced = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        assertTrue("A 20 ms movement must change pixels without waiting for a whole letter", differences(middle, advanced) > 5)
         val later = layout(FIRST)
         assertEquals(first.layoutInput.text, later.layoutInput.text)
         assertEquals(first.layoutInput.style.color, later.layoutInput.style.color)
-        screenshot("whole-line-custom-color")
+        screenshot("smooth-wave-custom-color")
     }
 
     @Test fun seekCrossfadesWholeLinesAndKeepsCardHeightWithinItsEndpoints() {
@@ -156,9 +170,69 @@ class LyricsRenderingDeviceTest {
         screenshot("plain-text-fallback")
     }
 
+    @Test fun rightToLeftLyricsIlluminateFromTheRight() {
+        val arabic = "ضوء يتحرك بسلاسة"
+        lyrics.value = verses("a", arabic)
+        media.value = track("a", 19_000)
+        content()
+        val paragraph = layout(arabic)
+        assertEquals(ResolvedTextDirection.Rtl, paragraph.getBidiRunDirection(0))
+        val full = compose.onNodeWithText(arabic).captureToImage().toPixelMap()
+        compose.runOnIdle { media.value = media.value.copy(positionMs = 14_250) }
+        val middle = compose.onNodeWithText(arabic).captureToImage().toPixelMap()
+        val split = (paragraph.getLineLeft(0) + paragraph.getLineRight(0)) / 2f
+        var left = 0f; var right = 0f; var leftCount = 0; var rightCount = 0
+        for (y in 0 until full.height) for (x in 0 until full.width) if (full[x, y].red > 0.98f) {
+            if (x < split) { left += middle[x, y].red; leftCount++ }
+            else { right += middle[x, y].red; rightCount++ }
+        }
+        assertTrue(leftCount > 0 && rightCount > 0)
+        assertTrue("RTL wave must have brighter completed glyphs on the right", right / rightCount > left / leftCount + 0.25f)
+        screenshot("smooth-wave-rtl")
+    }
+
+    @Test fun playingTicksInterpolateBetweenFramesAndPauseFreezesTheWave() {
+        val position = mutableStateOf(12_000L)
+        val playing = mutableStateOf(true)
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                IslandTheme {
+                    Box(Modifier.fillMaxSize().background(Color.Black).padding(top = 40.dp)) {
+                        Box(Modifier.width(288.dp)) {
+                            SmoothKaraokeText(FIRST, position.value, 10_000, 20_000, playing.value, true, settings.value)
+                        }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val before = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { position.value = 12_300 }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(32)
+        val during = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        compose.mainClock.advanceTimeBy(160)
+        val after = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        assertTrue(differences(before, during) > 5)
+        assertTrue(differences(during, after) > 5)
+        compose.runOnIdle { playing.value = false }
+        compose.mainClock.advanceTimeByFrame()
+        val paused = compose.onNodeWithText(FIRST).captureToImage().toPixelMap()
+        compose.mainClock.advanceTimeBy(1_000)
+        assertEquals(0, differences(paused, compose.onNodeWithText(FIRST).captureToImage().toPixelMap()))
+    }
+
+    private fun differences(a: PixelMap, b: PixelMap): Int {
+        assertEquals(a.width, b.width); assertEquals(a.height, b.height)
+        var count = 0
+        for (y in 0 until a.height) for (x in 0 until a.width) if (a[x, y] != b[x, y]) count++
+        return count
+    }
+
     private companion object {
-        const val FIRST = "Строка появляется целиком"
-        const val SECOND = "Следующая строка плавно сменяет предыдущую целиком"
+        const val FIRST = "Плавная волна внутри строки"
+        const val SECOND = "Подсветка плавно идёт вслед за музыкой по всей строке"
         const val NEW_TRACK = "У нового трека свой текст"
         fun track(key: String, position: Long) = MediaInfo(key, "example.music", "Проверка строки", "Тестовый исполнитель",
             null, null, Tints.Lavender, 60_000, position, SystemClock.elapsedRealtime(), 1f, false, true)
