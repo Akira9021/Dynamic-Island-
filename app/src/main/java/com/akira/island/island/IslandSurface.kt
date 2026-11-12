@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.akira.island.core.GlassTilt
+import com.akira.island.core.glassBodyDensity
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.resolveOutline
 
@@ -27,8 +28,14 @@ fun Modifier.islandSurface(
     val color = (if (outline.fromActivity) accent ?: Color(outline.color) else Color(outline.color)).let {
         it.copy(alpha = it.alpha * outline.opacity / 100f)
     }
+    val shadow = if ((s.shadow || s.liquidGlass) && !s.reduceEffects) {
+        val elevation = if (s.liquidGlass) 6.dp else 10.dp
+        val alpha = if (s.liquidGlass) base.alpha * glassBodyDensity(s.glassOpacity / 100f) else fill.alpha
+        if (alpha < 1f) Modifier.outsideSurfaceShadow(shape, elevation)
+        else Modifier.shadow(elevation, shape, clip = false)
+    } else Modifier
     return this
-        .then(if ((s.shadow || s.liquidGlass) && !s.reduceEffects) Modifier.shadow(if (s.liquidGlass) 6.dp else 10.dp, shape, clip = false) else Modifier)
+        .then(shadow)
         .clip(shape)
         .then(if (s.liquidGlass) Modifier.glassSurface(shape, base, s.glassOpacity / 100f,
             tilt = { if (s.reduceEffects) GlassTilt.Zero else tilt() },
