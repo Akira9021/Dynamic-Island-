@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import kotlin.math.abs
 import kotlin.math.sin
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -93,10 +94,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
@@ -155,6 +153,7 @@ private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, ba
         .padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
         Scaled(s.contentScale) {
             when (act) {
+                is Act.HotspotA -> HotspotDetails(act.status)
                 is Act.WeatherA -> WeatherDetails(act.weather)
                 is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
                 is Act.TimerA -> TimerExpanded(act.t, s)
@@ -396,8 +395,7 @@ private fun CallExpanded(c: CallInfo) {
 }
 
 /**
- * Текст песни, как в ролике: одна текущая строка, спетая часть белая, остальное — бледное. Заливка идёт
- * от начала строки до начала следующей; новая строка въезжает снизу.
+ * Целая строка плавно сменяется по настоящим LRC-меткам, без побуквенной заливки.
  */
 @Composable
 private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
@@ -409,26 +407,25 @@ private fun KaraokeLine(lyrics: Lyrics, pos: Long, s: IslandSettings) {
         return
     }
     val index = lyrics.indexAt(pos)
+    val text = lyrics.lines.getOrNull(index)?.text?.ifBlank { null } ?: "• • •"
     AnimatedContent(
-        targetState = index,
+        // Snapshot the outgoing text too: a new track can have the same line index.
+        targetState = Triple(lyrics.key, index, text),
         transitionSpec = {
-            (slideInVertically(tween(320)) { it / 2 } + fadeIn(tween(320))) togetherWith
-                (slideOutVertically(tween(320)) { -it / 2 } + fadeOut(tween(200)))
+            val duration = if (s.reduceEffects) 0 else 260
+            val transition = if (s.reduceEffects) {
+                fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+            } else {
+                (slideInVertically(tween(duration)) { it / 4 } + fadeIn(tween(duration))) togetherWith
+                    (slideOutVertically(tween(duration)) { -it / 4 } + fadeOut(tween(180)))
+            }
+            transition.using(SizeTransform { _, _ -> tween(duration) })
         },
         label = "lyrics",
-    ) { i ->
-        val line = lyrics.lines.getOrNull(i)
-        val text = line?.text?.ifBlank { null } ?: "• • •"
-        val start = line?.timeMs ?: 0L
-        val end = lyrics.lines.getOrNull(i + 1)?.timeMs ?: (start + 4_000)
-        val sung = if (line == null) 0f else ((pos - start).toFloat() / (end - start).coerceAtLeast(1)).coerceIn(0f, 1f)
-        // Заливка чуть опережает голос и доходит до конца строки к 85% её времени
-        val chars = if (s.reduceEffects) text.length else (text.length * (sung / 0.85f).coerceAtMost(1f)).toInt()
+    ) { line ->
         Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(color = Color.White)) { append(text.take(chars)) }
-                withStyle(SpanStyle(color = Color.White.copy(alpha = 0.32f))) { append(text.drop(chars)) }
-            },
+            text = line.third,
+            color = Color.White,
             fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth(),
         )

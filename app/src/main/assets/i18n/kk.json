@@ -864,5 +864,10 @@
   "Pause recording": "Жазуды кідірту",
   "Resume recording": "Жазуды жалғастыру",
   "Couldn't pause recording": "Жазуды кідірту мүмкін болмады",
-  "Couldn't resume recording": "Жазуды жалғастыру мүмкін болмады"
+  "Couldn't resume recording": "Жазуды жалғастыру мүмкін болмады",
+  "Card stays visible while the hotspot is on": "Кіру нүктесі қосулы болғанда, карта көрініп тұрады",
+  "Connected devices: {0}": "Қосылған құрылғылар: {0}",
+  "Connected device count is unavailable": "Қосылған құрылғылар саны қолжетімсіз",
+  "Hotspot settings": "Кіру нүктесінің параметрлері",
+  "Couldn't open network settings": "Желі параметрлерін ашу мүмкін болмады"
 }

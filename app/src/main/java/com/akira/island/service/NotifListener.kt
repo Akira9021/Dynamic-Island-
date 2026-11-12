@@ -41,10 +41,16 @@ class NotifListener : NotificationListenerService() {
         media?.stop()
         media = MediaMonitor(applicationContext).also { it.start() }
         // Уже висящие уведомления разбираем без показа сообщений — они не новые
-        runCatching { activeNotifications }.getOrNull()?.forEach { postSafely(it, initial = true) }
+        val existing = runCatching { activeNotifications }.getOrNull()
+        runCatching {
+            if (existing != null) HotspotMonitor.rescan(this, existing.toList())
+            else HotspotMonitor.notificationsUnavailable()
+        }
+        existing?.forEach { postSafely(it, initial = true) }
     }
 
     override fun onListenerDisconnected() {
+        if (connected === this) HotspotMonitor.notificationsUnavailable()
         if (connected === this) connected = null
         media?.stop()
         media = null
@@ -62,6 +68,7 @@ class NotifListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        if (connected === this) HotspotMonitor.notificationsUnavailable()
         if (connected === this) connected = null
         handler.removeCallbacksAndMessages(null)
         media?.stop()
@@ -114,6 +121,7 @@ class NotifListener : NotificationListenerService() {
     }
 
     private fun postSafely(sbn: StatusBarNotification, initial: Boolean = false) {
+        runCatching { HotspotMonitor.onPosted(this, sbn) }
         // Third-party extras/icons can be malformed. One bad notification must not take down
         // the notification listener and the accessibility overlay sharing this process.
         runCatching { media?.onNotificationPosted(sbn) }
@@ -123,6 +131,7 @@ class NotifListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        HotspotMonitor.onRemoved(sbn.key)
         runCatching { media?.onNotificationRemoved(sbn.key) }
         runCatching { NotificationParser.onRemoved(sbn.key) }
     }

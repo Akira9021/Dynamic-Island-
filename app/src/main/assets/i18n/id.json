@@ -864,5 +864,10 @@
   "Pause recording": "Jeda perekaman",
   "Resume recording": "Lanjutkan perekaman",
   "Couldn't pause recording": "Tidak dapat menjeda perekaman",
-  "Couldn't resume recording": "Tidak dapat melanjutkan perekaman"
+  "Couldn't resume recording": "Tidak dapat melanjutkan perekaman",
+  "Card stays visible while the hotspot is on": "Kartu tetap terlihat selama hotspot aktif",
+  "Connected devices: {0}": "Perangkat terhubung: {0}",
+  "Connected device count is unavailable": "Jumlah perangkat yang terhubung tidak tersedia",
+  "Hotspot settings": "Setelan hotspot",
+  "Couldn't open network settings": "Tidak dapat membuka setelan jaringan"
 }

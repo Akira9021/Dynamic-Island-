@@ -67,7 +67,6 @@ class SystemEvents(private val context: Context) {
     private var vpnState: Boolean? = null
     private var debugState: Pair<Boolean?, Boolean?>? = null
     private var connectionJob: kotlinx.coroutines.Job? = null
-    private var hotspotState: Boolean? = null
     private val s get() = SettingsRepo.current
 
     private var lowWarned = false
@@ -163,6 +162,7 @@ class SystemEvents(private val context: Context) {
         if (active) return
         active = true
         SystemEventObservation.state.value = SystemEventReadings(observing = true)
+        HotspotMonitor.broadcastStarted()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(Intent.ACTION_POWER_CONNECTED)
@@ -242,6 +242,7 @@ class SystemEvents(private val context: Context) {
 
     fun stop() {
         active = false
+        HotspotMonitor.broadcastStopped()
         SystemEventObservation.state.value = SystemEventObservation.state.value.copy(observing = false)
         connectionJob?.cancel(); connectionJob = null
         main.removeCallbacks(batterySample)
@@ -258,10 +259,10 @@ class SystemEvents(private val context: Context) {
                 val state = intent.getIntExtra("wifi_state", -1)
                 // Enabled/disabled only: intermediate or unknown OEM states are not events.
                 val enabled = when (state) { 13 -> true; 11 -> false; else -> return }
-                val old = hotspotState
-                hotspotState = enabled
-                SystemEventObservation.state.value = SystemEventObservation.state.value.copy(hotspot = enabled)
-                if (!initialSticky && old != enabled) {
+                val old = HotspotMonitor.state.value.enabled
+                HotspotMonitor.onBroadcast(enabled)
+                // On is a persistent activity now. Only a confirmed transition to Off is a banner.
+                if (!initialSticky && old == true && !enabled) {
                     notice(s.evHotspot, ConnectionEvent.HOTSPOT.notice(enabled))
                 }
             }

@@ -26,6 +26,7 @@ import com.akira.island.core.PlayerAction
 import com.akira.island.core.Tints
 import com.akira.island.data.SettingsRepo
 import com.akira.island.lyrics.LyricsRepo
+import com.akira.island.lyrics.FoundLyrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,6 +55,7 @@ class MediaMonitor(private val context: Context) {
     private var started = false
     private val notificationSessions = LinkedHashMap<String, MediaController>()
     private var lyricsRequest: String? = null
+    private var lyricsRetriedRequest: String? = null
     /** Отпечаток последней обложки (см. [artPrint]); null — обложки нет */
     private var lastArt: Long? = null
     private var artJob: Job? = null
@@ -333,8 +335,19 @@ class MediaMonitor(private val context: Context) {
         lyricsJob?.cancel()
         IslandBus.lyrics.value = null
         if (!SettingsRepo.current.lyricsEnabled) {
+            lyricsRetriedRequest = null
             IslandBus.lyricsStatus.value = null
             return
+        }
+        fun publishLyrics(found: FoundLyrics?): Boolean {
+            if (lyricsRequest != request || IslandBus.media.value?.key != m.key || !SettingsRepo.current.lyricsEnabled) return false
+            if (found != null && found.lines.isNotEmpty()) {
+                IslandBus.lyrics.value = Lyrics(m.key, found.lines, found.synced)
+                IslandBus.lyricsStatus.value = m.key to LyricsStatus.FOUND
+            } else {
+                IslandBus.lyricsStatus.value = m.key to LyricsStatus.MISSING
+            }
+            return true
         }
         IslandBus.lyricsStatus.value = m.key to LyricsStatus.LOADING
         lyricsJob = scope.launch {
@@ -342,13 +355,25 @@ class MediaMonitor(private val context: Context) {
             if (!IslandBus.screenOn.value) IslandBus.screenOn.first { it }
             val found = LyricsRepo.find(m.title, m.artist, m.album, m.durationMs)
             currentCoroutineContext().ensureActive()
-            if (lyricsRequest != request || IslandBus.media.value?.key != m.key) return@launch
-            if (found != null && found.lines.isNotEmpty()) {
-                IslandBus.lyrics.value = Lyrics(m.key, found.lines, found.synced)
-                IslandBus.lyricsStatus.value = m.key to LyricsStatus.FOUND
-            } else {
-                IslandBus.lyricsStatus.value = m.key to LyricsStatus.MISSING
+            if (!publishLyrics(found) || found?.synced == true || lyricsRetriedRequest == request) return@launch
+
+            // One retry belongs to this same cancellable job. Hidden players wait for a visibility
+            // event rather than polling, and the readable plain fallback stays on screen meanwhile.
+            suspend fun awaitVisible() {
+                combine(IslandBus.screenOn, IslandBus.expanded, IslandBus.focus, IslandBus.media) { on, expanded, focus, media ->
+                    on && expanded && focus == "media" && media?.key == m.key
+                }.first { it }
             }
+            awaitVisible()
+            delay(5_000)
+            awaitVisible()
+            currentCoroutineContext().ensureActive()
+            if (lyricsRequest != request || !SettingsRepo.current.lyricsEnabled) return@launch
+            lyricsRetriedRequest = request
+            if (found == null) IslandBus.lyricsStatus.value = m.key to LyricsStatus.LOADING
+            val retried = LyricsRepo.find(m.title, m.artist, m.album, m.durationMs, refreshUnsynced = true)
+            currentCoroutineContext().ensureActive()
+            if (retried != null || found == null) publishLyrics(retried)
         }
     }
 

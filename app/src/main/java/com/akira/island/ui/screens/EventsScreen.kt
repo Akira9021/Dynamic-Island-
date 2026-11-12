@@ -54,6 +54,7 @@ import com.akira.island.ui.Tile
 fun EventsScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
     val readings by SystemEventObservation.state.collectAsState()
+    val hotspot by com.akira.island.service.HotspotMonitor.state.collectAsState()
     var example by remember { mutableStateOf(ConnectionEvent.VPN.notice(true)) }
     fun set(block: IslandSettings.() -> IslandSettings) {
         val before = SettingsRepo.current
@@ -100,11 +101,14 @@ fun EventsScreen(onBack: () -> Unit) {
                 s.evUsbOff, color = Tile.Gray) { set { copy(evUsbOff = it) } }
             GroupToggle(Pos.Middle, Icons.Rounded.VpnKey, "VPN", tr("Плашка при подключении и отключении", "Banner when connecting or disconnecting"),
                 s.evVpn, color = Tile.Blue) { on -> set { copy(evVpn = on) } }
-            GroupToggle(Pos.Last, Icons.Rounded.WifiTethering, tr("Точка доступа", "Hotspot"), tr("Когда телефон раздаёт интернет", "When your phone shares its connection"),
+            GroupToggle(Pos.Last, Icons.Rounded.WifiTethering, tr("Точка доступа", "Hotspot"), tr("Карточка видна, пока точка доступа включена", "Card stays visible while the hotspot is on"),
                 s.evHotspot, color = Tile.Teal) { on -> set { copy(evHotspot = on) } }
         }
         EventReading(ConnectionEvent.VPN, readings.vpn, readings.observing) { example = it }
         EventReading(ConnectionEvent.HOTSPOT, readings.hotspot, readings.observing) { example = it }
+        if (s.evHotspot && hotspot.enabled == true) SettingsHint(hotspot.clients?.let {
+            com.akira.island.core.trf("Подключено устройств: {0}", "Connected devices: {0}", it)
+        } ?: tr("Число подключённых устройств недоступно", "Connected device count is unavailable"))
         if (readings.observing && readings.hotspot == null) SettingsHint(tr("Эта прошивка пока не передала состояние точки доступа. Если оно недоступно Android-приложениям, реальные плашки для неё не появятся.",
             "This phone has not reported its hotspot state. If the firmware does not expose it to apps, real hotspot banners are unavailable."))
 

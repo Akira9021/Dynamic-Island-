@@ -864,5 +864,10 @@
   "Pause recording": "Pausar gravação",
   "Resume recording": "Retomar gravação",
   "Couldn't pause recording": "Não foi possível pausar a gravação",
-  "Couldn't resume recording": "Não foi possível retomar a gravação"
+  "Couldn't resume recording": "Não foi possível retomar a gravação",
+  "Card stays visible while the hotspot is on": "O cartão permanece visível enquanto o ponto de acesso está ativo",
+  "Connected devices: {0}": "Dispositivos ligados: {0}",
+  "Connected device count is unavailable": "O número de dispositivos ligados não está disponível",
+  "Hotspot settings": "Definições do ponto de acesso",
+  "Couldn't open network settings": "Não foi possível abrir as definições de rede"
 }

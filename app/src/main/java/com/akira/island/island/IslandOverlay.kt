@@ -62,6 +62,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -172,6 +173,7 @@ fun IslandOverlay(
     val inbox by IslandBus.inbox.collectAsState()
     val weather by com.akira.island.service.WeatherRepo.state.collectAsState()
     val extras by com.akira.island.data.ExtrasRepo.state.collectAsState()
+    val hotspot by com.akira.island.service.HotspotMonitor.state.collectAsState()
     val shadeOpen by IslandBus.shadeOpen.collectAsState()
     // Будильник появляется в острове за 12 часов и уходит, когда прозвенел: просыпаемся ровно в эти два момента,
     // а не каждые полминуты. Пока телефон спит, ожидание стоит — поэтому со включением экрана пересчитываем
@@ -277,6 +279,7 @@ fun IslandOverlay(
             persistent.add(at, Act.MediaA(m))
         }
         if (s.cardProgress) groupedProgress(progress.values.toList())?.let { persistent += Act.ProgressA(it) }
+        if (s.evHotspot && hotspot.enabled == true) persistent += Act.HotspotA(hotspot)
         // «Только при подключении» — зарядка не занимает остров всё время, пока телефон заряжается
         if (s.cardCharging && battery.charging && !s.chargingBrief) persistent += Act.ChargingA(battery)
         if (s.historyMinutes != 0 && inbox.isNotEmpty()) persistent += Act.InboxA(inbox)
@@ -942,7 +945,7 @@ private fun Act.surfaceAccent(): Color? = when (this) {
     is Act.ChargingA, is Act.CallA -> Tints.Green
     is Act.TimerA, is Act.StopwatchA, is Act.ChronoA -> Tints.Orange
     is Act.TorchA -> Tints.Yellow
-    is Act.ProgressA -> Tints.Blue
+    is Act.ProgressA, is Act.HotspotA -> Tints.Blue
     is Act.LiveA -> liveTint(l.kind)
     else -> null
 }
@@ -993,6 +996,8 @@ private fun BubbleContent(act: Act, s: IslandSettings) {
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
             is Act.ChargingA -> Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.WeatherA -> Icon(Icons.Rounded.WbSunny, null, tint = Tints.Yellow, modifier = Modifier.size(inner))
+            is Act.HotspotA -> Icon(androidx.compose.material.icons.Icons.Rounded.WifiTethering,
+                tr("Точка доступа", "Hotspot"), tint = Tints.Blue, modifier = Modifier.size(inner))
             is Act.InboxA -> AppIcon(act.items.last().appIcon, inner, Ios.chatbubble, Tints.Blue)
             else -> Unit
         }
