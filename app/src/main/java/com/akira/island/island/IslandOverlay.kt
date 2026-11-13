@@ -285,7 +285,7 @@ fun IslandOverlay(
         if (s.cardCharging && battery.charging && !s.chargingBrief) persistent += Act.ChargingA(battery)
         if (s.historyMinutes != 0 && inbox.isNotEmpty()) persistent += Act.InboxA(inbox)
         if (extras.weatherEnabled && !extras.briefEnabled) weather?.let { persistent += Act.WeatherA(it) }
-        // Будильник — тише всех: показывается, только когда больше ничего нет, и не уходит в пузырь
+        // Ожидающий будильник остаётся доступен в пузырьке, не занимая основную капсулу.
         val alarm = nextAlarm
         if (s.cardAlarm && alarm != null && alarm.triggerAt - alarmNow in 1..ALARM_LEAD_MS) persistent += Act.AlarmA(alarm)
 
@@ -314,12 +314,12 @@ fun IslandOverlay(
     val primary = when {
         calibrating || s.collapseOnShade && shadeOpen -> Act.Idle
         previewing -> Act.LiveA(WidthDemo)
-        else -> acts.firstOrNull() ?: Act.Idle
+        else -> primaryWithPendingAlarm(acts, expanded, focus)
     }
     val incoming = (primary as? Act.CallA)?.c?.incoming == true
     // Вторая активность — кружком рядом, если его не выключили в «Поведении»
     val secondary = if (!s.bubble || primary.transient || incoming || calibrating || s.collapseOnShade && shadeOpen) null
-    else acts.drop(1).firstOrNull { !it.transient && it !is Act.AlarmA }
+    else secondaryWithPendingAlarm(acts, primary)
     var pinnedSummary by remember { mutableStateOf(false) }
     val shortcutsLocked by IslandBus.locked.collectAsState()
     val pinsOffSchedule by IslandBus.offSchedule.collectAsState()
@@ -355,7 +355,7 @@ fun IslandOverlay(
     }
 
     val keyguard by IslandBus.keyguard.collectAsState()
-    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle, showExpanded || showPins, calibrating, screenOn, keyguard, shadeOpen)
+    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle && secondary == null, showExpanded || showPins, calibrating, screenOn, keyguard, shadeOpen)
     var idleTimedOut by remember { mutableStateOf(false) }
     var idleWakeRevision by remember { mutableLongStateOf(0L) }
     LaunchedEffect(autoHideEligible, s.idleHideSec, idleWakeRevision) {
@@ -373,7 +373,7 @@ fun IslandOverlay(
     }
     val timedHidden = autoHideEligible && idleTimedOut
     // Explicitly hiding the empty capsule retains its previous non-interactive behavior.
-    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && !showExpanded && !showPins && !calibrating && !(s.evLock && keyguard)
+    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !showPins && !calibrating && !(s.evLock && keyguard)
     val wakeBounds = remember { mutableStateOf(Rect.Zero) }
 
     // Спрятанный остров не ловит касания, даже пока уходит
@@ -1012,6 +1012,7 @@ private fun BubbleContent(act: Act, s: IslandSettings) {
                 Icon(Ios.timer, null, tint = Tints.Orange, modifier = Modifier.size(inner * 0.5f))
             }
             is Act.StopwatchA -> Icon(Ios.stopwatch, null, tint = Tints.Orange, modifier = Modifier.size(inner * 0.8f))
+            is Act.AlarmA -> Icon(Ios.alarm, tr("Будильник", "Alarm"), tint = AlarmTint, modifier = Modifier.size(inner * 0.8f))
             is Act.TorchA -> Icon(Ios.flashlight, null, tint = Tints.Yellow, modifier = Modifier.size(inner * 0.75f))
             is Act.ChronoA -> AppIcon(act.c.icon, inner, act.c.recordingKind?.icon ?: Ios.timer,
                 if (act.c.recording) Tints.Red else Tints.Orange)

@@ -10,6 +10,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.Gravity
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import com.akira.island.R
 import java.util.function.Consumer
@@ -44,6 +45,36 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private var failed = false
     private var closed = false
     private var listening = false
+    private var corrections = 0
+    private var appliedBlurRadius = -1
+    private fun setBlurRadius(window: android.view.Window, radius: Int) {
+        if (Build.VERSION.SDK_INT >= 31 && appliedBlurRadius != radius) {
+            window.setBackgroundBlurRadius(radius)
+            appliedBlurRadius = radius
+        }
+    }
+    // WindowManager may apply a different parent/content origin to an accessibility sub-window.
+    // Keep native blur off until the *actual* frame agrees with the Compose card on screen.
+    private val align = ViewTreeObserver.OnPreDrawListener {
+        val w = dialog?.window
+        if (w != null && wanted && !closed && Build.VERSION.SDK_INT >= 31) {
+            val screen = IntArray(2); val local = IntArray(2); val actual = IntArray(2)
+            parent.getLocationOnScreen(screen); parent.getLocationInWindow(local)
+            w.decorView.getLocationOnScreen(actual)
+            val dx = screen[0] - local[0] + bounds.left - actual[0]
+            val dy = screen[1] - local[1] + bounds.top - actual[1]
+            val sized = w.decorView.width == bounds.width() && w.decorView.height == bounds.height()
+            if (dx == 0 && dy == 0 && sized) {
+                setBlurRadius(w, (28 * context.resources.displayMetrics.density).toInt())
+            } else {
+                setBlurRadius(w, 0)
+                if (corrections++ < 2) w.attributes = w.attributes.apply {
+                    x += dx; y += dy; width = bounds.width(); height = bounds.height()
+                }
+            }
+        }
+        true
+    }
     private val listener = Consumer<Boolean> { render() }
     private val attach = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(v: View) = render()
@@ -80,18 +111,24 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
         if (Build.VERSION.SDK_INT < 31) return
         runCatching {
             val d = dialog ?: Dialog(context, R.style.IslandBackdrop).also {
+                appliedBlurRadius = -1
                 val w = checkNotNull(it.window)
                 w.setType(WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA)
                 w.setBackgroundDrawable(background)
                 w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                 w.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
                 it.setContentView(View(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS })
+                w.decorView.viewTreeObserver.addOnPreDrawListener(align)
                 dialog = it
             }
             val w = checkNotNull(d.window)
             background.cornerRadius = corner
+            corrections = 0
+            setBlurRadius(w, 0)
             w.attributes = w.attributes.apply {
                 token = parent.windowToken
                 gravity = Gravity.TOP or Gravity.LEFT
@@ -102,8 +139,10 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             // Attached windows must not apply a second status/navigation-bar inset to parent-local bounds.
             w.setDecorFitsSystemWindows(false)
             w.decorView.setPadding(0, 0, 0, 0)
-            w.attributes = w.attributes.apply { setFitInsetsTypes(0) }
-            w.setBackgroundBlurRadius((28 * context.resources.displayMetrics.density).toInt())
+            w.attributes = w.attributes.apply {
+                setFitInsetsTypes(0)
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
             d.show()
         }.onFailure {
             failed = true

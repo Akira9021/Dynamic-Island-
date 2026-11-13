@@ -30,6 +30,14 @@ class BackdropBlurDeviceTest {
     @get:Rule val activity = ActivityScenarioRule(MainActivity::class.java)
 
     @Test fun attachedWindowBlursBackgroundWithoutCoveringItsParent() {
+        checkAttachedWindow(false)
+    }
+
+    @Test fun screenLayoutParentWithOffsetKeepsBlurInsideTheCard() {
+        checkAttachedWindow(true)
+    }
+
+    private fun checkAttachedWindow(screenLayout: Boolean) {
         assumeTrue(Build.VERSION.SDK_INT >= 31)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         var foreground: Dialog? = null
@@ -52,9 +60,17 @@ class BackdropBlurDeviceTest {
                         setBackgroundColor(Color.TRANSPARENT)
                     })
                     window!!.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+                    if (screenLayout) {
+                        window!!.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+                        window!!.setDecorFitsSystemWindows(false)
+                        window!!.attributes = window!!.attributes.apply {
+                            setFitInsetsTypes(0)
+                            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                        }
+                    }
                     show()
                     window!!.setLayout(480, 280)
-                    window!!.attributes = window!!.attributes.apply { gravity = Gravity.TOP or Gravity.LEFT; x = 80; y = 300 }
+                    window!!.attributes = window!!.attributes.apply { gravity = Gravity.TOP or Gravity.LEFT; x = 80; y = if(screenLayout) 40 else 300 }
                 }
             }
             instrumentation.waitForIdleSync(); SystemClock.sleep(1500)
