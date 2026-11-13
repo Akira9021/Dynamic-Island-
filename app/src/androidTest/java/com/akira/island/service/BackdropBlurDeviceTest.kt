@@ -81,6 +81,19 @@ class BackdropBlurDeviceTest {
                 File(dir, "$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
             File(dir, "result.txt").writeText("before=${contrast(before)} after=${contrast(after)} origin=${origin.toList()}")
             assertTrue("Actual background stripes must lose contrast", contrast(after) < contrast(before) / 2)
+            // A separate blurred strip below the card is a regression even if its interior looks right.
+            val below = origin[1] + 292
+            if (below < before.height) {
+                fun outsideContrast(bitmap: android.graphics.Bitmap): Long {
+                    var total = 0L
+                    for (x in origin[0] + 80 until minOf(origin[0] + 400, bitmap.width - 1))
+                        total += kotlin.math.abs(Color.red(bitmap.getPixel(x, below)) - Color.red(bitmap.getPixel(x + 1, below)))
+                    return total
+                }
+                val clear = outsideContrast(before)
+                assertTrue("Outside fixture must contain visible background stripes", clear > 1000)
+                assertTrue("Blur must stay inside its card instead of leaving a band below it", outsideContrast(after) >= clear * .95)
+            }
             var redBefore = 0; var redAfter = 0
             var peak = 0
             for (y in origin[1] until minOf(origin[1] + 100, before.height))

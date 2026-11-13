@@ -99,6 +99,10 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
                 format = PixelFormat.TRANSLUCENT
                 title = "DynamicIslandBackdrop"
             }
+            // Attached windows must not apply a second status/navigation-bar inset to parent-local bounds.
+            w.setDecorFitsSystemWindows(false)
+            w.decorView.setPadding(0, 0, 0, 0)
+            w.attributes = w.attributes.apply { setFitInsetsTypes(0) }
             w.setBackgroundBlurRadius((28 * context.resources.displayMetrics.density).toInt())
             d.show()
         }.onFailure {

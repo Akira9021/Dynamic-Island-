@@ -320,7 +320,14 @@ fun IslandOverlay(
     // Вторая активность — кружком рядом, если его не выключили в «Поведении»
     val secondary = if (!s.bubble || primary.transient || incoming || calibrating || s.collapseOnShade && shadeOpen) null
     else acts.drop(1).firstOrNull { !it.transient && it !is Act.AlarmA }
-    val showExpanded = expanded && !primary.transient && !incoming && !calibrating && !(s.collapseOnShade && shadeOpen)
+    var pinnedSummary by remember { mutableStateOf(false) }
+    val shortcutsLocked by IslandBus.locked.collectAsState()
+    val pinsOffSchedule by IslandBus.offSchedule.collectAsState()
+    LaunchedEffect(expanded) { if (!expanded) pinnedSummary = false }
+    val showPins = s.enabled && !pinsOffSchedule && expanded && primary is Act.Idle && !pinnedSummary &&
+        (extras.apps.isNotEmpty() || extras.contacts.isNotEmpty()) && !shortcutsLocked &&
+        screenOn && !shadeOpen && !calibrating
+    val showExpanded = expanded && !showPins && !primary.transient && !incoming && !calibrating && !(s.collapseOnShade && shadeOpen)
     val h = s.height.dp
 
     // Пузырь уходит с анимацией, поэтому помним последнюю активность в нём
@@ -335,9 +342,9 @@ fun IslandOverlay(
     LaunchedEffect(focusGone) { if (focusGone) Controls.collapse() }
 
     // «Сворачивать раскрытый остров»: если его столько секунд не трогают, он сворачивается сам
-    LaunchedEffect(showExpanded, s.autoCollapseSec) {
+    LaunchedEffect(showExpanded, showPins, s.autoCollapseSec) {
         val limit = s.autoCollapseSec * 1000L
-        if (!showExpanded || limit <= 0) return@LaunchedEffect
+        if ((!showExpanded && !showPins) || limit <= 0) return@LaunchedEffect
         val opened = SystemClock.elapsedRealtime()
         while (true) {
             val idle = SystemClock.elapsedRealtime() - maxOf(opened, IslandBus.lastTouch)
@@ -348,7 +355,7 @@ fun IslandOverlay(
     }
 
     val keyguard by IslandBus.keyguard.collectAsState()
-    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle, showExpanded, calibrating, screenOn, keyguard, shadeOpen)
+    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle, showExpanded || showPins, calibrating, screenOn, keyguard, shadeOpen)
     var idleTimedOut by remember { mutableStateOf(false) }
     var idleWakeRevision by remember { mutableLongStateOf(0L) }
     LaunchedEffect(autoHideEligible, s.idleHideSec, idleWakeRevision) {
@@ -366,7 +373,7 @@ fun IslandOverlay(
     }
     val timedHidden = autoHideEligible && idleTimedOut
     // Explicitly hiding the empty capsule retains its previous non-interactive behavior.
-    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && !showExpanded && !calibrating && !(s.evLock && keyguard)
+    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && !showExpanded && !showPins && !calibrating && !(s.evLock && keyguard)
     val wakeBounds = remember { mutableStateOf(Rect.Zero) }
 
     // Спрятанный остров не ловит касания, даже пока уходит
@@ -419,8 +426,9 @@ fun IslandOverlay(
             EggSparks { body.value }
             EggDriver({ body.value }, s)
         }
+        if (showPins) PinnedShortcutLayer(extras.apps, extras.contacts, onSummary = { pinnedSummary = true })
         com.akira.island.face.FaceUnlockLayer(s, allowed = !calibrating && !shadeOpen &&
-            !showExpanded && !eggOn)
+            !showExpanded && !showPins && !eggOn)
     }
 }
 
@@ -629,7 +637,7 @@ internal fun IslandBody(
     Box(
         Modifier
             .onGloballyPositioned { onBounds(it.boundsInWindow()) }
-            .then(if (s.backdropBlur && !preview && onBackdropShape != null) Modifier.drawWithContent {
+            .then(if (s.liquidGlass && !preview && onBackdropShape != null) Modifier.drawWithContent {
                 val radius = corner.value.toPx()
                 val usable = expanded && !calibrating && !s.notch && !egg &&
                     kotlin.math.abs(jellyX.value - 1f) < 0.001f && kotlin.math.abs(jellyY.value - 1f) < 0.001f &&

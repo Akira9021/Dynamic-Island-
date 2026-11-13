@@ -20,7 +20,7 @@ internal class NetworkRateCounter {
         }
         val rate = NetworkRate((rx - before.first).toDouble() * 1000 / dt, (tx - before.second).toDouble() * 1000 / dt)
         if (rate.incoming + rate.outgoing >= 1024) { busy++; quiet = 0 } else { quiet++; busy = 0 }
-        if (busy >= 2) visible = true
+        if (busy >= 1) visible = true
         if (quiet >= 3) visible = false
         return rate.takeIf { visible }
     }

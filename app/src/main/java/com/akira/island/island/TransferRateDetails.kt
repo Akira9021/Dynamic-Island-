@@ -22,12 +22,12 @@ internal fun transferRateText(bytes: Double): String {
 @Composable
 internal fun TransferRateDetails(details: TransferDetails?, showNetwork: Boolean) {
     val general = if (showNetwork && details?.bytesPerSecond == null) NetworkRates.state.collectAsState().value else null
-    TransferRateLines(details, general)
+    TransferRateLines(details, general, waitingForNetwork = showNetwork && details?.bytesPerSecond == null)
 }
 
 @Composable
-internal fun TransferRateLines(details: TransferDetails?, general: NetworkRate?) {
-    if (details == null && general == null) return
+internal fun TransferRateLines(details: TransferDetails?, general: NetworkRate?, waitingForNetwork: Boolean = false) {
+    if (details == null && general == null && !waitingForNetwork) return
     Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         details?.bytesPerSecond?.let {
             val arrow = when (details.direction) { TransferDirection.DOWN -> "↓ "; TransferDirection.UP -> "↑ "; null -> "" }
@@ -43,11 +43,11 @@ internal fun TransferRateLines(details: TransferDetails?, general: NetworkRate?)
             Text(trf("Осталось: {0}", "Remaining: {0}", remaining), color = Color.Gray, fontSize = 12.sp,
                 modifier = Modifier.testTag("operation-eta"))
         }
-        general?.let {
+        if (general != null || waitingForNetwork) {
             Text(tr("Примерная общая скорость сети", "Approximate total network speed"), color = Color.Gray, fontSize = 11.sp)
             // Wrap directions independently on narrow cards and with large text.
-            Text("↓ " + transferRateText(it.incoming), color = Color.White, fontSize = 13.sp, modifier = Modifier.testTag("network-incoming"))
-            Text("↑ " + transferRateText(it.outgoing), color = Color.White, fontSize = 13.sp, modifier = Modifier.testTag("network-outgoing"))
+            Text("↓ " + (general?.incoming?.let(::transferRateText) ?: "—"), color = Color.White, fontSize = 13.sp, modifier = Modifier.testTag("network-incoming"))
+            Text("↑ " + (general?.outgoing?.let(::transferRateText) ?: "—"), color = Color.White, fontSize = 13.sp, modifier = Modifier.testTag("network-outgoing"))
         }
     }
 }

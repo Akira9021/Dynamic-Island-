@@ -46,7 +46,7 @@ class ShortcutsBatteryDeviceTest {
         }
         override fun after() {
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
-                SettingsRepo.update { oldSettings }; ExtrasRepo.update { oldExtras }; IslandBus.locked.value = oldLocked
+                SettingsRepo.update { oldSettings }; ExtrasRepo.update { oldExtras }; IslandBus.locked.value = oldLocked; IslandBus.expanded.value=false
             }
         }
     }
@@ -69,12 +69,12 @@ class ShortcutsBatteryDeviceTest {
             }
         }
         compose.waitForIdle()
-        compose.onRoot().captureToImage() // Wait for the first actual draw on software emulators.
+        compose.onAllNodes(isRoot()).onFirst().captureToImage() // Wait for the first actual draw on software emulators.
     }
 
     private fun screenshot(name: String) {
         val dir = File(compose.activity.getExternalFilesDir(null), "shortcuts-battery-previews").apply { mkdirs() }
-        File(dir, "$name.png").outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(dir, "$name.png").outputStream().use { compose.onAllNodes(isRoot()).onFirst().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     @Test fun orbitPagesKeepAllTwelveTargetsAndTheirRealCallbacks() {
@@ -82,19 +82,18 @@ class ShortcutsBatteryDeviceTest {
         var openedContact: ContactShortcut? = null
         content { ShortcutOrbit(apps, contacts, { openedApp = it }, { openedContact = it }) }
         compose.onNodeWithTag("shortcut-orbit").assertIsDisplayed()
-        compose.onNodeWithTag("shortcuts-previous").assertIsNotEnabled()
+        compose.onNodeWithTag("shortcuts-previous").assertDoesNotExist()
         apps.forEach { compose.onNodeWithTag("app:$it").assertIsDisplayed() }
         compose.onNodeWithTag("app:${apps.first()}").performClick()
         compose.runOnIdle { assertEquals(apps.first(), openedApp) }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val ownLabel = context.packageManager.getApplicationLabel(context.applicationInfo).toString()
-        compose.waitUntil(20_000) { compose.onAllNodesWithText(ownLabel).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription(ownLabel).fetchSemanticsNodes().isNotEmpty() }
         screenshot("apps-orbit")
-        compose.onNodeWithTag("shortcuts-next").performClick()
         contacts.forEach { compose.onNodeWithTag("contact:${it.uri}").assertIsDisplayed() }
         compose.onNodeWithTag("contact:${contacts.last().uri}").performClick()
         compose.runOnIdle { assertEquals(contacts.last(), openedContact) }
-        compose.onNodeWithTag("shortcuts-next").assertIsNotEnabled()
+        compose.onNodeWithTag("shortcuts-next").assertDoesNotExist()
         screenshot("contacts-orbit")
     }
 
@@ -105,7 +104,6 @@ class ShortcutsBatteryDeviceTest {
             ShortcutOrbit(extras.apps, extras.contacts, {}, {})
         }
         compose.onNodeWithTag("shortcut-grid").assertIsDisplayed()
-        compose.onNodeWithTag("shortcuts-next").performClick()
         compose.onNodeWithTag("contact:${contacts.last().uri}").assertIsDisplayed()
         screenshot("large-font-grid")
         compose.runOnUiThread { ExtrasRepo.update { copy(contacts = emptyList()) } }
@@ -115,7 +113,11 @@ class ShortcutsBatteryDeviceTest {
 
     @Test fun lockImmediatelyHidesAppsAndContactsWithoutErasingSelections() {
         compose.runOnUiThread { ExtrasRepo.update { ExtraSettings(apps = this@ShortcutsBatteryDeviceTest.apps, contacts = this@ShortcutsBatteryDeviceTest.contacts) } }
-        content { IdleExtras(SettingsRepo.current) }
+        compose.runOnUiThread {
+            SettingsRepo.update { copy(cardCharging=false) }
+            IslandBus.expanded.value=true; IslandBus.notice.value=null
+        }
+        content { IslandOverlay() }
         compose.onNodeWithTag("app:${apps.first()}").assertIsDisplayed()
         compose.runOnUiThread { IslandBus.locked.value = true }
         // StateFlow delivery to collectAsState is asynchronous; wait for that frame, not an old tree.

@@ -47,7 +47,7 @@ internal fun ShortcutAvatar(icon: ImageBitmap?, contactName: String?, modifier: 
         contentAlignment = Alignment.Center) {
         when {
             icon != null -> Image(icon, null, Modifier.fillMaxSize())
-            contactName != null -> Text(shortcutInitials(contactName), color = Color.White, fontSize = 17.sp,
+            contactName != null -> Text(shortcutInitials(contactName), color = Color.White, fontSize = 14.sp,
                 maxLines = 1, customizable = false)
             else -> Icon(Icons.Rounded.Apps, null, tint = Color.White)
         }

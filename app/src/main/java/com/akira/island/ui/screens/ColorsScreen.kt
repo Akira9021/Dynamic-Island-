@@ -145,18 +145,12 @@ fun ColorsScreen(onBack: () -> Unit) {
             v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
         }
         SettingsHint(tr("Затемнение видно на светлой заливке. На чёрном цвете разницы не будет.", "Bottom shading is visible on light fills. It has no visible effect on black."))
-        GroupToggle(Pos.Single, Icons.Rounded.BlurOn, tr("Размытие фона", "Background blur"),
-            when {
-                s.reduceEffects -> tr("Отключено режимом уменьшения эффектов", "Disabled by Reduce effects")
-                s.notch -> tr("Недоступно для нестандартного выреза", "Unavailable for custom notches")
-                blurRejected -> tr("Система отклонила фоновое окно", "The system rejected the backdrop window")
-                !blurAvailable -> tr("Сейчас недоступно в системе — сохраняется обычный материал", "Currently unavailable — the existing material is retained")
-                !com.akira.island.service.backdropTransmits(s) -> tr("Фон закрыт заливкой — уменьшите её плотность", "Hidden by the fill — lower its density")
-                !islandRunning -> tr("Появится после включения острова", "Available once the island is running")
-                else -> tr("Матовое стекло раскрытого острова", "Frosted background of the expanded island")
-            }, s.backdropBlur, color = Tile.Teal) { SettingsRepo.update { copy(backdropBlur = it) } }
-        SettingsHint(tr("Android 12+. Только настоящий остров: пример сверху не меняется. В энергосбережении, при блокировке и нестандартном вырезе эффект отключается.",
-            "Android 12+. Applies to the actual island; the preview above is unchanged. Disabled in power saving, on lock, and for custom notches."))
+        if (s.liquidGlass) SettingsHint(when {
+            s.reduceEffects -> tr("Размытие отключено режимом уменьшения эффектов; материал стекла сохранён.", "Blur is disabled by Reduce effects; the glass material is retained.")
+            blurRejected || !blurAvailable -> tr("Системное размытие сейчас недоступно; прозрачность и блики стекла сохраняются.", "System blur is currently unavailable; glass transparency and reflections remain.")
+            !islandRunning -> tr("Размытие встроено в стекло и появится после включения острова.", "Blur is part of the glass and appears when the island is running.")
+            else -> tr("Размытие — часть стекла и ограничено формой острова. Плотность регулируется выше.", "Blur follows the glass shape. Adjust its density above.")
+        })
         GroupToggle(Pos.Single, Icons.Rounded.Tonality, tr("Тень", "Shadow"), tr("Заметна на светлом фоне; режим «Уменьшить эффекты» отключает её.", "Visible on light backgrounds; Reduce effects disables it."), s.shadow, color = Tile.Gray) {
             v -> SettingsRepo.update { copy(shadow = v) }
         }

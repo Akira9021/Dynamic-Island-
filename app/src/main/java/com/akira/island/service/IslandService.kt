@@ -428,7 +428,7 @@ class IslandService : AccessibilityService() {
     }
 
     private fun scheduleBackdrop() {
-        if (backdropClosed || (backdrop == null && (!SettingsRepo.current.backdropBlur || Build.VERSION.SDK_INT < 31))) return
+        if (backdropClosed || (backdrop == null && (!SettingsRepo.current.liquidGlass || Build.VERSION.SDK_INT < 31))) return
         backdrop?.hide()
         handler.removeCallbacks(backdropUpdate)
         handler.postDelayed(backdropUpdate, TOUCH_QUIET_MS)
@@ -436,11 +436,11 @@ class IslandService : AccessibilityService() {
 
     private fun updateBackdrop() {
         val s = SettingsRepo.current
-        val allowed = backdropAllowed(s.backdropBlur, s.enabled, visible && display?.alpha == 1f, IslandBus.expanded.value,
+        val allowed = backdropAllowed(s.liquidGlass, s.enabled, visible && display?.alpha == 1f, IslandBus.expanded.value,
             IslandBus.screenOn.value, IslandBus.locked.value, IslandBus.powerSave.value, s.reduceEffects, backdropShape)
         if (!allowed || !backdropTransmits(s) || body.isEmpty || Build.VERSION.SDK_INT < 31) {
             backdrop?.hide()
-            if (!s.backdropBlur) { backdrop?.close(); backdrop = null }
+            if (!s.liquidGlass) { backdrop?.close(); backdrop = null }
             return
         }
         val view = display ?: return

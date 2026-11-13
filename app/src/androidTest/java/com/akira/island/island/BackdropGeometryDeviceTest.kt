@@ -28,7 +28,7 @@ class BackdropGeometryDeviceTest {
 
     @Test fun geometryUsesTheActualCornerAndStopsReportingWhenDisabled() {
         val saved = SettingsRepo.current
-        val s = mutableStateOf(IslandSettings(backdropBlur = true, expandedCornerRadius = 28, reduceEffects = true))
+        val s = mutableStateOf(IslandSettings(liquidGlass = true, backdropBlur = false, expandedCornerRadius = 28, reduceEffects = true))
         var radius = 0f; var eligible = false
         val reports = AtomicInteger()
         try {
@@ -44,10 +44,14 @@ class BackdropGeometryDeviceTest {
             val density = compose.activity.resources.displayMetrics.density
             compose.runOnIdle { assertEquals(28 * density, radius, 0.1f); assertTrue(eligible) }
             compose.runOnIdle { s.value = s.value.copy(expandedCornerRadius = 12) }
+            compose.waitForIdle()
+            compose.onRoot().captureToImage()
             compose.waitUntil(10000) { kotlin.math.abs(radius - 12 * density) < 0.1f }
             compose.runOnIdle { s.value = s.value.copy(notch = true) }
+            compose.waitForIdle()
+            compose.onRoot().captureToImage()
             compose.waitUntil(10000) { !eligible }
-            compose.runOnIdle { s.value = s.value.copy(backdropBlur = false) }
+            compose.runOnIdle { s.value = s.value.copy(liquidGlass = false) }
             compose.waitForIdle()
             val count = reports.get()
             compose.runOnIdle { s.value = s.value.copy(expandedCornerRadius = 36) }

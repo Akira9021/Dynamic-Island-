@@ -30,23 +30,16 @@ fun IdleExtras(s: IslandSettings) {
     val locked by IslandBus.locked.collectAsState()
     val steps by com.akira.island.service.StepRepo.count.collectAsState()
     val standaloneInfo = !extras.briefEnabled && (extras.steps || extras.analogClock)
-    if (!extras.controls && !standaloneInfo && extras.apps.isEmpty() && extras.contacts.isEmpty()) return
+    val previewShortcuts = LocalIslandPreview.current && (extras.apps.isNotEmpty() || extras.contacts.isNotEmpty())
+    if (!extras.controls && !standaloneInfo && !previewShortcuts) return
     fun open(intent: Intent) {
         Controls.collapse()
         runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        if (previewShortcuts && !locked) ShortcutOrbit(extras.apps, extras.contacts, {}, {})
         if (extras.analogClock && !extras.briefEnabled) AnalogClock(rememberWallNow(1000), Modifier.fillMaxWidth().height(110.dp))
         if (extras.steps && !locked && !extras.briefEnabled) Text(tr("Шаги сегодня", "Steps today") + ": " + (steps?.toString() ?: "…"), color = Color.White, fontSize = 14.sp)
-        // Shortcuts never bypass the lock screen; Android owns the eventual authentication.
-        if (!locked) {
-            ShortcutOrbit(extras.apps, extras.contacts,
-                onApp = { Controls.openApp(context, it) },
-                onContact = { c ->
-                    val uri = Uri.parse(c.uri)
-                    if (uri.scheme == "content" && uri.authority == "com.android.contacts") open(Intent(Intent.ACTION_VIEW, uri))
-                })
-        }
         if (extras.controls && !locked) {
             val audio = remember { context.getSystemService(AudioManager::class.java) }
             val maximum = audio?.getStreamMaxVolume(AudioManager.STREAM_MUSIC)?.coerceAtLeast(1) ?: 1

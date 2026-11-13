@@ -4,6 +4,23 @@ import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import com.akira.island.island.glassSurface
+import com.akira.island.island.Text
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -29,9 +46,18 @@ import kotlin.math.roundToInt
 @Composable
 fun FaceGlyph(phase: FacePhase, reduced: Boolean, modifier: Modifier = Modifier) {
     val sweep = remember { Animatable(0f) }
+    val glyphAlpha = remember { Animatable(1f) }
     LaunchedEffect(phase, reduced) {
+        glyphAlpha.snapTo(1f)
         sweep.snapTo(0f)
-        if (!reduced && phase != FacePhase.HIDDEN) sweep.animateTo(1f, tween(if (phase == FacePhase.SCANNING) 1_400 else 260))
+        if (!reduced && phase != FacePhase.HIDDEN) {
+            sweep.animateTo(1f, tween(if (phase == FacePhase.SCANNING) 1_400 else 260))
+            if (phase == FacePhase.SUCCESS) {
+                // Fade while success is still valid; never keep a green check after HIDDEN/veto.
+                delay(600)
+                glyphAlpha.animateTo(0f, tween(180))
+            }
+        }
     }
     Canvas(modifier) {
         if (phase == FacePhase.HIDDEN) return@Canvas
@@ -39,10 +65,10 @@ fun FaceGlyph(phase: FacePhase, reduced: Boolean, modifier: Modifier = Modifier)
             FacePhase.SUCCESS -> Color(0xFF56DB91)
             FacePhase.FAILURE -> Color(0xFFD0C7F5)
             else -> Color.White
-        }
+        }.copy(alpha=glyphAlpha.value)
         val u = size.minDimension / 40f
         val stroke = Stroke(2.1f * u, cap = StrokeCap.Round)
-        drawRoundRect(Color.Black.copy(alpha = .82f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(11*u))
+        drawRoundRect(Color.Black.copy(alpha = .82f*glyphAlpha.value), cornerRadius = androidx.compose.ui.geometry.CornerRadius(11*u))
         val l=7*u; val r=size.width-l; val t=7*u; val b=size.height-t; val c=6*u
         val corners = Path().apply {
             moveTo(l,t+c); lineTo(l,t+2*u); quadraticBezierTo(l,t,l+2*u,t); lineTo(l+c,t)
@@ -53,7 +79,7 @@ fun FaceGlyph(phase: FacePhase, reduced: Boolean, modifier: Modifier = Modifier)
         drawPath(corners,tint,style=stroke)
         if (phase == FacePhase.SUCCESS) {
             val check=Path().apply { moveTo(13*u,20*u); lineTo(18*u,25*u); lineTo(28*u,14*u) }
-            drawPath(check,tint.copy(alpha=if(reduced) 1f else sweep.value.coerceAtLeast(.15f)),style=stroke)
+            drawPath(check,tint.copy(alpha=(if(reduced) 1f else sweep.value.coerceAtLeast(.15f))*glyphAlpha.value),style=stroke)
         } else {
             drawLine(tint,Offset(14*u,15*u),Offset(14*u,18*u),2*u,StrokeCap.Round)
             drawLine(tint,Offset(26*u,15*u),Offset(26*u,18*u),2*u,StrokeCap.Round)
@@ -70,19 +96,42 @@ fun FaceGlyph(phase: FacePhase, reduced: Boolean, modifier: Modifier = Modifier)
     }
 }
 
+/** Fixed-size face card: state changes never move its frame or the underlying activity. */
+@Composable
+fun FaceUnlockCard(phase: FacePhase, reduced: Boolean, modifier: Modifier = Modifier) {
+    Box(modifier.width(176.dp).height(124.dp)
+        .glassSurface(RoundedCornerShape(28.dp), Color.Black, .82f), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FaceGlyph(phase, reduced, Modifier.size(48.dp))
+            Text("Face ID", color = Color.White, fontSize = 15.sp, customizable = false)
+        }
+    }
+}
+
 /** Insets identify the physical camera. With no trustworthy anchor, do not invent a position. */
 @Composable
 fun FaceUnlockLayer(settings: IslandSettings, allowed: Boolean) {
     val phase by FaceUnlockState.phase.collectAsState()
     val screenOn by IslandBus.screenOn.collectAsState()
     val offSchedule by IslandBus.offSchedule.collectAsState()
-    // The disabled/idle feature contributes no layout, insets queries or animation work.
-    if (!settings.faceUnlockOnly || !settings.enabled || !screenOn || offSchedule || !allowed || phase == FacePhase.HIDDEN) return
+    val revision by FaceUnlockState.revision.collectAsState()
+    val canDisplay = settings.faceUnlockOnly && settings.enabled && screenOn && !offSchedule && allowed
+    // Screen/source revisions must never retain a success glyph from the previous lock session.
+    val visibility = remember(canDisplay, revision) { MutableTransitionState(false) }
+    visibility.targetState = canDisplay && phase != FacePhase.HIDDEN
+    var retained by remember(canDisplay, revision) { mutableStateOf(FacePhase.HIDDEN) }
+    LaunchedEffect(phase, canDisplay, revision) {
+        if (!canDisplay) { retained = FacePhase.HIDDEN; return@LaunchedEffect }
+        if (phase != FacePhase.HIDDEN) retained = phase
+        else { delay(if (settings.reduceEffects) 0 else 220); retained = FacePhase.HIDDEN }
+    }
+    if (!canDisplay || phase == FacePhase.HIDDEN && retained == FacePhase.HIDDEN) return
     val view = LocalView.current
     val density = LocalDensity.current
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var anchor by remember { mutableStateOf<Offset?>(null) }
-    val side = with(density) { 36.dp.toPx() }
+    val side = with(density) { 176.dp.toPx() }
+    val panelHeight = with(density) { 124.dp.toPx() }
     fun locate(c: LayoutCoordinates?) {
         anchor = if (Build.VERSION.SDK_INT >= 28 && c?.isAttached == true) runCatching {
             val cutout = view.rootWindowInsets?.displayCutout?.boundingRects?.firstOrNull { !it.isEmpty }
@@ -91,19 +140,24 @@ fun FaceUnlockLayer(settings: IslandSettings, allowed: Boolean) {
                 Offset(cutout.right.toFloat(),cutout.top.toFloat()),Offset(cutout.left.toFloat(),cutout.bottom.toFloat()),
                 Offset(cutout.right.toFloat(),cutout.bottom.toFloat())).map(c::windowToLocal)
             val left=corners.minOf { it.x }; val rightEdge=corners.maxOf { it.x }
-            val centerY=(corners.minOf { it.y }+corners.maxOf { it.y })/2f
-            // Leave the physical hole uncovered; place the scanner just alongside it.
-            val right = rightEdge + side*.12f
-            val x = if (right+side <= c.size.width) right else left-side*1.12f
-            val y = (centerY-side/2).coerceAtLeast(0f)
-            Offset(x,y).takeIf { it.x >= 0 && it.x+side <= c.size.width && it.y+side <= c.size.height }
+            val x = ((left + rightEdge - side) / 2f).coerceIn(0f, (c.size.width-side).coerceAtLeast(0f))
+            val y = corners.maxOf { it.y } + with(density) { 4.dp.toPx() }
+            Offset(x,y).takeIf { side <= c.size.width && it.y >= 0 && it.y+panelHeight <= c.size.height }
         }.getOrNull() else null
     }
     LaunchedEffect(phase, allowed) { if (phase != FacePhase.HIDDEN && allowed) locate(coordinates) }
     Box(Modifier.fillMaxSize().onGloballyPositioned { coordinates=it; locate(it) }) {
         val at=anchor
         if (at != null) {
-            FaceGlyph(phase,settings.reduceEffects,Modifier.offset { IntOffset(at.x.roundToInt(),at.y.roundToInt()) }.size(36.dp))
+            AnimatedVisibility(visibility,
+                modifier = Modifier.offset { IntOffset(at.x.roundToInt(),at.y.roundToInt()) },
+                enter = fadeIn(tween(if(settings.reduceEffects) 0 else 180)) + expandVertically(
+                    animationSpec = if(settings.reduceEffects) tween(0) else spring(dampingRatio=.88f, stiffness=500f),
+                    expandFrom=Alignment.Top),
+                exit = fadeOut(tween(if(settings.reduceEffects) 0 else 160)) + shrinkVertically(
+                    animationSpec=tween(if(settings.reduceEffects) 0 else 200), shrinkTowards=Alignment.Top)) {
+                FaceUnlockCard(phase,settings.reduceEffects)
+            }
         }
     }
 }

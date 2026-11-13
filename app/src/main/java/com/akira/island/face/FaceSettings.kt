@@ -84,7 +84,7 @@ fun FaceSettings(enabled: Boolean, onEnabled: (Boolean) -> Unit) {
         onDismissRequest=::closeExample,
         title={ Text(tr("Пример анимации", "Preview animation")) },
         text={ Row(Modifier.fillMaxWidth().testTag("face-demo"),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-            FaceGlyph(demo,settings.forPowerSave(powerSave).reduceEffects,Modifier.size(40.dp))
+            FaceUnlockCard(demo,settings.forPowerSave(powerSave).reduceEffects)
             Text(tr("Демонстрация, не реальная проверка лица", "Preview, not an actual face scan"),color=Ui.Sub,modifier=Modifier.weight(1f))
         } },
         confirmButton={ TextButton(onClick=::closeExample) { Text(tr("Закрыть", "Close")) } },
