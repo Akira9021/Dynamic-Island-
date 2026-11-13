@@ -68,6 +68,7 @@ data class ProgressInfo(
     val max: Int,
     val indeterminate: Boolean,
     val postTime: Long,
+    val transferDetails: TransferDetails? = null,
 ) {
     val fraction: Float get() = if (max > 0) (progress.toFloat() / max).coerceIn(0f, 1f) else 0f
 }

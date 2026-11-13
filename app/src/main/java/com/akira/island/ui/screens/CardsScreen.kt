@@ -98,6 +98,13 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
                 s.cardProgress, color = Tile.Teal) { set { copy(cardProgress = it) } }
         }
 
+        if (s.cardProgress) {
+            GroupToggle(Pos.Single, Icons.Rounded.Downloading, tr("Общая скорость сети", "Total network speed"),
+                tr("Примерные ↓ и ↑ во время загрузки; это не скорость отдельного файла", "Approximate download and upload totals during a transfer, not the speed of one file"),
+                s.showNetworkRate, color = Tile.Teal) { set { copy(showNetworkRate = it) } }
+            if (s.showNetworkRate) com.akira.island.island.NetworkRateExample()
+        }
+
         SectionHeader(tr("В дороге", "On the road"))
         GroupToggle(Pos.Single, Icons.Rounded.Navigation, tr("Навигация, такси и доставка", "Navigation, taxi and delivery"),
             tr("Google и Яндекс Карты, Навигатор, 2ГИС, Яндекс Go, Uber и другие — расстояние и время в капсуле, подробности в раскрытом виде",

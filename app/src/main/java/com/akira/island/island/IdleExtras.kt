@@ -40,24 +40,12 @@ fun IdleExtras(s: IslandSettings) {
         if (extras.steps && !locked && !extras.briefEnabled) Text(tr("Шаги сегодня", "Steps today") + ": " + (steps?.toString() ?: "…"), color = Color.White, fontSize = 14.sp)
         // Shortcuts never bypass the lock screen; Android owns the eventual authentication.
         if (!locked) {
-            extras.apps.chunked(3).forEach { row ->
-                Row {
-                    row.forEach { pkg ->
-                        val label = remember(pkg) { runCatching { context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg) }
-                        TextButton(onClick = { Controls.openApp(context, pkg) }, modifier = Modifier.weight(1f)) { Text(label, maxLines = 1) }
-                    }
-                }
-            }
-            extras.contacts.chunked(3).forEach { row ->
-                Row {
-                    row.forEach { c ->
-                        TextButton(onClick = {
-                            val uri = Uri.parse(c.uri)
-                            if (uri.scheme == "content" && uri.authority == "com.android.contacts") open(Intent(Intent.ACTION_VIEW, uri))
-                        }, modifier = Modifier.weight(1f)) { Text(c.name, maxLines = 1) }
-                    }
-                }
-            }
+            ShortcutOrbit(extras.apps, extras.contacts,
+                onApp = { Controls.openApp(context, it) },
+                onContact = { c ->
+                    val uri = Uri.parse(c.uri)
+                    if (uri.scheme == "content" && uri.authority == "com.android.contacts") open(Intent(Intent.ACTION_VIEW, uri))
+                })
         }
         if (extras.controls && !locked) {
             val audio = remember { context.getSystemService(AudioManager::class.java) }

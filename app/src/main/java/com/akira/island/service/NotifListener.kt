@@ -155,7 +155,11 @@ object NotificationParser {
         val hasProgress = !isMedia && ((max > 0 && value < max) || (indeterminate && ongoing))
         IslandBus.progress.value = IslandBus.progress.value.toMutableMap().apply {
             if (hasProgress) {
-                put(sbn.key, ProgressInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), value, max, indeterminate, sbn.postTime))
+                val detailText = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT, Notification.EXTRA_SUB_TEXT)
+                    .mapNotNull { key -> ex.getCharSequence(key)?.takeIf { it.length <= 1024 }?.toString() }
+                    .distinct().joinToString("\n")
+                put(sbn.key, ProgressInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), value, max, indeterminate,
+                    sbn.postTime, TransferDetailsParser.parse(detailText)))
             } else {
                 remove(sbn.key)
             }

@@ -40,6 +40,9 @@ private val lineColors = listOf(0xFF3A3A40, 0xFF8E8E93, 0xFFFFFFFF, 0xFFC6C3F7, 
 @Composable
 fun ColorsScreen(onBack: () -> Unit) {
     val s by SettingsRepo.state.collectAsState()
+    val blurAvailable = rememberBackdropAvailability()
+    val blurRejected by com.akira.island.service.IslandBackdropBlur.windowRejected.collectAsState()
+    val islandRunning by com.akira.island.core.IslandBus.serviceRunning.collectAsState()
     var card by rememberSaveable { mutableStateOf(false) }
     var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
     Page(tr("Цвет и рамка", "Color and border"), onBack, preview = {
@@ -142,6 +145,18 @@ fun ColorsScreen(onBack: () -> Unit) {
             v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
         }
         SettingsHint(tr("Затемнение видно на светлой заливке. На чёрном цвете разницы не будет.", "Bottom shading is visible on light fills. It has no visible effect on black."))
+        GroupToggle(Pos.Single, Icons.Rounded.BlurOn, tr("Размытие фона", "Background blur"),
+            when {
+                s.reduceEffects -> tr("Отключено режимом уменьшения эффектов", "Disabled by Reduce effects")
+                s.notch -> tr("Недоступно для нестандартного выреза", "Unavailable for custom notches")
+                blurRejected -> tr("Система отклонила фоновое окно", "The system rejected the backdrop window")
+                !blurAvailable -> tr("Сейчас недоступно в системе — сохраняется обычный материал", "Currently unavailable — the existing material is retained")
+                !com.akira.island.service.backdropTransmits(s) -> tr("Фон закрыт заливкой — уменьшите её плотность", "Hidden by the fill — lower its density")
+                !islandRunning -> tr("Появится после включения острова", "Available once the island is running")
+                else -> tr("Матовое стекло раскрытого острова", "Frosted background of the expanded island")
+            }, s.backdropBlur, color = Tile.Teal) { SettingsRepo.update { copy(backdropBlur = it) } }
+        SettingsHint(tr("Android 12+. Только настоящий остров: пример сверху не меняется. В энергосбережении, при блокировке и нестандартном вырезе эффект отключается.",
+            "Android 12+. Applies to the actual island; the preview above is unchanged. Disabled in power saving, on lock, and for custom notches."))
         GroupToggle(Pos.Single, Icons.Rounded.Tonality, tr("Тень", "Shadow"), tr("Заметна на светлом фоне; режим «Уменьшить эффекты» отключает её.", "Visible on light backgrounds; Reduce effects disables it."), s.shadow, color = Tile.Gray) {
             v -> SettingsRepo.update { copy(shadow = v) }
         }
@@ -156,6 +171,25 @@ fun ColorsScreen(onBack: () -> Unit) {
         SettingsHint(tr("Показаны кнопки таймера. Цвета ответа на сообщения настраиваются в «Уведомлениях»; красный и зелёный у звонков сохраняются.",
             "The preview shows timer controls. Reply colors are set in Notifications; red and green call controls keep their meaning."))
     }
+}
+
+@Composable
+private fun rememberBackdropAvailability(): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val manager = remember(context) { context.getSystemService(android.view.WindowManager::class.java) }
+    var available by remember(context) { mutableStateOf(android.os.Build.VERSION.SDK_INT >= 31 &&
+        runCatching { manager.isCrossWindowBlurEnabled }.getOrDefault(false)) }
+    DisposableEffect(manager) {
+        val listener = java.util.function.Consumer<Boolean> { available = it }
+        var registered = false
+        if (android.os.Build.VERSION.SDK_INT >= 31) runCatching {
+            manager.addCrossWindowBlurEnabledListener(context.mainExecutor, listener); registered = true
+        }
+        onDispose {
+            if (android.os.Build.VERSION.SDK_INT >= 31 && registered) runCatching { manager.removeCrossWindowBlurEnabledListener(listener) }
+        }
+    }
+    return available
 }
 
 @Composable

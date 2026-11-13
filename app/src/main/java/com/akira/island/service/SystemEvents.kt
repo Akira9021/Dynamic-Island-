@@ -43,6 +43,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /** Системные события, которые остров показывает короткими уведомлениями. */
@@ -73,7 +74,8 @@ class SystemEvents(private val context: Context) {
     private var usbConnected: Boolean? = null
     private var brightnessMode = -1
     private var dnd: Boolean? = null
-    private val headsetBattery = HashMap<String, Int>()
+    private val headsetBattery = HeadsetBatteryTracker()
+    private var headsetNoticeJob: kotlinx.coroutines.Job? = null
     private val wifiNetworks = HashSet<Network>()
     /** Когда подключили или отключили зарядку — кабель от компьютера не должен давать вторую плашку «USB» */
     private var lastPowerChange = 0L
@@ -161,6 +163,7 @@ class SystemEvents(private val context: Context) {
     fun start() {
         if (active) return
         active = true
+        headsetNoticeJob = IslandBus.scope.launch { IslandBus.notice.collect { updateVisibleHeadsetBattery() } }
         SystemEventObservation.state.value = SystemEventReadings(observing = true)
         HotspotMonitor.broadcastStarted()
         val filter = IntentFilter().apply {
@@ -245,6 +248,8 @@ class SystemEvents(private val context: Context) {
         HotspotMonitor.broadcastStopped()
         SystemEventObservation.state.value = SystemEventObservation.state.value.copy(observing = false)
         connectionJob?.cancel(); connectionJob = null
+        headsetNoticeJob?.cancel(); headsetNoticeJob = null
+        headsetBattery.clear()
         main.removeCallbacks(batterySample)
         runCatching { context.unregisterReceiver(receiver) }
         runCatching { context.contentResolver.unregisterContentObserver(brightnessObserver) }
@@ -356,7 +361,7 @@ class SystemEvents(private val context: Context) {
             BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                     ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-                ) return
+                ) { headsetBattery.invalidateAll(); updateVisibleHeadsetBattery(); return }
                 val device = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                     ?: return
                 // Без разрешения BLUETOOTH_CONNECT имени и класса устройства не узнать
@@ -366,25 +371,30 @@ class SystemEvents(private val context: Context) {
                     device.bluetoothClass?.majorDeviceClass == BluetoothClass.Device.Major.AUDIO_VIDEO
                 }.getOrDefault(false)
                 if (!isAudio) return
+                val address = runCatching { device.address }.getOrNull() ?: return
                 if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED) {
-                    val battery = headsetBattery[device.address]
-                    notice(
-                        s.evHeadsetOn,
-                        Notice(name ?: tr("Наушники", "Headphones"), null, ic(R.drawable.ios_headset), Tints.Green,
-                            ring = battery?.let { it / 100f }, caption = tr("Подключено", "Connected")),
-                    )
+                    val n = Notice(name ?: tr("Наушники", "Headphones"), null, ic(R.drawable.ios_headset), Tints.Green,
+                        caption = tr("Подключено", "Connected"))
+                    val battery = headsetBattery.connect(address, n.id)
+                    notice(s.evHeadsetOn, n.copy(ring = HeadsetBatteryTracker.ring(battery)))
                 } else {
-                    headsetBattery.remove(device.address)
+                    headsetBattery.disconnect(address)
+                    updateVisibleHeadsetBattery()
                     notice(s.evHeadsetOff, Notice(name ?: tr("Наушники", "Headphones"), null, ic(R.drawable.ios_headset), Tints.Gray,
                         caption = tr("Отключено", "Disconnected")))
                 }
             }
 
             BT_BATTERY_CHANGED -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+                ) { headsetBattery.invalidateAll(); updateVisibleHeadsetBattery(); return }
                 val device = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                     ?: return
                 val level = intent.getIntExtra(EXTRA_BT_BATTERY, -1)
-                if (level >= 0) headsetBattery[device.address] = level
+                val address = runCatching { device.address }.getOrNull() ?: return
+                headsetBattery.battery(address, level)
+                updateVisibleHeadsetBattery()
             }
 
             UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
@@ -428,7 +438,15 @@ class SystemEvents(private val context: Context) {
         val now = SystemClock.elapsedRealtime()
         if (now - lastUnlock < 3_000) return
         lastUnlock = now
-        notice(s.evUnlock, Notice("", null, ic(R.drawable.ios_lock_open), Color.White, style = NoticeStyle.PILL))
+        notice(s.evUnlock && !s.faceUnlockOnly, Notice("", null, ic(R.drawable.ios_lock_open), Color.White, style = NoticeStyle.PILL))
+    }
+
+    private fun updateVisibleHeadsetBattery() {
+        val current = IslandBus.notice.value ?: return
+        val (matches, level) = headsetBattery.levelForNotice(current.id)
+        if (!matches) return
+        val ring = HeadsetBatteryTracker.ring(level)
+        if (current.ring != ring) IslandBus.notice.value = current.copy(ring = ring)
     }
 
     /** Заблокирован ли телефон так, что для входа нужен PIN-код, ключ или пароль. */

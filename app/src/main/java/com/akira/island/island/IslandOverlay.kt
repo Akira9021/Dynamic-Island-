@@ -147,6 +147,7 @@ private data class Frame(val act: Act, val expanded: Boolean) {
 fun IslandOverlay(
     onBodyBounds: (Rect) -> Unit = {},
     onBubbleBounds: (Rect) -> Unit = {},
+    onBackdropShape: ((Float, Boolean) -> Unit)? = null,
 ) {
     val saved by SettingsRepo.state.collectAsState()
     val powerSave by IslandBus.powerSave.collectAsState()
@@ -403,7 +404,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble)
+                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -418,6 +419,8 @@ fun IslandOverlay(
             EggSparks { body.value }
             EggDriver({ body.value }, s)
         }
+        com.akira.island.face.FaceUnlockLayer(s, allowed = !calibrating && !shadeOpen &&
+            !showExpanded && !eggOn)
     }
 }
 
@@ -451,6 +454,7 @@ internal fun IslandRow(
     calibrating: Boolean,
     onBodyBounds: (Rect) -> Unit,
     onBubbleBounds: (Rect) -> Unit,
+    onBackdropShape: ((Float, Boolean) -> Unit)? = null,
 ) {
     Row(
         Modifier
@@ -470,7 +474,7 @@ internal fun IslandRow(
         // Пустое место с другой стороны уравновешивает пузырь, чтобы остров стоял над камерой
         val left = s.bubbleSide == BubbleSide.LEFT
         if (left) BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = true) else Spacer(Modifier.animatedWidth(slot))
-        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds)
+        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds, onBackdropShape)
         if (left) Spacer(Modifier.animatedWidth(slot)) else BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = false)
     }
 }
@@ -521,6 +525,7 @@ internal fun IslandBody(
     battery: BatteryInfo,
     calibrating: Boolean,
     onBounds: (Rect) -> Unit,
+    onBackdropShape: ((Float, Boolean) -> Unit)? = null,
 ) {
     val preview = LocalIslandPreview.current
     val context = LocalContext.current
@@ -618,10 +623,24 @@ internal fun IslandBody(
     val settings by rememberUpdatedState(s)
     val realEgg by IslandBus.egg.collectAsState()
     val egg = realEgg && !preview
+    // Plain remembered values: reporting geometry must not invalidate composition while drawing.
+    val reportedBackdrop = remember { floatArrayOf(Float.NaN, -1f) }
 
     Box(
         Modifier
             .onGloballyPositioned { onBounds(it.boundsInWindow()) }
+            .then(if (s.backdropBlur && !preview && onBackdropShape != null) Modifier.drawWithContent {
+                val radius = corner.value.toPx()
+                val usable = expanded && !calibrating && !s.notch && !egg &&
+                    kotlin.math.abs(jellyX.value - 1f) < 0.001f && kotlin.math.abs(jellyY.value - 1f) < 0.001f &&
+                    pull.value == 0f && shake.value == 0f
+                val flag = if (usable) 1f else 0f
+                if (reportedBackdrop[0] != radius || reportedBackdrop[1] != flag) {
+                    reportedBackdrop[0] = radius; reportedBackdrop[1] = flag
+                    onBackdropShape(radius, usable)
+                }
+                drawContent()
+            } else Modifier)
             .graphicsLayer {
                 // Пасхалка: остров подпрыгивает в такт песни; оплата прошла — на миг подрастает
                 val bump = if (preview) 1f else Egg.bump() * PayFx.pop.floatValue
@@ -1080,5 +1099,5 @@ internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): c
     val unknown = items.any { it.indeterminate || it.max <= 0 }
     return first.copy(key = "downloads", title = trf("Загрузок: {0}", "Downloads: {0}", items.size),
         progress = (items.sumOf { it.fraction.toDouble() } / items.size * 1000).toInt(), max = 1000,
-        indeterminate = unknown)
+        indeterminate = unknown, transferDetails = null)
 }

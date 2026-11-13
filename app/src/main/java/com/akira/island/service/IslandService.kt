@@ -88,8 +88,15 @@ class IslandService : AccessibilityService() {
     private var wm: WindowManager? = null
     private var display: FrameLayout? = null
     private var touch: TouchRoot? = null
+    private var networkRateMonitor: NetworkRateMonitor? = null
+    private var backdrop: IslandBackdropBlur? = null
+    private var backdropRadius = 0f
+    private var backdropShape = false
+    private var backdropClosed = false
+    private val backdropUpdate = Runnable { updateBackdrop() }
     private val owner = OverlayLifecycleOwner()
     private var events: SystemEvents? = null
+    private var faceUnlock: com.akira.island.face.FaceUnlockController? = null
     private var torch: TorchController? = null
     private var alarm: TimerAlarm? = null
     private var calls: CallMonitor? = null
@@ -140,7 +147,7 @@ class IslandService : AccessibilityService() {
     private val shoot = Runnable {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
     }
-    private val showAgain = Runnable { display?.alpha = 1f }
+    private val showAgain = Runnable { display?.alpha = 1f; scheduleBackdrop() }
 
     /** Поворот экрана: при «У камеры» в альбомной ориентации окно острова встаёт у края с камерой */
     private val displays by lazy { getSystemService(DisplayManager::class.java) }
@@ -230,6 +237,8 @@ class IslandService : AccessibilityService() {
         alarmMonitor = AlarmMonitor(this).also { runCatching { it.start() } }
         WeatherRepo.start(this, scope)
         IslandBus.serviceRunning.value = display != null && touch != null
+        faceUnlock = com.akira.island.face.FaceUnlockController(this, scope).also { it.start() }
+        networkRateMonitor = NetworkRates.monitor().also { it.start(scope) }
 
         // Входящий смахнули — он скрыт, пока звонит; перестал звонить — следующий входящий снова в острове.
         // Здесь, а не в острове: пока остров спрятан, он не рисуется и ничего бы не сбросил
@@ -342,6 +351,7 @@ class IslandService : AccessibilityService() {
     }
 
     private fun createWindows() {
+        backdropClosed = false
         val compose = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
@@ -354,6 +364,12 @@ class IslandService : AccessibilityService() {
                                 // До целых пикселей: доли пикселя в конце пружины не двигают окна
                                 onBodyBounds = { r -> val q = r.snapped(); if (q != body) { body = q; onBoundsChanged() } },
                                 onBubbleBounds = { r -> val q = r.snapped(); if (q != bubble) { bubble = q; onBoundsChanged() } },
+                                onBackdropShape = { radius, usable ->
+                                    if (backdropRadius != radius || backdropShape != usable) {
+                                        backdropRadius = radius; backdropShape = usable
+                                        scheduleBackdrop()
+                                    }
+                                },
                             )
                         }
                     }
@@ -378,6 +394,11 @@ class IslandService : AccessibilityService() {
 
         val touchRoot = TouchRoot(this, { display }, ::onOutsideTouch)
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
+        scope.launch {
+            combine(SettingsRepo.state, IslandBus.expanded, IslandBus.screenOn, IslandBus.powerSave, IslandBus.locked) {
+                    _, _, _, _, _ -> Unit
+            }.collect { scheduleBackdrop() }
+        }
     }
 
     /**
@@ -400,8 +421,33 @@ class IslandService : AccessibilityService() {
         list.isEmpty() || list.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
     }.getOrDefault(true)
 
-    private fun applyCurrentSettings() = applySettings(SettingsRepo.current, IslandBus.landscape.value,
-        IslandBus.keyguard.value, IslandBus.displayRotation.value)
+    private fun applyCurrentSettings() {
+        applySettings(SettingsRepo.current, IslandBus.landscape.value,
+            IslandBus.keyguard.value, IslandBus.displayRotation.value)
+        scheduleBackdrop()
+    }
+
+    private fun scheduleBackdrop() {
+        if (backdropClosed || (backdrop == null && (!SettingsRepo.current.backdropBlur || Build.VERSION.SDK_INT < 31))) return
+        backdrop?.hide()
+        handler.removeCallbacks(backdropUpdate)
+        handler.postDelayed(backdropUpdate, TOUCH_QUIET_MS)
+    }
+
+    private fun updateBackdrop() {
+        val s = SettingsRepo.current
+        val allowed = backdropAllowed(s.backdropBlur, s.enabled, visible && display?.alpha == 1f, IslandBus.expanded.value,
+            IslandBus.screenOn.value, IslandBus.locked.value, IslandBus.powerSave.value, s.reduceEffects, backdropShape)
+        if (!allowed || !backdropTransmits(s) || body.isEmpty || Build.VERSION.SDK_INT < 31) {
+            backdrop?.hide()
+            if (!s.backdropBlur) { backdrop?.close(); backdrop = null }
+            return
+        }
+        val view = display ?: return
+        val layer = backdrop ?: IslandBackdropBlur(this, view).also { backdrop = it }
+        layer.update(android.graphics.Rect(floor(body.left).toInt(), floor(body.top).toInt(),
+            ceil(body.right).toInt(), ceil(body.bottom).toInt()), backdropRadius, true)
+    }
 
     private fun isAmbientDisplay(): Boolean {
         val state = runCatching { displays?.getDisplay(Display.DEFAULT_DISPLAY)?.state }.getOrNull()
@@ -480,6 +526,7 @@ class IslandService : AccessibilityService() {
     private fun screenshotWithoutIsland() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         Controls.collapse()
+        backdrop?.hide()
         val view = display ?: return
         view.alpha = 0f
         handler.removeCallbacks(shoot)
@@ -489,6 +536,7 @@ class IslandService : AccessibilityService() {
     }
 
     private fun onBoundsChanged() {
+        scheduleBackdrop()
         // Во время анимации границы меняются каждый кадр, а перекладка окна — вызов системы посреди кадра,
         // от которого остров может дёрнуться, а на ColorOS — пропасть на треть секунды. Поэтому окно касаний
         // перекладывается один раз, когда остров замер (120 мс без изменений), а если он движется долго
@@ -757,6 +805,11 @@ class IslandService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        faceUnlock?.stop(); faceUnlock = null
+        networkRateMonitor?.stop(); networkRateMonitor = null
+        backdropClosed = true
+        handler.removeCallbacks(backdropUpdate)
+        backdrop?.close(); backdrop = null
         // Остров выключили в спец. возможностях — держать его процесс больше незачем
         stopService(Intent(this, KeepAliveService::class.java))
         handler.removeCallbacks(shoot)

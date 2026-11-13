@@ -197,6 +197,7 @@ data class IslandSettings(
     val cardMedia: Boolean = true,
     val cardTorch: Boolean = true,
     val cardProgress: Boolean = true,
+    val showNetworkRate: Boolean = false,
     val cardTimer: Boolean = true,
     val cardRecording: Boolean = true,
     val cardCharging: Boolean = true,
@@ -232,6 +233,8 @@ data class IslandSettings(
     val evUsbOn: Boolean = true,
     val evUsbOff: Boolean = true,
     val evUnlock: Boolean = false,
+    /** Optional, verified face unlock only. Never falls back to a generic unlock event. */
+    val faceUnlockOnly: Boolean = false,
     /** На экране блокировки в капсуле замок; после разблокировки он уходит */
     val evLock: Boolean = true,
     val evDnd: Boolean = true,
@@ -293,6 +296,7 @@ data class IslandSettings(
     // Liquid Glass: полупрозрачное стекло с бликами вместо чёрной заливки. По умолчанию выключено
     val liquidGlass: Boolean = false,
     val glassOpacity: Int = 68,
+    val backdropBlur: Boolean = false,
 
     // Анимации
     val expandStyle: ExpandStyle = ExpandStyle.FRUIT,
@@ -408,6 +412,7 @@ data class IslandSettings(
     // Optional presentation controls. Defaults preserve the existing 1.7 layout.
     val idleClockBattery: Boolean = false,
     val preferMusic: Boolean = false,
+    val showPlayerBattery: Boolean = false,
     val swipeActivities: Boolean = false,
     val vinylArt: Boolean = false,
     val hideWhenSourceOpen: Boolean = false,
@@ -567,7 +572,7 @@ object SettingsRepo {
         val d = IslandSettings()
         copy(
             fxBlur = d.fxBlur, fxEqualizer = d.fxEqualizer, fxRate = d.fxRate, fxGlow = d.fxGlow, fxPay = d.fxPay,
-            fxShake = d.fxShake, batterySaver = d.batterySaver,
+            fxShake = d.fxShake, batterySaver = d.batterySaver, backdropBlur = d.backdropBlur,
         )
     }
 }

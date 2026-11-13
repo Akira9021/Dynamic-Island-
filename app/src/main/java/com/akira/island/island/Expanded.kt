@@ -155,12 +155,12 @@ private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, ba
             when (act) {
                 is Act.HotspotA -> HotspotDetails(act.status)
                 is Act.WeatherA -> WeatherDetails(act.weather)
-                is Act.MediaA -> MediaExpanded(act.m, s, lyrics)
+                is Act.MediaA -> MediaExpanded(act.m, s, lyrics, battery)
                 is Act.TimerA -> TimerExpanded(act.t, s)
                 is Act.StopwatchA -> StopwatchExpanded(act.w)
                 is Act.TorchA -> Unit
                 is Act.ChronoA -> ChronoExpanded(act.c, s)
-                is Act.ProgressA -> ProgressExpanded(act.p)
+                is Act.ProgressA -> ProgressExpanded(act.p, s)
                 is Act.LiveA -> LiveExpanded(act.l)
                 is Act.CallA -> CallExpanded(act.c)
                 is Act.AlarmA -> AlarmExpanded(act.a, s)
@@ -256,25 +256,37 @@ private fun ago(ms: Long): String {
  * заливается белым по мере пения; время по краям тонкой полосы и три кнопки посередине.
  */
 @Composable
-private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
+private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo) {
     val context = LocalContext.current
     Column {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val narrow = maxWidth < 260.dp
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PlayerArt(m, s, Modifier.size(if (narrow) 44.dp else 60.dp).clickable { Controls.openApp(context, m.pkg) })
-                Spacer(Modifier.width(if (narrow) 8.dp else 14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
-                        modifier = Modifier.marqueeFade().basicMarquee(iterations = Int.MAX_VALUE))
-                    if (m.artist.isNotBlank()) {
-                        Spacer(Modifier.height(3.dp))
-                        Text(m.artist, color = Tints.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column {
+                if (narrow && s.showPlayerBattery && battery.level in 0..100) {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.End) {
+                        PlayerBattery(battery, s.batteryPercentOnly)
                     }
                 }
-                Spacer(Modifier.width(if (narrow) 6.dp else 10.dp))
-                val egg by IslandBus.egg.collectAsState()
-                if (egg) SoulHeart(Modifier.size(24.dp)) else Equalizer(m.accent, m.playing, s.liveEqualizer, Modifier.size(if (narrow) 20.dp else 30.dp, 24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PlayerArt(m, s, Modifier.size(if (narrow) 44.dp else 60.dp).clickable { Controls.openApp(context, m.pkg) })
+                    Spacer(Modifier.width(if (narrow) 8.dp else 14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1,
+                            modifier = Modifier.marqueeFade().basicMarquee(iterations = Int.MAX_VALUE))
+                        if (m.artist.isNotBlank()) {
+                            Spacer(Modifier.height(3.dp))
+                            Text(m.artist, color = Tints.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Spacer(Modifier.width(if (narrow) 6.dp else 10.dp))
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (!narrow && s.showPlayerBattery && battery.level in 0..100) {
+                            PlayerBattery(battery, s.batteryPercentOnly)
+                        }
+                        val egg by IslandBus.egg.collectAsState()
+                        if (egg) SoulHeart(Modifier.size(24.dp)) else Equalizer(m.accent, m.playing, s.liveEqualizer, Modifier.size(if (narrow) 20.dp else 30.dp, 24.dp))
+                    }
+                }
             }
         }
 
@@ -757,7 +769,7 @@ private fun RecordingWave(modifier: Modifier, animate: Boolean) {
 }
 
 @Composable
-private fun ProgressExpanded(p: ProgressInfo) {
+private fun ProgressExpanded(p: ProgressInfo, s: IslandSettings) {
     val context = LocalContext.current
     Column(Modifier.clickable { Controls.openApp(context, p.pkg) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -775,6 +787,7 @@ private fun ProgressExpanded(p: ProgressInfo) {
             Box(Modifier.fillMaxWidth(if (p.indeterminate) 1f else p.fraction).fillMaxHeight().clip(CircleShape)
                 .background(if (p.indeterminate) Tints.Blue.copy(alpha = 0.4f) else Tints.Blue))
         }
+        TransferRateDetails(p.transferDetails, s.showNetworkRate)
     }
 }
 

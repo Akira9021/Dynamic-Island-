@@ -4,6 +4,7 @@ import com.akira.island.data.*
 import com.akira.island.island.PreviewScene
 
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.rounded.Apps
@@ -175,10 +176,11 @@ fun BehaviorScreen(onBack: () -> Unit) {
     if (sourceDialog) ChoiceDialog(tr("Когда открыто приложение", "When its app is open"), SourceVisibility.entries, s.sourceVisibility, ::sourceLabel,
         { mode -> SettingsRepo.update { withSourceVisibility(mode) } }) { sourceDialog = false }
     var previewScene by remember { mutableStateOf(PreviewScene.IDLE) }
+    var playerBatteryPreview by remember { mutableStateOf(false) }
     if (emptyDialog) ChoiceDialog(tr("Когда нет активностей", "When no activities are active"), EmptyCapsule.entries, s.emptyCapsule, ::emptyLabel,
         { mode -> SettingsRepo.update { withEmptyCapsule(mode) } }) { emptyDialog = false }
     Page(tr("Поведение", "Behavior"), onBack, preview = {
-        SettingsPreview(scene = previewScene, onScene = { previewScene = it }, twoActivities = true, respectVisibility = true)
+        SettingsPreview(card = playerBatteryPreview && previewScene == PreviewScene.MUSIC, scene = previewScene, onScene = { previewScene = it }, twoActivities = true, respectVisibility = true)
     }) {
         SectionHeader(tr("Когда показывать", "When to show"))
         Group {
@@ -200,6 +202,13 @@ fun BehaviorScreen(onBack: () -> Unit) {
             GroupToggle(Pos.First, Icons.Rounded.LibraryMusic, tr("Приоритет музыки", "Prefer music"),
                 tr("Играющая музыка выше фоновых таймеров и событий; звонки и сигналы важнее", "Playing music takes priority over background timers and events; calls and alarms still come first"),
                 s.preferMusic, color = Tile.Pink) { v -> previewScene = PreviewScene.MUSIC; SettingsRepo.update { copy(preferMusic = v) } }
+            GroupToggle(Pos.Middle, Icons.Rounded.BatteryFull, tr("Заряд в плеере", "Battery in the player"),
+                tr("Процент заряда рядом с эквалайзером раскрытого плеера", "Battery percentage beside the expanded player's equalizer"),
+                s.showPlayerBattery, color = Tile.Green) { value ->
+                previewScene = PreviewScene.MUSIC
+                playerBatteryPreview = true
+                SettingsRepo.update { copy(showPlayerBattery = value) }
+            }
             GroupToggle(Pos.Middle, Icons.Rounded.VisibilityOff, tr("Скрывать на AOD", "Hide on AOD"),
                 tr("Не показывать остров, пока экран в режиме ожидания", "Hide the island while the display is in ambient mode"),
                 s.hideOnAod, color = Tile.Gray) { v -> SettingsRepo.update { copy(hideOnAod = v) } }

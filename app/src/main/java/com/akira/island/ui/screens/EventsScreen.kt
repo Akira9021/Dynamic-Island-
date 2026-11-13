@@ -91,7 +91,7 @@ fun EventsScreen(onBack: () -> Unit) {
             GroupToggle(Pos.Middle, Icons.Rounded.WifiOff, tr("Wi-Fi отключён", "Wi-Fi disconnected"), null,
                 s.evWifiOff, color = Tile.Gray) { set { copy(evWifiOff = it) } }
             GroupToggle(Pos.Middle, Icons.Rounded.BluetoothConnected, tr("Наушники подключены", "Headphones connected"),
-                tr("По Bluetooth, с зарядом, если он известен", "Over Bluetooth, with the charge if it's known"),
+                tr("По Bluetooth. Доступный заряд обновляется, пока карточка видна", "Over Bluetooth. Available battery updates while the card is visible"),
                 s.evHeadsetOn, color = Tile.Indigo) { set { copy(evHeadsetOn = it) } }
             GroupToggle(Pos.Middle, Icons.Rounded.BluetoothDisabled, tr("Наушники отключены", "Headphones disconnected"), null,
                 s.evHeadsetOff, color = Tile.Gray) { set { copy(evHeadsetOff = it) } }
@@ -104,6 +104,7 @@ fun EventsScreen(onBack: () -> Unit) {
             GroupToggle(Pos.Last, Icons.Rounded.WifiTethering, tr("Точка доступа", "Hotspot"), tr("Карточка видна, пока точка доступа включена", "Card stays visible while the hotspot is on"),
                 s.evHotspot, color = Tile.Teal) { on -> set { copy(evHotspot = on) } }
         }
+        HeadsetBatteryExamples { example = it }
         EventReading(ConnectionEvent.VPN, readings.vpn, readings.observing) { example = it }
         EventReading(ConnectionEvent.HOTSPOT, readings.hotspot, readings.observing) { example = it }
         if (s.evHotspot && hotspot.enabled == true) SettingsHint(hotspot.clients?.let {
@@ -151,6 +152,8 @@ fun EventsScreen(onBack: () -> Unit) {
                     "A check mark and the amount — from the wallet screen, a notification or a bank SMS"),
                 s.evPaySuccess, color = Tile.Green) { set { copy(evPaySuccess = it) } }
         }
+
+        com.akira.island.face.FaceSettings(s.faceUnlockOnly) { set { copy(faceUnlockOnly = it) } }
 
         SectionHeader(tr("Другое", "Other"))
         Group {

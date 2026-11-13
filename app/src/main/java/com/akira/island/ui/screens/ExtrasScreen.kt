@@ -85,12 +85,12 @@ fun ExtrasScreen(onBack: () -> Unit) {
                 }
             })
             s.apps.forEach { pkg ->
-                val label = remember(pkg) { runCatching { context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg) }
-                GroupItem(Pos.Middle, Icons.Rounded.Close, label, tr("Нажмите, чтобы убрать", "Tap to remove"), onClick = { ExtrasRepo.update { copy(apps = this.apps - pkg) } })
+                val visual = com.akira.island.island.rememberAppShortcut(pkg)
+                SelectedShortcutRow(visual.label, visual.icon, null) { ExtrasRepo.update { copy(apps = this.apps - pkg) } }
             }
             GroupItem(Pos.Middle, Icons.Rounded.PersonAdd, tr("Добавить контакт", "Add contact"), tr("Открывает карточку контакта; до шести", "Opens the contact card; up to six"), color = Tile.Green, onClick = { runCatching { contact.launch(null) }.onFailure { error = tr("Не удалось открыть контакты", "Could not open contacts") } })
             s.contacts.forEach { c ->
-                GroupItem(Pos.Middle, Icons.Rounded.Close, c.name, tr("Нажмите, чтобы убрать", "Tap to remove"), onClick = { ExtrasRepo.update { copy(contacts = contacts - c) } })
+                SelectedShortcutRow(c.name, null, c.name) { ExtrasRepo.update { copy(contacts = contacts - c) } }
             }
             GroupItem(Pos.Last, Icons.Rounded.Info, tr("Ваши ярлыки", "Your shortcuts"),
                 tr("Приложения и контакты доступны после раскрытия пустого острова. Контакты скрыты на экране блокировки.", "Apps and contacts appear in the expanded idle island. Contacts are hidden on the lock screen."))
