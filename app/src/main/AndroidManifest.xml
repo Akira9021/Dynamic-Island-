@@ -6,6 +6,7 @@
     <!-- Optional face-only mode: granted explicitly through Shizuku, not at startup. -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
     <!-- Optional brightness slider; user grants special access in system settings. -->
@@ -99,6 +100,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.SystemAlarmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Island" />
 
         <!-- Hide only this alias. MainActivity remains enabled for the tile and Android settings. -->
         <activity-alias

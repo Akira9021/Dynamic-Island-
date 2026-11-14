@@ -413,6 +413,9 @@ data class IslandSettings(
     // Optional presentation controls. Defaults preserve the existing 1.7 layout.
     val idleClockBattery: Boolean = false,
     val preferMusic: Boolean = false,
+    val keepExpandedOnOutsideTouch: Boolean = false,
+    val adaptiveChargeEta: Boolean = false,
+    val showAlarmCreator: Boolean = false,
     val showPlayerBattery: Boolean = false,
     val swipeActivities: Boolean = false,
     val vinylArt: Boolean = false,

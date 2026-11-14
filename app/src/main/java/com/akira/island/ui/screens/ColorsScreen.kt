@@ -233,6 +233,8 @@ private fun IslandSettings.edge(card: Boolean, index: Int, value: Float): Island
 /** Кружки цветов в карточке: выбранный — с галочкой. */
 @Composable
 fun Swatches(colors: List<Long>, selected: Long, onPick: (Long) -> Unit) {
+    var picker by rememberSaveable { mutableStateOf(false) }
+    if (picker) HsvColorPickerDialog(selected, { picker = false }) { color -> onPick(color); picker = false }
     FlowRow(
         Modifier
             .fillMaxWidth()
@@ -257,6 +259,10 @@ fun Swatches(colors: List<Long>, selected: Long, onPick: (Long) -> Unit) {
                     Icon(Icons.Rounded.Check, null, tint = if (color.luminance() > 0.5f) Color.Black else Color.White)
                 }
             }
+        }
+        Box(Modifier.size(44.dp).clip(CircleShape).background(Ui.IconBg).border(1.dp, Ui.Outline, CircleShape)
+            .clickable { picker = true }.testTag("open-hsv-picker"), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Colorize, tr("Выбрать свой цвет", "Choose a custom color"), tint = Ui.Primary)
         }
     }
 }

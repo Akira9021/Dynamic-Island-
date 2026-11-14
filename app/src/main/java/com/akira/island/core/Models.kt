@@ -200,8 +200,10 @@ data class BatteryInfo(
     val voltageV: Float? = null,
     /** Измеренная мощность на аккумуляторе, не номинальная мощность зарядного устройства. */
     val powerWatts: Float? = null,
-    /** Оценка Android до полного заряда; null — система не может её вычислить. */
+    /** До полного заряда: оценка Android либо явно отмеченная приблизительная; null — неизвестно. */
     val remainingMs: Long? = null,
+    /** True only for an approximate rate observed during this charging session. */
+    val remainingApproximate: Boolean = false,
 )
 
 /** Как событие выглядит в острове. */

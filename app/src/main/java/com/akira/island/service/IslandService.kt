@@ -420,17 +420,20 @@ class IslandService : AccessibilityService() {
     }
 
     /**
-     * Касание мимо раскрытого острова сворачивает его, мимо поля ответа — закрывает ввод.
+     * Касание мимо раскрытого острова сворачивает его, если не включено сохранение карточки.
+     * Касание мимо поля ответа закрывает ввод по прежнему правилу клавиатуры.
      * Нажатия на клавиатуру тоже приходят сюда как «мимо» (она — отдельное окно), а где именно
      * коснулись, система не сообщает. Поэтому, пока клавиатура на экране, ввод не закрываем:
      * его закрывает «Назад» (клавиатура прячется) или смахивание плашки вверх.
      */
     private fun onOutsideTouch() {
-        if (IslandBus.reply.value != null) {
-            if (!keyboardShown()) IslandBus.reply.value = null
-            return
+        val replyOpen = IslandBus.reply.value != null
+        when (com.akira.island.core.outsideTouchDecision(IslandBus.expanded.value, replyOpen,
+            replyOpen && keyboardShown(), SettingsRepo.current.keepExpandedOnOutsideTouch)) {
+            com.akira.island.core.OutsideTouchDecision.KEEP -> Unit
+            com.akira.island.core.OutsideTouchDecision.CLOSE_REPLY -> IslandBus.reply.value = null
+            com.akira.island.core.OutsideTouchDecision.COLLAPSE -> Controls.collapse()
         }
-        if (IslandBus.expanded.value) Controls.collapse()
     }
 
     /** Видна ли клавиатура. Если список окон недоступен, считаем, что видна, — так ввод не оборвётся. */

@@ -58,6 +58,7 @@ class SystemEvents(private val context: Context) {
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
     private val batteryManager = context.getSystemService(BatteryManager::class.java)
     private var active = false
+    private val chargeEta = com.akira.island.core.AdaptiveChargeEta()
     private val batterySample = object : Runnable {
         override fun run() {
             if (!active || !IslandBus.screenOn.value) return
@@ -495,8 +496,12 @@ class SystemEvents(private val context: Context) {
         val remaining = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && charging && level < 100) {
             BatteryReadings.remainingMs(runCatching { batteryManager?.computeChargeTimeRemaining() ?: -1L }.getOrDefault(-1L), charging)
         } else null
+        val fallback = if (s.adaptiveChargeEta) chargeEta.observe(SystemClock.elapsedRealtime(), level,
+            charging, plugged, remaining) else { chargeEta.reset(); null }
         IslandBus.battery.value = BatteryInfo(level, charging, current, voltage,
-            if (current != null && voltage != null) current * voltage / 1000f else null, remaining)
+            if (current != null && voltage != null) current * voltage / 1000f else null,
+            remaining ?: fallback?.remainingMs,
+            remainingApproximate = remaining == null && fallback?.source == com.akira.island.core.ChargeEtaSource.OBSERVED)
 
         if (charging || level > 5) {
             lowWarned = false

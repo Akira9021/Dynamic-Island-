@@ -5,6 +5,9 @@ import com.akira.island.island.PreviewScene
 
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.rounded.BatteryFull
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.AlarmAdd
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.rounded.Apps
@@ -195,6 +198,19 @@ fun BehaviorScreen(onBack: () -> Unit) {
                 s.lockScreen.title, color = Tile.Indigo, onClick = { lockDialog = true })
             GroupItem(Pos.Last, Icons.Rounded.Apps, tr("Когда открыто приложение", "When its app is open"),
                 sourceLabel(s.sourceVisibility), color = Tile.Blue, onClick = { sourceDialog = true })
+        }
+
+        SectionHeader(tr("Дополнительные возможности", "Additional features"))
+        Group {
+            GroupToggle(Pos.First, Icons.Rounded.AlarmAdd, tr("Создание будильника", "Create alarms"),
+                tr("Кнопка в раскрытом пустом острове; подтверждение в системных «Часах»", "A shortcut in the expanded idle island; confirm in Clock"),
+                s.showAlarmCreator, color = Tile.Orange) { value -> SettingsRepo.update { copy(showAlarmCreator = value) } }
+            GroupToggle(Pos.Middle, Icons.Rounded.TouchApp, tr("Не закрывать касанием снаружи", "Keep open on outside touch"),
+                tr("Сохранять раскрытую карточку; жесты и автосворачивание по времени сохраняются", "Keep the card expanded; gestures and timed collapse still apply"),
+                s.keepExpandedOnOutsideTouch, color = Tile.Indigo) { value -> SettingsRepo.update { copy(keepExpandedOnOutsideTouch = value) } }
+            GroupToggle(Pos.Last, Icons.Rounded.BatteryChargingFull, tr("Оценивать время зарядки", "Estimate charging time"),
+                tr("Если Android не дал оценку — приблизительно, после двух измеренных изменений заряда", "When Android provides no estimate, approximate after two measured increases"),
+                s.adaptiveChargeEta, color = Tile.Green) { value -> SettingsRepo.update { copy(adaptiveChargeEta = value) } }
         }
 
         SectionHeader(tr("Карточки и экран", "Cards and screen"))

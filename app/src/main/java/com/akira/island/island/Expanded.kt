@@ -2,6 +2,8 @@
 
 package com.akira.island.island
 
+import androidx.compose.ui.platform.testTag
+
 import android.content.Context
 import android.media.AudioManager
 import android.text.format.DateFormat
@@ -264,7 +266,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, batt
             Column {
                 if (narrow && s.showPlayerBattery && battery.level in 0..100) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.End) {
-                        PlayerBattery(battery, s.batteryPercentOnly)
+                        PlayerBattery(battery, percentOnly = false)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -281,7 +283,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, batt
                     Spacer(Modifier.width(if (narrow) 6.dp else 10.dp))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (!narrow && s.showPlayerBattery && battery.level in 0..100) {
-                            PlayerBattery(battery, s.batteryPercentOnly)
+                            PlayerBattery(battery, percentOnly = false)
                         }
                         val egg by IslandBus.egg.collectAsState()
                         if (egg) SoulHeart(Modifier.size(24.dp)) else Equalizer(m.accent, m.playing, s.liveEqualizer, Modifier.size(if (narrow) 20.dp else 30.dp, 24.dp))
@@ -879,11 +881,11 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
             }
             if (battery.level >= 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!s.batteryPercentOnly) BatteryGlyph(battery.level, when {
+                    BatteryGlyph(battery.level, when {
                         battery.charging -> Tints.Green
                         battery.level <= 15 -> Tints.Red
                         else -> Color.White
-                    }, Modifier.size(26.dp, 13.dp))
+                    }, Modifier.size(26.dp, 13.dp).testTag("expanded-idle-battery-icon"))
                     Spacer(Modifier.width(4.dp))
                     Text("${battery.level}%", color = Color.White, fontSize = 16.sp, style = Digits)
                 }
@@ -894,16 +896,27 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
             val measurements = listOfNotNull(
                 battery.powerWatts?.let { trf("{0} Вт на батарее", "{0} W at battery", String.format(java.util.Locale.ROOT, "%.1f", it)) },
                 battery.currentMa?.let { trf("{0} мА", "{0} mA", it.toInt()) },
-                battery.remainingMs?.takeIf { it > 0 }?.let { trf("До полного заряда: {0}", "Until full: {0}", formatDuration(it)) },
+                battery.remainingMs?.takeIf { it > 0 && (!battery.remainingApproximate || s.adaptiveChargeEta) }?.let {
+                    if (battery.remainingApproximate) trf("Примерно до полного заряда: {0}", "Approximately until full: {0}", formatDuration(it))
+                    else trf("До полного заряда: {0}", "Until full: {0}", formatDuration(it))
+                },
             )
             if (measurements.isNotEmpty()) Text(measurements.joinToString(" · "), color = Dim, fontSize = 12.sp,
                 modifier = Modifier.padding(top = 8.dp))
         }
         IdleExtras(s)
         val actions = if (extras.briefEnabled && locked) emptyList() else s.quickActions
-        if (actions.isEmpty()) return@Column
+        val alarmCreator = s.showAlarmCreator && !locked
+        if (actions.isEmpty() && !alarmCreator) return@Column
         Spacer(Modifier.height(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (alarmCreator) PillButton(Ios.alarm, tr("Новый будильник", "New alarm"),
+                bg = Tints.Orange.copy(alpha = 0.2f), fg = Tints.Orange, modifier = Modifier.fillMaxWidth()) {
+                val intent = android.content.Intent(context, com.akira.island.ui.SystemAlarmActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (runCatching { context.startActivity(intent) }.isSuccess) Controls.collapse()
+                else android.widget.Toast.makeText(context, tr("Не удалось открыть редактор будильника", "Could not open the alarm editor"), android.widget.Toast.LENGTH_SHORT).show()
+            }
             // Таймер от 1 до 99 минут
             if (QuickAction.TIMER in actions) IdleTimerPicker(s)
             // Остальные кнопки — по две в ряд, в порядке из настроек

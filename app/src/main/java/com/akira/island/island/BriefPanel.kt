@@ -168,14 +168,12 @@ private fun ColumnScope.BriefClockPage(
         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
     PinnedShortcutRow()
     if (battery.level >= 0) Row(Modifier.testTag("brief-battery"), verticalAlignment = Alignment.CenterVertically) {
-        if (!s.batteryPercentOnly) {
-            BatteryGlyph(battery.level, when {
-                battery.charging -> Tints.Green
-                battery.level <= 15 -> Tints.Red
-                else -> Color.White
-            }, Modifier.size(26.dp, 13.dp))
-            Spacer(Modifier.width(6.dp))
-        }
+        BatteryGlyph(battery.level, when {
+            battery.charging -> Tints.Green
+            battery.level <= 15 -> Tints.Red
+            else -> Color.White
+        }, Modifier.size(26.dp, 13.dp).testTag("expanded-brief-battery-icon"))
+        Spacer(Modifier.width(6.dp))
         Text("${battery.level}%", color = Color.White, fontSize = 14.sp, style = Digits, maxLines = 1, softWrap = false)
     }
     alarm?.takeIf { it.triggerAt - now in 1..86_400_000L }?.let { next ->
