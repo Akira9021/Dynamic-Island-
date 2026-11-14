@@ -33,7 +33,7 @@ class BackdropBlurDeviceTest {
         checkAttachedWindow(false)
     }
 
-    @Test fun screenLayoutParentWithOffsetKeepsBlurInsideTheCard() {
+    @Test fun islandWindowFlagsShowInitialBlurWithinFourFrames() {
         checkAttachedWindow(true)
     }
 
@@ -88,7 +88,23 @@ class BackdropBlurDeviceTest {
                     it.update(Rect(500, 120, 560, 180), 30f, true)
                 }
             }
-            instrumentation.waitForIdleSync(); SystemClock.sleep(1500)
+            // Observe the material after four frames, not a late 1.5-second enablement.
+            val frames = java.util.concurrent.CountDownLatch(1)
+            activity.scenario.onActivity {
+                android.view.Choreographer.getInstance().postFrameCallback(object : android.view.Choreographer.FrameCallback {
+                    var remaining = 4
+                    override fun doFrame(time: Long) {
+                        if (--remaining == 0) frames.countDown()
+                        else android.view.Choreographer.getInstance().postFrameCallback(this)
+                    }
+                })
+            }
+            assertTrue("Frame scheduling must finish", frames.await(15, java.util.concurrent.TimeUnit.SECONDS))
+            // The legacy generic Dialog has different inset/placement rules and may need
+            // calibration. Its existing functional test is not a first-frame latency test.
+            // The production island flags above keep the strict four-frame check.
+            if (!screenLayout) SystemClock.sleep(1500)
+            instrumentation.waitForIdleSync()
             val after = instrumentation.uiAutomation.takeScreenshot()
             val origin = IntArray(2)
             activity.scenario.onActivity {

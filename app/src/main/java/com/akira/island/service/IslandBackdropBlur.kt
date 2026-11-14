@@ -48,6 +48,8 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private var listening = false
     private var corrections = 0
     private var appliedBlurRadius = -1
+    private var positionBiasX = 0
+    private var positionBiasY = 0
     private fun setBlurRadius(window: android.view.Window, radius: Int) {
         if (Build.VERSION.SDK_INT >= 31 && appliedBlurRadius != radius) {
             window.setBackgroundBlurRadius(radius)
@@ -62,6 +64,8 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             val screen = IntArray(2); val local = IntArray(2); val actual = IntArray(2)
             parent.getLocationOnScreen(screen); parent.getLocationInWindow(local)
             w.decorView.getLocationOnScreen(actual)
+            positionBiasX = actual[0] - (screen[0] - local[0]) - w.attributes.x
+            positionBiasY = actual[1] - (screen[1] - local[1]) - w.attributes.y
             val dx = screen[0] - local[0] + bounds.left - actual[0]
             val dy = screen[1] - local[1] + bounds.top - actual[1]
             val sized = w.decorView.width == bounds.width() && w.decorView.height == bounds.height()
@@ -137,11 +141,10 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             // inscribes its blur in a notch's silhouette instead of spilling outside it.
             background.cornerRadius = maxOf(topCorner, corner)
             corrections = 0
-            setBlurRadius(w, 0)
             w.attributes = w.attributes.apply {
                 token = parent.windowToken
                 gravity = Gravity.TOP or Gravity.LEFT
-                width = bounds.width(); height = bounds.height(); x = bounds.left; y = bounds.top
+                width = bounds.width(); height = bounds.height(); x = bounds.left - positionBiasX; y = bounds.top - positionBiasY
                 format = PixelFormat.TRANSLUCENT
                 title = "DynamicIslandBackdrop"
             }
@@ -152,6 +155,9 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
                 setFitInsetsTypes(0)
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             }
+            // Blur is the initial material, not a second effect enabled after the glass appears.
+            // The pre-draw alignment guard still suppresses it if the platform places a frame wrong.
+            setBlurRadius(w, (28 * context.resources.displayMetrics.density).toInt())
             d.show()
         }.onFailure {
             failed = true

@@ -91,20 +91,14 @@ class IslandService : AccessibilityService() {
     private var networkRateMonitor: NetworkRateMonitor? = null
     private var backdrop: IslandBackdropBlur? = null
     private var bubbleBackdrop: IslandBackdropBlur? = null
-    private var backdropRadius = 0f
-    private var backdropShape = false
-    private var backdropCard = false
+    private var backdropGeometry: com.akira.island.island.BackdropGeometry? = null
     private var backdropPending = false
+    private var backdropSampler: (() -> Unit)? = null
     private var backdropClosed = false
-    private var backdropQueuedBody = Rect.Zero
-    private var backdropQueuedBubble = Rect.Zero
-    private var backdropQueuedRadius = 0f
     private val backdropUpdate = Runnable {
-        backdropPending = false
-        if (!backdropClosed) {
-            if (backdropQueuedBody != body || backdropQueuedBubble != bubble || backdropQueuedRadius != backdropRadius)
-                scheduleBackdrop()
-            else updateBackdrop()
+        if (backdropPending && !backdropClosed) {
+            backdropPending = false
+            updateBackdrop()
         }
     }
     private val owner = OverlayLifecycleOwner()
@@ -377,9 +371,13 @@ class IslandService : AccessibilityService() {
                                 // До целых пикселей: доли пикселя в конце пружины не двигают окна
                                 onBodyBounds = { r -> val q = r.snapped(); if (q != body) { body = q; onBoundsChanged() } },
                                 onBubbleBounds = { r -> val q = r.snapped(); if (q != bubble) { bubble = q; onBoundsChanged() } },
-                                onBackdropShape = { radius, usable, card ->
-                                    if (backdropRadius != radius || backdropShape != usable || backdropCard != card) {
-                                        backdropRadius = radius; backdropShape = usable; backdropCard = card
+                                onBackdropSampler = { sampler ->
+                                    backdropSampler = sampler
+                                    if (sampler == null) { backdropGeometry = null; scheduleBackdrop() }
+                                },
+                                onBackdropShape = { geometry ->
+                                    if (backdropGeometry != geometry) {
+                                        backdropGeometry = geometry
                                         scheduleBackdrop()
                                     }
                                 },
@@ -400,6 +398,13 @@ class IslandService : AccessibilityService() {
             }
         }
         drawRoot.addView(compose)
+        drawRoot.viewTreeObserver.addOnPreDrawListener {
+            // Sample animated graphics-layer transforms even when content itself is cached.
+            backdropSampler?.invoke()
+            // Layout has supplied the current bounds; prepare the material before foreground draw.
+            if (backdropPending) backdropUpdate.run()
+            true
+        }
         owner.create()
         owner.attach(drawRoot)
         placeDisplayWindow(SettingsRepo.current, IslandBus.contentRotation.value)
@@ -442,21 +447,22 @@ class IslandService : AccessibilityService() {
 
     private fun scheduleBackdrop() {
         if (backdropClosed || (backdrop == null && (!SettingsRepo.current.liquidGlass || Build.VERSION.SDK_INT < 31))) return
+        val s = SettingsRepo.current
+        if (!s.enabled || !visible || !IslandBus.screenOn.value || IslandBus.locked.value ||
+            IslandBus.powerSave.value || s.reduceEffects || !s.liquidGlass) {
+            backdrop?.hide(); bubbleBackdrop?.hide()
+        }
         if (backdropPending) return
         backdropPending = true
-        backdropQueuedBody = body
-        backdropQueuedBubble = bubble
-        backdropQueuedRadius = backdropRadius
-        backdrop?.hide()
-        bubbleBackdrop?.hide()
         val view = display
-        if (view != null) view.postOnAnimation(backdropUpdate) else handler.post(backdropUpdate)
+        if (view?.isAttachedToWindow == true) view.postInvalidateOnAnimation()
+        else handler.post(backdropUpdate)
     }
 
     private fun updateBackdrop() {
         val s = SettingsRepo.current
         val allowed = backdropAllowed(s.liquidGlass, s.enabled, visible && display?.alpha == 1f,
-            IslandBus.screenOn.value, IslandBus.locked.value, IslandBus.powerSave.value, s.reduceEffects, backdropShape)
+            IslandBus.screenOn.value, IslandBus.locked.value, IslandBus.powerSave.value, s.reduceEffects, backdropGeometry?.usable == true)
         if (!allowed || Build.VERSION.SDK_INT < 31) {
             backdrop?.hide(); bubbleBackdrop?.hide()
             if (!s.liquidGlass) {
@@ -466,11 +472,12 @@ class IslandService : AccessibilityService() {
             return
         }
         val view = display ?: return
-        if (backdropTransmits(s, backdropCard) && !body.isEmpty) {
+        val geometry = backdropGeometry
+        if (geometry != null && backdropTransmits(s, geometry.card) && !body.isEmpty && !geometry.area.isEmpty) {
             val layer = backdrop ?: IslandBackdropBlur(this, view).also { backdrop = it }
-            layer.update(android.graphics.Rect(floor(body.left).toInt(), floor(body.top).toInt(),
-                ceil(body.right).toInt(), ceil(body.bottom).toInt()), backdropRadius, true,
-                if (s.notch) dp(s.notchTopRadius).toFloat() else backdropRadius)
+            layer.update(android.graphics.Rect(ceil(geometry.area.left).toInt(), ceil(geometry.area.top).toInt(),
+                floor(geometry.area.right).toInt(), floor(geometry.area.bottom).toInt()), geometry.bottomRadius, true,
+                geometry.topRadius)
         } else backdrop?.hide()
         if (!IslandBus.expanded.value && !bubble.isEmpty && backdropTransmits(s, card = false)) {
             val layer = bubbleBackdrop ?: IslandBackdropBlur(this, view).also { bubbleBackdrop = it }
@@ -839,6 +846,7 @@ class IslandService : AccessibilityService() {
         faceUnlock?.stop(); faceUnlock = null
         networkRateMonitor?.stop(); networkRateMonitor = null
         backdropClosed = true
+        backdropSampler = null
         display?.removeCallbacks(backdropUpdate)
         backdropPending = false
         handler.removeCallbacks(backdropUpdate)

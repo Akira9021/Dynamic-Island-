@@ -64,6 +64,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -89,6 +90,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -147,7 +150,8 @@ private data class Frame(val act: Act, val expanded: Boolean) {
 fun IslandOverlay(
     onBodyBounds: (Rect) -> Unit = {},
     onBubbleBounds: (Rect) -> Unit = {},
-    onBackdropShape: ((Float, Boolean, Boolean) -> Unit)? = null,
+    onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
+    onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
 ) {
     val saved by SettingsRepo.state.collectAsState()
     val powerSave by IslandBus.powerSave.collectAsState()
@@ -404,7 +408,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape)
+                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -454,7 +458,8 @@ internal fun IslandRow(
     calibrating: Boolean,
     onBodyBounds: (Rect) -> Unit,
     onBubbleBounds: (Rect) -> Unit,
-    onBackdropShape: ((Float, Boolean, Boolean) -> Unit)? = null,
+    onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
+    onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
 ) {
     Row(
         Modifier
@@ -474,7 +479,7 @@ internal fun IslandRow(
         // Пустое место с другой стороны уравновешивает пузырь, чтобы остров стоял над камерой
         val left = s.bubbleSide == BubbleSide.LEFT
         if (left) BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = true) else Spacer(Modifier.animatedWidth(slot))
-        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds, onBackdropShape)
+        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds, onBackdropShape, onBackdropSampler)
         if (left) Spacer(Modifier.animatedWidth(slot)) else BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = false)
     }
 }
@@ -527,7 +532,8 @@ internal fun IslandBody(
     battery: BatteryInfo,
     calibrating: Boolean,
     onBounds: (Rect) -> Unit,
-    onBackdropShape: ((Float, Boolean, Boolean) -> Unit)? = null,
+    onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
+    onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
 ) {
     val preview = LocalIslandPreview.current
     val context = LocalContext.current
@@ -625,24 +631,35 @@ internal fun IslandBody(
     val settings by rememberUpdatedState(s)
     val realEgg by IslandBus.egg.collectAsState()
     val egg = realEgg && !preview
-    // Plain remembered values: reporting geometry must not invalidate composition while drawing.
-    val reportedBackdrop = remember { floatArrayOf(Float.NaN, -1f, -1f) }
-
+    // Native material follows the drawn contour, including spring/drag transforms.
+    // Touch bounds retain their existing behavior.
+    val reportedBackdrop = remember { arrayOfNulls<BackdropGeometry>(1) }
+    val backdropCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val backdropDensity = LocalDensity.current
+    fun reportBackdrop() {
+        if (s.liquidGlass && !preview && onBackdropShape != null) {
+            val c = backdropCoordinates[0]?.takeIf { it.isAttached && it.size.width > 0 && it.size.height > 0 } ?: return
+            val origin = c.localToWindow(Offset.Zero)
+            val x = c.localToWindow(Offset(c.size.width.toFloat(), 0f))
+            val y = c.localToWindow(Offset(0f, c.size.height.toFloat()))
+            val scale = maxOf((x-origin).getDistance()/c.size.width, (y-origin).getDistance()/c.size.height)
+            val geometry = BackdropGeometry(c.boundsInWindow(),
+                with(backdropDensity) { corner.value.toPx() }*scale,
+                with(backdropDensity) { (if (s.notch) s.notchTopRadius.dp else corner.value).toPx() }*scale,
+                !calibrating && !egg && scale.isFinite(), large)
+            if (reportedBackdrop[0] != geometry) {
+                reportedBackdrop[0] = geometry
+                onBackdropShape(geometry)
+            }
+        }
+    }
+    DisposableEffect(onBackdropSampler, s.liquidGlass, s.notch, s.notchTopRadius, large, calibrating, egg, preview, backdropDensity) {
+        onBackdropSampler?.invoke { reportBackdrop() }
+        onDispose { onBackdropSampler?.invoke(null) }
+    }
     Box(
         Modifier
             .onGloballyPositioned { onBounds(it.boundsInWindow()) }
-            .then(if (s.liquidGlass && !preview && onBackdropShape != null) Modifier.drawWithContent {
-                val radius = corner.value.toPx()
-                val usable = !calibrating && !egg &&
-                    kotlin.math.abs(jellyX.value - 1f) < 0.001f && kotlin.math.abs(jellyY.value - 1f) < 0.001f &&
-                    pull.value == 0f && shake.value == 0f
-                val flag = if (usable) 1f else 0f
-                if (reportedBackdrop[0] != radius || reportedBackdrop[1] != flag || reportedBackdrop[2] != (if (large) 1f else 0f)) {
-                    reportedBackdrop[0] = radius; reportedBackdrop[1] = flag; reportedBackdrop[2] = if (large) 1f else 0f
-                    onBackdropShape(radius, usable, large)
-                }
-                drawContent()
-            } else Modifier)
             .graphicsLayer {
                 // Пасхалка: остров подпрыгивает в такт песни; оплата прошла — на миг подрастает
                 val bump = if (preview) 1f else Egg.bump() * PayFx.pop.floatValue
@@ -651,6 +668,11 @@ internal fun IslandBody(
                 translationX = shake.value.dp.toPx()
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
+            .onGloballyPositioned { backdropCoordinates[0] = it; reportBackdrop() }
+            .then(if (s.liquidGlass && !preview && onBackdropShape != null) Modifier.drawWithContent {
+                reportBackdrop()
+                drawContent()
+            } else Modifier)
             .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)

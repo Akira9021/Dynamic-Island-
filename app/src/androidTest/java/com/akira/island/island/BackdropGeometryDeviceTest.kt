@@ -31,6 +31,37 @@ import java.util.concurrent.atomic.AtomicInteger
 class BackdropGeometryDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
+    @Test fun springFramesReportTheirVisibleContourWithoutDisablingBlur() {
+        val expanded = mutableStateOf(false)
+        val latest = java.util.concurrent.atomic.AtomicReference<BackdropGeometry?>()
+        var sample: (() -> Unit)? = null
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.runOnUiThread { compose.activity.setContent {
+                IslandTheme { Box(Modifier.width(340.dp)) {
+                    IslandBody(Act.Idle, expanded.value,
+                        IslandSettings(liquidGlass=true, reduceEffects=false, autoUpdateCheck=false,
+                            cornerRadius=20, expandedCornerRadius=20,
+                            expandStyle=com.akira.island.data.ExpandStyle.FRUIT,
+                            elasticity=com.akira.island.data.Elasticity.HIGH),
+                        null, BatteryInfo(62), false, {}, onBackdropShape={ latest.set(it) }, onBackdropSampler={ sample=it })
+                } }
+            } }
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.onRoot().captureToImage()
+            val compact=requireNotNull(latest.get())
+            compose.runOnIdle { expanded.value=true }
+            compose.mainClock.advanceTimeByFrame()
+            compose.mainClock.advanceTimeBy(64)
+            compose.onRoot().captureToImage()
+            compose.runOnIdle { requireNotNull(sample).invoke() }
+            val spring=requireNotNull(latest.get())
+            assertTrue("The material remains eligible during the spring",spring.usable)
+            assertTrue(spring.area.width>compact.area.width)
+            assertTrue(spring.bottomRadius>0f)
+        } finally { compose.mainClock.autoAdvance=true }
+    }
+
     @Test fun geometryUsesTheActualCornerAndStopsReportingWhenDisabled() {
         val saved = SettingsRepo.current
         val s = mutableStateOf(IslandSettings(liquidGlass = true, backdropBlur = false, expandedCornerRadius = 28, reduceEffects = true))
@@ -43,7 +74,7 @@ class BackdropGeometryDeviceTest {
             compose.runOnUiThread { compose.activity.setContent {
                 IslandTheme { Box(Modifier.width(300.dp)) {
                     IslandBody(activity.value, expanded.value, s.value, null, BatteryInfo(62), false, {},
-                        onBackdropShape = { r, ok, large -> card = large; radius = r; eligible = ok; reports.incrementAndGet() })
+                        onBackdropShape = { g -> card = g.card; radius = g.bottomRadius; eligible = g.usable; reports.incrementAndGet() })
                 } }
             } }
             compose.waitForIdle()

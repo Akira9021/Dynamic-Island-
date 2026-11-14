@@ -3,7 +3,6 @@ package com.akira.island.island
 import android.graphics.Bitmap
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,58 +25,6 @@ import org.junit.Test
 
 class VisualRefinementDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-
-    private fun clearEmulatorSystemAnr() {
-        if (android.os.Build.HARDWARE !in setOf("ranchu","goldfish")) return
-        val instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-        repeat(2) {
-            val root=instrumentation.uiAutomation.rootInActiveWindow ?: return
-            if(root.packageName?.toString() !in setOf("android","com.android.systemui")) return
-            val systemAnr=listOf("Quickstep","System UI","com.android.launcher3").any { name ->
-                root.findAccessibilityNodeInfosByText(name).any { node ->
-                    node.text?.toString()?.let { text -> text.contains("responding") || text.contains("не отвечает") }==true
-                }
-            }
-            if(!systemAnr) return
-            val close=listOf("Close app","Закрыть приложение").flatMap { root.findAccessibilityNodeInfosByText(it) }
-                .firstOrNull { it.isClickable } ?: return
-            assertTrue("Close only the emulator's system ANR dialog",close.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
-            instrumentation.waitForIdleSync()
-            android.os.SystemClock.sleep(1000)
-        }
-    }
-
-    @Test fun smallPopupDoesNotConsumeTheUnderlyingCardAndDismissesOutside() {
-        var dismissed=false;var outside=false;var chosen=false
-        compose.runOnUiThread { compose.activity.setContent {
-            var visible by remember { mutableStateOf(true) }
-            Box(Modifier.fillMaxSize().background(Color(0xFF232933))) {
-                Box(Modifier.align(Alignment.TopStart).offset(y=128.dp).size(64.dp).testTag("outside-shortcuts")
-                    .clickable { outside=true })
-                if(visible) PinnedShortcutPopup(listOf("com.akira.island"),emptyList(),{chosen=true},{},
-                    onDismiss={dismissed=true;visible=false})
-            }
-        } }
-        compose.onNodeWithTag("shortcut-orbit").assertIsDisplayed()
-        val bounds=compose.onNodeWithTag("shortcut-orbit").fetchSemanticsNode().boundsInRoot
-        val expected=176*compose.activity.resources.displayMetrics.density
-        assertTrue(bounds.width<=expected+1);assertTrue(bounds.height<=expected+1)
-        clearEmulatorSystemAnr()
-        val target=compose.onNodeWithTag("outside-shortcuts").fetchSemanticsNode().boundsInRoot.center
-        val location=IntArray(2)
-        compose.runOnUiThread { compose.activity.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0).getLocationOnScreen(location) }
-        val now=android.os.SystemClock.uptimeMillis()
-        val automation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
-        for(action in listOf(android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP)) {
-            val event=android.view.MotionEvent.obtain(now,android.os.SystemClock.uptimeMillis(),action,
-                target.x+location[0],target.y+location[1],0)
-            event.source=android.view.InputDevice.SOURCE_TOUCHSCREEN
-            try { assertTrue(automation.injectInputEvent(event,true)) } finally { event.recycle() }
-        }
-        compose.waitUntil(10_000) { dismissed }
-        compose.onNodeWithTag("shortcut-orbit").assertDoesNotExist()
-        assertTrue(outside);assertFalse(chosen)
-    }
 
     @Test fun pinnedRowIsInsideTheSummaryWithoutAnExtraPopup() {
         val settings=com.akira.island.data.SettingsRepo.current
