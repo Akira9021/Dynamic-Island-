@@ -42,6 +42,9 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private var bounds = Rect()
     private var corner = 0f
     private var topCorner = 0f
+    private var blurStrength = 50
+    private fun requestedBlurRadius(): Int =
+        (glassBlurRadiusDp(blurStrength) * context.resources.displayMetrics.density).toInt()
     private var wanted = false
     private var failed = false
     private var closed = false
@@ -70,7 +73,7 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             val dy = screen[1] - local[1] + bounds.top - actual[1]
             val sized = w.decorView.width == bounds.width() && w.decorView.height == bounds.height()
             if (dx == 0 && dy == 0 && sized) {
-                setBlurRadius(w, (28 * context.resources.displayMetrics.density).toInt())
+                setBlurRadius(w, requestedBlurRadius())
             } else {
                 setBlurRadius(w, 0)
                 if (corrections++ < 2) w.attributes = w.attributes.apply {
@@ -101,7 +104,7 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
         runCatching { manager.isCrossWindowBlurEnabled }.getOrDefault(false)
     val showing: Boolean get() = dialog?.isShowing == true && dialog?.window?.decorView?.visibility == View.VISIBLE
 
-    fun update(area: Rect, cornerPx: Float, enabled: Boolean, topCornerPx: Float = cornerPx) {
+    fun update(area: Rect, cornerPx: Float, enabled: Boolean, topCornerPx: Float = cornerPx, strengthPercent: Int = 50) {
         if (closed) return
         val bottom = cornerPx.coerceAtLeast(0f)
         val top = topCornerPx.coerceAtLeast(0f)
@@ -109,14 +112,15 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
         val target = Rect(area).apply { inset(horizontalInset, 0) }
         val clippedBottom = if (horizontalInset > 0) 0f else bottom
         val clippedTop = if (horizontalInset > 0) 0f else top
-        if (bounds == target && corner == clippedBottom && topCorner == clippedTop && wanted == enabled) return
-        bounds.set(target); corner = clippedBottom; topCorner = clippedTop; wanted = enabled
+        val strength = strengthPercent.coerceIn(0, 100)
+        if (bounds == target && corner == clippedBottom && topCorner == clippedTop && wanted == enabled && blurStrength == strength) return
+        bounds.set(target); corner = clippedBottom; topCorner = clippedTop; wanted = enabled; blurStrength = strength
         render()
     }
 
     private fun render() {
         if (closed) return
-        if (!wanted || bounds.isEmpty || !supported || !parent.isAttachedToWindow) {
+        if (!wanted || blurStrength == 0 || bounds.isEmpty || !supported || !parent.isAttachedToWindow) {
             dialog?.hide(); return
         }
         if (Build.VERSION.SDK_INT < 31) return
@@ -157,7 +161,7 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             }
             // Blur is the initial material, not a second effect enabled after the glass appears.
             // The pre-draw alignment guard still suppresses it if the platform places a frame wrong.
-            setBlurRadius(w, (28 * context.resources.displayMetrics.density).toInt())
+            setBlurRadius(w, requestedBlurRadius())
             d.show()
         }.onFailure {
             failed = true

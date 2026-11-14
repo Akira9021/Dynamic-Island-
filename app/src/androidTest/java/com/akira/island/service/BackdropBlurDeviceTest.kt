@@ -165,6 +165,24 @@ class BackdropBlurDeviceTest {
                 }
             assertTrue("Foreground fixture must contain sharp red text", redBefore > 100)
             assertEquals("Blur must not cover the foreground window", redBefore, redAfter)
+            if (screenLayout && !secondBubble) {
+                // Same owner and geometry: changing only strength must invalidate the window.
+                activity.scenario.onActivity {
+                    blur!!.update(Rect(0, 0, 480, 280), 48f, true, strengthPercent = 0)
+                    assertFalse("Zero strength removes native blur", blur!!.showing)
+                }
+                instrumentation.waitForIdleSync(); SystemClock.sleep(500)
+                val clear = instrumentation.uiAutomation.takeScreenshot()
+                assertTrue("Zero restores the sharp background", contrast(clear) >= contrast(before) * .95)
+                activity.scenario.onActivity {
+                    blur!!.update(Rect(0, 0, 480, 280), 48f, true, strengthPercent = 100)
+                    assertTrue("Changing strength recreates blur at unchanged bounds", blur!!.showing)
+                }
+                instrumentation.waitForIdleSync(); SystemClock.sleep(500)
+                val strong = instrumentation.uiAutomation.takeScreenshot()
+                assertTrue("Maximum strength blurs the actual background", contrast(strong) < contrast(before) / 2)
+                clear.recycle(); strong.recycle()
+            }
         } finally {
             activity.scenario.onActivity { blur?.close(); bubbleBlur?.close(); foreground?.dismiss() }
         }

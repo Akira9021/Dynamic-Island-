@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.tr
@@ -141,6 +142,17 @@ fun ColorsScreen(onBack: () -> Unit) {
             "${if (s.liquidGlass) s.glassOpacity else s.islandOpacity}%", color = Tile.Teal) { v ->
             SettingsRepo.update { if (liquidGlass) copy(glassOpacity = v.toInt()) else copy(islandOpacity = v.toInt()) }
         }
+        if (s.liquidGlass) {
+            Box(Modifier.testTag("glass-blur-strength")) {
+                GroupSlider(Pos.Single, Icons.Rounded.BlurOn, tr("Сила размытия", "Blur strength"),
+                    s.glassBlurStrength.coerceIn(0,100).toFloat(),0f..100f,"${s.glassBlurStrength.coerceIn(0,100)}%",color=Tile.Teal) { value ->
+                    SettingsRepo.update { copy(glassBlurStrength=value.toInt().coerceIn(0,100)) }
+                }
+            }
+            SettingsHint(tr("0% — без размытия, 50% — стандартное, 100% — сильное. Меняется фон, текст и кнопки остаются чёткими.",
+                "0%: no blur, 50%: standard, 100%: strong. Only the background changes; text and buttons stay sharp."))
+            BlurStrengthPreview(s.glassBlurStrength,blurAvailable && !s.reduceEffects)
+        }
         GroupSlider(Pos.Single, Icons.Rounded.Gradient, tr("Затемнение снизу", "Bottom shading"), s.bottomGradient.toFloat(), 0f..80f, "${s.bottomGradient}%", color = Tile.Indigo) {
             v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
         }
@@ -149,7 +161,9 @@ fun ColorsScreen(onBack: () -> Unit) {
             s.reduceEffects -> tr("Размытие отключено режимом уменьшения эффектов; материал стекла сохранён.", "Blur is disabled by Reduce effects; the glass material is retained.")
             blurRejected || !blurAvailable -> tr("Системное размытие сейчас недоступно; прозрачность и блики стекла сохраняются.", "System blur is currently unavailable; glass transparency and reflections remain.")
             !islandRunning -> tr("Размытие встроено в стекло и появится после включения острова.", "Blur is part of the glass and appears when the island is running.")
-            else -> tr("Размытие — часть стекла и ограничено формой острова. Плотность регулируется выше.", "Blur follows the glass shape. Adjust its density above.")
+            s.glassBlurStrength == 0 -> tr("Размытие выключено; прозрачность и блики стекла сохраняются.", "Blur is off; glass transparency and reflections remain.")
+            else -> tr("Сила размытия меняет фон, плотность стекла — его заливку. Изменения применяются к острову и второму кружочку.",
+                "Blur strength changes the background; glass density changes its tint. Changes apply to the island and activity bubble.")
         })
         GroupToggle(Pos.Single, Icons.Rounded.Tonality, tr("Тень", "Shadow"), tr("Заметна на светлом фоне; режим «Уменьшить эффекты» отключает её.", "Visible on light backgrounds; Reduce effects disables it."), s.shadow, color = Tile.Gray) {
             v -> SettingsRepo.update { copy(shadow = v) }

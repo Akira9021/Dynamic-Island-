@@ -477,12 +477,13 @@ class IslandService : AccessibilityService() {
             val layer = backdrop ?: IslandBackdropBlur(this, view).also { backdrop = it }
             layer.update(android.graphics.Rect(ceil(geometry.area.left).toInt(), ceil(geometry.area.top).toInt(),
                 floor(geometry.area.right).toInt(), floor(geometry.area.bottom).toInt()), geometry.bottomRadius, true,
-                geometry.topRadius)
+                geometry.topRadius, strengthPercent = s.glassBlurStrength)
         } else backdrop?.hide()
         if (!IslandBus.expanded.value && !bubble.isEmpty && backdropTransmits(s, card = false)) {
             val layer = bubbleBackdrop ?: IslandBackdropBlur(this, view).also { bubbleBackdrop = it }
             layer.update(android.graphics.Rect(floor(bubble.left).toInt(), floor(bubble.top).toInt(),
-                ceil(bubble.right).toInt(), ceil(bubble.bottom).toInt()), minOf(bubble.width, bubble.height)/2f, true)
+                ceil(bubble.right).toInt(), ceil(bubble.bottom).toInt()), minOf(bubble.width, bubble.height)/2f, true,
+                strengthPercent = s.glassBlurStrength)
         } else bubbleBackdrop?.hide()
     }
 

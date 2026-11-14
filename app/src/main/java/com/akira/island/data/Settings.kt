@@ -296,6 +296,7 @@ data class IslandSettings(
     // Liquid Glass: полупрозрачное стекло с бликами вместо чёрной заливки. По умолчанию выключено
     val liquidGlass: Boolean = false,
     val glassOpacity: Int = 68,
+    val glassBlurStrength: Int = 50,
     val backdropBlur: Boolean = false,
 
     // Анимации
