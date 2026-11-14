@@ -2,6 +2,8 @@ package com.akira.island.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,7 +23,8 @@ internal fun HsvColorPickerDialog(initial: Long, onDismiss: () -> Unit, onConfir
     var selection by remember(initial) { mutableStateOf(HsvColorSelection.fromArgb(initial)) }
     val color = Color(selection.toArgb())
     AlertDialog(onDismissRequest = onDismiss, title = { Text(tr("Свой цвет", "Custom color")) }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("hsv-color-picker")) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("hsv-color-picker")
+            .verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().height(44.dp).background(color, RoundedCornerShape(12.dp)))
             Text(String.format(Locale.ROOT, "#%06X", selection.toArgb() and 0xFFFFFF), style = MaterialTheme.typography.labelLarge)
             Text(tr("Оттенок", "Hue"))
