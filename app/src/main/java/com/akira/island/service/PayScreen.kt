@@ -231,7 +231,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         if (readyAt != 0L) {
             val base = baseline ?: return
             // Экран оплаты ещё дорисовывается — всё на нём «как было», а не оплата
-            if (now - readyAt < 500) {
+            if (paymentBaselinePending(now - readyAt, base, texts)) {
                 base += texts
                 return
             }

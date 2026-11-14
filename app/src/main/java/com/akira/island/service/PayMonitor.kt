@@ -242,7 +242,8 @@ object PayMonitor {
         } else if (!isPayApp(context, pkg) && !bankish.containsMatchIn(pkg)) {
             return false
         }
-        val text = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+        val text = paymentNotificationBody(ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+            ex.getCharSequence(Notification.EXTRA_TEXT)?.toString())
         val all = PayScreenParser.normalize("$title $text")
         // У настоящей оплаты всегда есть сумма; без неё это скорее реклама или новость банка
         val sum = PayScreenParser.amount(all)
