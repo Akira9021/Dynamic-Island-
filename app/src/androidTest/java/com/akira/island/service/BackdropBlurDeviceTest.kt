@@ -83,7 +83,9 @@ class BackdropBlurDeviceTest {
             activity.scenario.onActivity { a ->
                 blur = IslandBackdropBlur(a, foreground!!.window!!.decorView).also { it.update(Rect(0, 0, 480, 280), 48f, true) }
                 if (secondBubble) bubbleBlur = IslandBackdropBlur(a, foreground!!.window!!.decorView).also {
-                    it.update(Rect(500, 0, 560, 60), 30f, true)
+                    // Dialog fixtures are below SystemUI, unlike an accessibility overlay.
+                    // Sample actual background below the status bar, not its foreground glyphs.
+                    it.update(Rect(500, 120, 560, 180), 30f, true)
                 }
             }
             instrumentation.waitForIdleSync(); SystemClock.sleep(1500)
@@ -107,7 +109,7 @@ class BackdropBlurDeviceTest {
             assertTrue("Actual background stripes must lose contrast", contrast(after) < contrast(before) / 2)
             if (secondBubble) {
                 fun section(bitmap: android.graphics.Bitmap, from: Int, to: Int): Long {
-                    val y = origin[1] + 30
+                    val y = origin[1] + 150
                     return (origin[0]+from until origin[0]+to).sumOf { x ->
                         kotlin.math.abs(Color.red(bitmap.getPixel(x,y))-Color.red(bitmap.getPixel(x+1,y))).toLong()
                     }

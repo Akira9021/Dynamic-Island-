@@ -27,7 +27,7 @@ import org.junit.Test
 class VisualRefinementDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    @org.junit.Before fun clearEmulatorSystemAnr() {
+    private fun clearEmulatorSystemAnr() {
         if (android.os.Build.HARDWARE !in setOf("ranchu","goldfish")) return
         val instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         repeat(2) {
@@ -91,7 +91,7 @@ class VisualRefinementDeviceTest {
                 com.akira.island.data.SettingsRepo.update { com.akira.island.data.IslandSettings(
                     language=com.akira.island.data.AppLanguage.EN,reduceEffects=true,autoUpdateCheck=false,
                     cardCharging=false,cardMedia=false,cardAlarm=false,cardLive=false,cardCall=false,
-                    cardProgress=false,historyMinutes=0,quickActions=emptyList()) }
+                    cardProgress=false,historyMinutes=0) }
                 com.akira.island.data.ExtrasRepo.update { com.akira.island.data.ExtraSettings(
                     apps=listOf("com.akira.island"),contacts=listOf(ContactShortcut("Example contact","content://com.android.contacts/contacts/991"))) }
                 IslandBus.locked.value=false;IslandBus.expanded.value=true;IslandBus.notice.value=null
@@ -103,9 +103,14 @@ class VisualRefinementDeviceTest {
             compose.onNodeWithTag("app:com.akira.island").assertIsDisplayed()
             compose.onNodeWithTag("contact:content://com.android.contacts/contacts/991").assertIsDisplayed()
             compose.onNodeWithContentDescription("Open summary").assertDoesNotExist()
-            compose.onRoot().captureToImage()
+            val image=compose.onRoot().captureToImage().asAndroidBitmap()
+            File(compose.activity.getExternalFilesDir(null),"pinned-row-summary.png").outputStream().use {
+                image.compress(Bitmap.CompressFormat.PNG,100,it)
+            }
             val row=compose.onNodeWithTag("shortcut-row").fetchSemanticsNode().boundsInRoot
             assertTrue(row.height <= 60*compose.activity.resources.displayMetrics.density)
+            val timer=compose.onNodeWithText("Timer").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue("Shortcuts stay above the existing action buttons",row.bottom<=timer.top)
             assertTrue(IslandBus.expanded.value)
         } finally { compose.runOnUiThread {
             com.akira.island.data.SettingsRepo.update{settings};com.akira.island.data.ExtrasRepo.update{extras}

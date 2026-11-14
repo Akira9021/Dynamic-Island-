@@ -99,8 +99,14 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
 
     fun update(area: Rect, cornerPx: Float, enabled: Boolean, topCornerPx: Float = cornerPx) {
         if (closed) return
-        if (bounds == area && corner == cornerPx && topCorner == topCornerPx && wanted == enabled) return
-        bounds.set(area); corner = cornerPx.coerceAtLeast(0f); topCorner = topCornerPx.coerceAtLeast(0f); wanted = enabled
+        val bottom = cornerPx.coerceAtLeast(0f)
+        val top = topCornerPx.coerceAtLeast(0f)
+        val horizontalInset = backdropHorizontalInset(area.width(), area.height(), bottom, top)
+        val target = Rect(area).apply { inset(horizontalInset, 0) }
+        val clippedBottom = if (horizontalInset > 0) 0f else bottom
+        val clippedTop = if (horizontalInset > 0) 0f else top
+        if (bounds == target && corner == clippedBottom && topCorner == clippedTop && wanted == enabled) return
+        bounds.set(target); corner = clippedBottom; topCorner = clippedTop; wanted = enabled
         render()
     }
 
