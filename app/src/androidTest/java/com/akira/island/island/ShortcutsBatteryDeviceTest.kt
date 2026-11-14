@@ -77,37 +77,37 @@ class ShortcutsBatteryDeviceTest {
         File(dir, "$name.png").outputStream().use { compose.onAllNodes(isRoot()).onFirst().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    @Test fun orbitPagesKeepAllTwelveTargetsAndTheirRealCallbacks() {
+    @Test fun rowKeepsAllTwelveTargetsAndTheirRealCallbacks() {
         var openedApp: String? = null
         var openedContact: ContactShortcut? = null
-        content { ShortcutOrbit(apps, contacts, { openedApp = it }, { openedContact = it }) }
-        compose.onNodeWithTag("shortcut-orbit").assertIsDisplayed()
+        content { ShortcutRow(apps, contacts, { openedApp = it }, { openedContact = it }) }
+        compose.onNodeWithTag("shortcut-row").assertIsDisplayed()
         compose.onNodeWithTag("shortcuts-previous").assertDoesNotExist()
-        apps.forEach { compose.onNodeWithTag("app:$it").assertIsDisplayed() }
-        compose.onNodeWithTag("app:${apps.first()}").performClick()
+        apps.forEach { compose.onNodeWithTag("app:$it").performScrollTo().assertIsDisplayed() }
+        compose.onNodeWithTag("app:${apps.first()}").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(apps.first(), openedApp) }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val ownLabel = context.packageManager.getApplicationLabel(context.applicationInfo).toString()
         compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription(ownLabel).fetchSemanticsNodes().isNotEmpty() }
         screenshot("apps-orbit")
-        contacts.forEach { compose.onNodeWithTag("contact:${it.uri}").assertIsDisplayed() }
-        compose.onNodeWithTag("contact:${contacts.last().uri}").performClick()
+        contacts.forEach { compose.onNodeWithTag("contact:${it.uri}").performScrollTo().assertIsDisplayed() }
+        compose.onNodeWithTag("contact:${contacts.last().uri}").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(contacts.last(), openedContact) }
         compose.onNodeWithTag("shortcuts-next").assertDoesNotExist()
         screenshot("contacts-orbit")
     }
 
-    @Test fun largeFontsUseGridAndRemovingLastPageKeepsRemainingAppsReachable() {
+    @Test fun largeFontsKeepTheRowShortAndRemovingContactsKeepsAppsReachable() {
         compose.runOnUiThread { ExtrasRepo.update { ExtraSettings(apps = this@ShortcutsBatteryDeviceTest.apps, contacts = this@ShortcutsBatteryDeviceTest.contacts) } }
         content(width = 216, scale = 1.5f) {
             val extras = ExtrasRepo.state.collectAsState().value
-            ShortcutOrbit(extras.apps, extras.contacts, {}, {})
+            ShortcutRow(extras.apps, extras.contacts, {}, {})
         }
-        compose.onNodeWithTag("shortcut-grid").assertIsDisplayed()
-        compose.onNodeWithTag("contact:${contacts.last().uri}").assertIsDisplayed()
+        compose.onNodeWithTag("shortcut-row").assertIsDisplayed()
+        compose.onNodeWithTag("contact:${contacts.last().uri}").performScrollTo().assertIsDisplayed()
         screenshot("large-font-grid")
         compose.runOnUiThread { ExtrasRepo.update { copy(contacts = emptyList()) } }
-        compose.onNodeWithTag("app:${apps.first()}").assertIsDisplayed()
+        compose.onNodeWithTag("app:${apps.first()}").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("shortcuts-next").assertDoesNotExist()
     }
 
@@ -118,19 +118,19 @@ class ShortcutsBatteryDeviceTest {
             IslandBus.expanded.value=true; IslandBus.notice.value=null
         }
         content { IslandOverlay() }
-        compose.onNodeWithTag("app:${apps.first()}").assertIsDisplayed()
+        compose.onNodeWithTag("app:${apps.first()}").performScrollTo().assertIsDisplayed()
         compose.runOnUiThread { IslandBus.locked.value = true }
         // StateFlow delivery to collectAsState is asynchronous; wait for that frame, not an old tree.
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithTag("shortcut-orbit").fetchSemanticsNodes().isEmpty()
+            compose.onAllNodesWithTag("shortcut-row").fetchSemanticsNodes().isEmpty()
         }
-        compose.onNodeWithTag("shortcut-orbit").assertDoesNotExist()
+        compose.onNodeWithTag("shortcut-row").assertDoesNotExist()
         compose.runOnIdle { assertEquals(apps, ExtrasRepo.state.value.apps); assertEquals(contacts, ExtrasRepo.state.value.contacts) }
         compose.runOnUiThread { IslandBus.locked.value = false }
         compose.waitUntil(10_000) {
             compose.onAllNodesWithTag("app:${apps.first()}").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("app:${apps.first()}").assertIsDisplayed()
+        compose.onNodeWithTag("app:${apps.first()}").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun settingsRemoveButtonOnlyRemovesTheChosenContact() {

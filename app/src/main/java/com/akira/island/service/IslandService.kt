@@ -90,10 +90,23 @@ class IslandService : AccessibilityService() {
     private var touch: TouchRoot? = null
     private var networkRateMonitor: NetworkRateMonitor? = null
     private var backdrop: IslandBackdropBlur? = null
+    private var bubbleBackdrop: IslandBackdropBlur? = null
     private var backdropRadius = 0f
     private var backdropShape = false
+    private var backdropCard = false
+    private var backdropPending = false
     private var backdropClosed = false
-    private val backdropUpdate = Runnable { updateBackdrop() }
+    private var backdropQueuedBody = Rect.Zero
+    private var backdropQueuedBubble = Rect.Zero
+    private var backdropQueuedRadius = 0f
+    private val backdropUpdate = Runnable {
+        backdropPending = false
+        if (!backdropClosed) {
+            if (backdropQueuedBody != body || backdropQueuedBubble != bubble || backdropQueuedRadius != backdropRadius)
+                scheduleBackdrop()
+            else updateBackdrop()
+        }
+    }
     private val owner = OverlayLifecycleOwner()
     private var events: SystemEvents? = null
     private var faceUnlock: com.akira.island.face.FaceUnlockController? = null
@@ -364,9 +377,9 @@ class IslandService : AccessibilityService() {
                                 // До целых пикселей: доли пикселя в конце пружины не двигают окна
                                 onBodyBounds = { r -> val q = r.snapped(); if (q != body) { body = q; onBoundsChanged() } },
                                 onBubbleBounds = { r -> val q = r.snapped(); if (q != bubble) { bubble = q; onBoundsChanged() } },
-                                onBackdropShape = { radius, usable ->
-                                    if (backdropRadius != radius || backdropShape != usable) {
-                                        backdropRadius = radius; backdropShape = usable
+                                onBackdropShape = { radius, usable, card ->
+                                    if (backdropRadius != radius || backdropShape != usable || backdropCard != card) {
+                                        backdropRadius = radius; backdropShape = usable; backdropCard = card
                                         scheduleBackdrop()
                                     }
                                 },
@@ -429,24 +442,41 @@ class IslandService : AccessibilityService() {
 
     private fun scheduleBackdrop() {
         if (backdropClosed || (backdrop == null && (!SettingsRepo.current.liquidGlass || Build.VERSION.SDK_INT < 31))) return
+        if (backdropPending) return
+        backdropPending = true
+        backdropQueuedBody = body
+        backdropQueuedBubble = bubble
+        backdropQueuedRadius = backdropRadius
         backdrop?.hide()
-        handler.removeCallbacks(backdropUpdate)
-        handler.postDelayed(backdropUpdate, TOUCH_QUIET_MS)
+        bubbleBackdrop?.hide()
+        val view = display
+        if (view != null) view.postOnAnimation(backdropUpdate) else handler.post(backdropUpdate)
     }
 
     private fun updateBackdrop() {
         val s = SettingsRepo.current
-        val allowed = backdropAllowed(s.liquidGlass, s.enabled, visible && display?.alpha == 1f, IslandBus.expanded.value,
+        val allowed = backdropAllowed(s.liquidGlass, s.enabled, visible && display?.alpha == 1f,
             IslandBus.screenOn.value, IslandBus.locked.value, IslandBus.powerSave.value, s.reduceEffects, backdropShape)
-        if (!allowed || !backdropTransmits(s) || body.isEmpty || Build.VERSION.SDK_INT < 31) {
-            backdrop?.hide()
-            if (!s.liquidGlass) { backdrop?.close(); backdrop = null }
+        if (!allowed || Build.VERSION.SDK_INT < 31) {
+            backdrop?.hide(); bubbleBackdrop?.hide()
+            if (!s.liquidGlass) {
+                backdrop?.close(); backdrop = null
+                bubbleBackdrop?.close(); bubbleBackdrop = null
+            }
             return
         }
         val view = display ?: return
-        val layer = backdrop ?: IslandBackdropBlur(this, view).also { backdrop = it }
-        layer.update(android.graphics.Rect(floor(body.left).toInt(), floor(body.top).toInt(),
-            ceil(body.right).toInt(), ceil(body.bottom).toInt()), backdropRadius, true)
+        if (backdropTransmits(s, backdropCard) && !body.isEmpty) {
+            val layer = backdrop ?: IslandBackdropBlur(this, view).also { backdrop = it }
+            layer.update(android.graphics.Rect(floor(body.left).toInt(), floor(body.top).toInt(),
+                ceil(body.right).toInt(), ceil(body.bottom).toInt()), backdropRadius, true,
+                if (s.notch) dp(s.notchTopRadius).toFloat() else backdropRadius)
+        } else backdrop?.hide()
+        if (!IslandBus.expanded.value && !bubble.isEmpty && backdropTransmits(s, card = false)) {
+            val layer = bubbleBackdrop ?: IslandBackdropBlur(this, view).also { bubbleBackdrop = it }
+            layer.update(android.graphics.Rect(floor(bubble.left).toInt(), floor(bubble.top).toInt(),
+                ceil(bubble.right).toInt(), ceil(bubble.bottom).toInt()), minOf(bubble.width, bubble.height)/2f, true)
+        } else bubbleBackdrop?.hide()
     }
 
     private fun isAmbientDisplay(): Boolean {
@@ -527,6 +557,7 @@ class IslandService : AccessibilityService() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         Controls.collapse()
         backdrop?.hide()
+        bubbleBackdrop?.hide()
         val view = display ?: return
         view.alpha = 0f
         handler.removeCallbacks(shoot)
@@ -808,8 +839,11 @@ class IslandService : AccessibilityService() {
         faceUnlock?.stop(); faceUnlock = null
         networkRateMonitor?.stop(); networkRateMonitor = null
         backdropClosed = true
+        display?.removeCallbacks(backdropUpdate)
+        backdropPending = false
         handler.removeCallbacks(backdropUpdate)
         backdrop?.close(); backdrop = null
+        bubbleBackdrop?.close(); bubbleBackdrop = null
         // Остров выключили в спец. возможностях — держать его процесс больше незачем
         stopService(Intent(this, KeepAliveService::class.java))
         handler.removeCallbacks(shoot)

@@ -147,7 +147,7 @@ private data class Frame(val act: Act, val expanded: Boolean) {
 fun IslandOverlay(
     onBodyBounds: (Rect) -> Unit = {},
     onBubbleBounds: (Rect) -> Unit = {},
-    onBackdropShape: ((Float, Boolean) -> Unit)? = null,
+    onBackdropShape: ((Float, Boolean, Boolean) -> Unit)? = null,
 ) {
     val saved by SettingsRepo.state.collectAsState()
     val powerSave by IslandBus.powerSave.collectAsState()
@@ -320,14 +320,7 @@ fun IslandOverlay(
     // Вторая активность — кружком рядом, если его не выключили в «Поведении»
     val secondary = if (!s.bubble || primary.transient || incoming || calibrating || s.collapseOnShade && shadeOpen) null
     else secondaryWithPendingAlarm(acts, primary)
-    var pinnedSummary by remember { mutableStateOf(false) }
-    val shortcutsLocked by IslandBus.locked.collectAsState()
-    val pinsOffSchedule by IslandBus.offSchedule.collectAsState()
-    LaunchedEffect(expanded) { if (!expanded) pinnedSummary = false }
-    val showPins = s.enabled && !pinsOffSchedule && expanded && primary is Act.Idle && !pinnedSummary &&
-        (extras.apps.isNotEmpty() || extras.contacts.isNotEmpty()) && !shortcutsLocked &&
-        screenOn && !shadeOpen && !calibrating
-    val showExpanded = expanded && !showPins && !primary.transient && !incoming && !calibrating && !(s.collapseOnShade && shadeOpen)
+    val showExpanded = expanded && !primary.transient && !incoming && !calibrating && !(s.collapseOnShade && shadeOpen)
     val h = s.height.dp
 
     // Пузырь уходит с анимацией, поэтому помним последнюю активность в нём
@@ -342,9 +335,9 @@ fun IslandOverlay(
     LaunchedEffect(focusGone) { if (focusGone) Controls.collapse() }
 
     // «Сворачивать раскрытый остров»: если его столько секунд не трогают, он сворачивается сам
-    LaunchedEffect(showExpanded, showPins, s.autoCollapseSec) {
+    LaunchedEffect(showExpanded, s.autoCollapseSec) {
         val limit = s.autoCollapseSec * 1000L
-        if ((!showExpanded && !showPins) || limit <= 0) return@LaunchedEffect
+        if (!showExpanded || limit <= 0) return@LaunchedEffect
         val opened = SystemClock.elapsedRealtime()
         while (true) {
             val idle = SystemClock.elapsedRealtime() - maxOf(opened, IslandBus.lastTouch)
@@ -355,7 +348,7 @@ fun IslandOverlay(
     }
 
     val keyguard by IslandBus.keyguard.collectAsState()
-    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle && secondary == null, showExpanded || showPins, calibrating, screenOn, keyguard, shadeOpen)
+    val autoHideEligible = shouldTimeOutIdle(s, primary is Act.Idle && secondary == null, showExpanded, calibrating, screenOn, keyguard, shadeOpen)
     var idleTimedOut by remember { mutableStateOf(false) }
     var idleWakeRevision by remember { mutableLongStateOf(0L) }
     LaunchedEffect(autoHideEligible, s.idleHideSec, idleWakeRevision) {
@@ -373,7 +366,7 @@ fun IslandOverlay(
     }
     val timedHidden = autoHideEligible && idleTimedOut
     // Explicitly hiding the empty capsule retains its previous non-interactive behavior.
-    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !showPins && !calibrating && !(s.evLock && keyguard)
+    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !calibrating && !(s.evLock && keyguard)
     val wakeBounds = remember { mutableStateOf(Rect.Zero) }
 
     // Спрятанный остров не ловит касания, даже пока уходит
@@ -426,9 +419,8 @@ fun IslandOverlay(
             EggSparks { body.value }
             EggDriver({ body.value }, s)
         }
-        if (showPins) PinnedShortcutLayer(extras.apps, extras.contacts, onSummary = { pinnedSummary = true })
         com.akira.island.face.FaceUnlockLayer(s, allowed = !calibrating && !shadeOpen &&
-            !showExpanded && !showPins && !eggOn)
+            !showExpanded && !eggOn)
     }
 }
 
@@ -462,7 +454,7 @@ internal fun IslandRow(
     calibrating: Boolean,
     onBodyBounds: (Rect) -> Unit,
     onBubbleBounds: (Rect) -> Unit,
-    onBackdropShape: ((Float, Boolean) -> Unit)? = null,
+    onBackdropShape: ((Float, Boolean, Boolean) -> Unit)? = null,
 ) {
     Row(
         Modifier
@@ -501,6 +493,7 @@ private fun Modifier.animatedWidth(width: State<Dp>) = layout { measurable, cons
  */
 @Composable
 private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSettings, onBounds: (Rect) -> Unit, left: Boolean) {
+    LaunchedEffect(visible) { if (!visible) onBounds(Rect.Zero) }
     Box(
         Modifier
             .zIndex(-1f)
@@ -510,8 +503,7 @@ private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSe
                 // Справа пузырь прижат к дальнему краю места под него, слева — к ближнему краю экрана; пока место
                 // растёт, он выходит из-под острова
                 layout(w, p.height) { p.place(if (left) 0 else w - p.width, 0) }
-            }
-            .onGloballyPositioned { onBounds(it.boundsInWindow()) },
+            },
     ) {
         val drop = TransformOrigin(if (left) 1f else 0f, 0.5f)
         AnimatedVisibility(
@@ -519,7 +511,9 @@ private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSe
             enter = if (s.reduceEffects) fadeIn() else scaleIn(islandSpec(s), initialScale = 0.4f, transformOrigin = drop) + fadeIn(tween(90)),
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.4f, transformOrigin = drop) + fadeOut(tween(120, delayMillis = 60)),
         ) {
-            if (act != null) Bubble(act, s)
+            if (act != null) Box(Modifier.onGloballyPositioned {
+                onBounds(if (visible) it.boundsInWindow() else Rect.Zero)
+            }) { Bubble(act, s) }
         }
     }
 }
@@ -533,7 +527,7 @@ internal fun IslandBody(
     battery: BatteryInfo,
     calibrating: Boolean,
     onBounds: (Rect) -> Unit,
-    onBackdropShape: ((Float, Boolean) -> Unit)? = null,
+    onBackdropShape: ((Float, Boolean, Boolean) -> Unit)? = null,
 ) {
     val preview = LocalIslandPreview.current
     val context = LocalContext.current
@@ -632,20 +626,20 @@ internal fun IslandBody(
     val realEgg by IslandBus.egg.collectAsState()
     val egg = realEgg && !preview
     // Plain remembered values: reporting geometry must not invalidate composition while drawing.
-    val reportedBackdrop = remember { floatArrayOf(Float.NaN, -1f) }
+    val reportedBackdrop = remember { floatArrayOf(Float.NaN, -1f, -1f) }
 
     Box(
         Modifier
             .onGloballyPositioned { onBounds(it.boundsInWindow()) }
             .then(if (s.liquidGlass && !preview && onBackdropShape != null) Modifier.drawWithContent {
                 val radius = corner.value.toPx()
-                val usable = expanded && !calibrating && !s.notch && !egg &&
+                val usable = !calibrating && !egg &&
                     kotlin.math.abs(jellyX.value - 1f) < 0.001f && kotlin.math.abs(jellyY.value - 1f) < 0.001f &&
                     pull.value == 0f && shake.value == 0f
                 val flag = if (usable) 1f else 0f
-                if (reportedBackdrop[0] != radius || reportedBackdrop[1] != flag) {
-                    reportedBackdrop[0] = radius; reportedBackdrop[1] = flag
-                    onBackdropShape(radius, usable)
+                if (reportedBackdrop[0] != radius || reportedBackdrop[1] != flag || reportedBackdrop[2] != (if (large) 1f else 0f)) {
+                    reportedBackdrop[0] = radius; reportedBackdrop[1] = flag; reportedBackdrop[2] = if (large) 1f else 0f
+                    onBackdropShape(radius, usable, large)
                 }
                 drawContent()
             } else Modifier)

@@ -30,14 +30,12 @@ fun IdleExtras(s: IslandSettings) {
     val locked by IslandBus.locked.collectAsState()
     val steps by com.akira.island.service.StepRepo.count.collectAsState()
     val standaloneInfo = !extras.briefEnabled && (extras.steps || extras.analogClock)
-    val previewShortcuts = LocalIslandPreview.current && (extras.apps.isNotEmpty() || extras.contacts.isNotEmpty())
-    if (!extras.controls && !standaloneInfo && !previewShortcuts) return
+    if (!extras.controls && !standaloneInfo) return
     fun open(intent: Intent) {
         Controls.collapse()
         runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        if (previewShortcuts && !locked) ShortcutOrbit(extras.apps, extras.contacts, {}, {})
         if (extras.analogClock && !extras.briefEnabled) AnalogClock(rememberWallNow(1000), Modifier.fillMaxWidth().height(110.dp))
         if (extras.steps && !locked && !extras.briefEnabled) Text(tr("Шаги сегодня", "Steps today") + ": " + (steps?.toString() ?: "…"), color = Color.White, fontSize = 14.sp)
         if (extras.controls && !locked) {

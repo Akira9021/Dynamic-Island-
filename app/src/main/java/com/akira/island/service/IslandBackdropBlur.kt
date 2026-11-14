@@ -17,12 +17,12 @@ import java.util.function.Consumer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-internal fun backdropAllowed(requested: Boolean, enabled: Boolean, visible: Boolean, expanded: Boolean,
+internal fun backdropAllowed(requested: Boolean, enabled: Boolean, visible: Boolean,
     screenOn: Boolean, locked: Boolean, saving: Boolean, reduced: Boolean, shape: Boolean): Boolean =
-    requested && enabled && visible && expanded && screenOn && !locked && !saving && !reduced && shape
+    requested && enabled && visible && screenOn && !locked && !saving && !reduced && shape
 
-internal fun backdropTransmits(s: com.akira.island.data.IslandSettings): Boolean {
-    val color = if (s.expandedColorEnabled) s.expandedColor else s.color
+internal fun backdropTransmits(s: com.akira.island.data.IslandSettings, card: Boolean = true): Boolean {
+    val color = if (card && s.expandedColorEnabled) s.expandedColor else s.color
     val alpha = ((color ushr 24) and 255).toFloat() / 255f
     val density = if (s.liquidGlass) com.akira.island.core.glassBodyDensity(s.glassOpacity / 100f)
         else s.islandOpacity.coerceIn(20, 100) / 100f
@@ -41,6 +41,7 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private val background = GradientDrawable().apply { setColor(Color.argb(1, 255, 255, 255)) }
     private var bounds = Rect()
     private var corner = 0f
+    private var topCorner = 0f
     private var wanted = false
     private var failed = false
     private var closed = false
@@ -96,10 +97,10 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
         runCatching { manager.isCrossWindowBlurEnabled }.getOrDefault(false)
     val showing: Boolean get() = dialog?.isShowing == true && dialog?.window?.decorView?.visibility == View.VISIBLE
 
-    fun update(area: Rect, cornerPx: Float, enabled: Boolean) {
+    fun update(area: Rect, cornerPx: Float, enabled: Boolean, topCornerPx: Float = cornerPx) {
         if (closed) return
-        if (bounds == area && corner == cornerPx && wanted == enabled) return
-        bounds.set(area); corner = cornerPx.coerceAtLeast(0f); wanted = enabled
+        if (bounds == area && corner == cornerPx && topCorner == topCornerPx && wanted == enabled) return
+        bounds.set(area); corner = cornerPx.coerceAtLeast(0f); topCorner = topCornerPx.coerceAtLeast(0f); wanted = enabled
         render()
     }
 
@@ -126,7 +127,9 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
                 dialog = it
             }
             val w = checkNotNull(d.window)
-            background.cornerRadius = corner
+            // Public Android blur accepts only a round-rect outline. The larger corner
+            // inscribes its blur in a notch's silhouette instead of spilling outside it.
+            background.cornerRadius = maxOf(topCorner, corner)
             corrections = 0
             setBlurRadius(w, 0)
             w.attributes = w.attributes.apply {

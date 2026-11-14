@@ -166,6 +166,7 @@ private fun ColumnScope.BriefClockPage(
     }
     Text(date, color = Color.LightGray, fontSize = 13.sp, lineHeight = 17.sp,
         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+    PinnedShortcutRow()
     if (battery.level >= 0) Row(Modifier.testTag("brief-battery"), verticalAlignment = Alignment.CenterVertically) {
         if (!s.batteryPercentOnly) {
             BatteryGlyph(battery.level, when {

@@ -37,11 +37,16 @@ class BackdropBlurDeviceTest {
         checkAttachedWindow(true)
     }
 
-    private fun checkAttachedWindow(screenLayout: Boolean) {
+    @Test fun bubbleAndCardBlurTheirOwnRegionsWithoutABridge() {
+        checkAttachedWindow(true, secondBubble = true)
+    }
+
+    private fun checkAttachedWindow(screenLayout: Boolean, secondBubble: Boolean = false) {
         assumeTrue(Build.VERSION.SDK_INT >= 31)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         var foreground: Dialog? = null
         var blur: IslandBackdropBlur? = null
+        var bubbleBlur: IslandBackdropBlur? = null
         try {
             activity.scenario.onActivity { a ->
                 assumeTrue(a.getSystemService(WindowManager::class.java).isCrossWindowBlurEnabled)
@@ -69,7 +74,7 @@ class BackdropBlurDeviceTest {
                         }
                     }
                     show()
-                    window!!.setLayout(480, 280)
+                    window!!.setLayout(if (secondBubble) 640 else 480, 280)
                     window!!.attributes = window!!.attributes.apply { gravity = Gravity.TOP or Gravity.LEFT; x = 80; y = if(screenLayout) 40 else 300 }
                 }
             }
@@ -77,6 +82,9 @@ class BackdropBlurDeviceTest {
             val before = instrumentation.uiAutomation.takeScreenshot()
             activity.scenario.onActivity { a ->
                 blur = IslandBackdropBlur(a, foreground!!.window!!.decorView).also { it.update(Rect(0, 0, 480, 280), 48f, true) }
+                if (secondBubble) bubbleBlur = IslandBackdropBlur(a, foreground!!.window!!.decorView).also {
+                    it.update(Rect(500, 0, 560, 60), 30f, true)
+                }
             }
             instrumentation.waitForIdleSync(); SystemClock.sleep(1500)
             val after = instrumentation.uiAutomation.takeScreenshot()
@@ -97,6 +105,18 @@ class BackdropBlurDeviceTest {
                 File(dir, "$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
             File(dir, "result.txt").writeText("before=${contrast(before)} after=${contrast(after)} origin=${origin.toList()}")
             assertTrue("Actual background stripes must lose contrast", contrast(after) < contrast(before) / 2)
+            if (secondBubble) {
+                fun section(bitmap: android.graphics.Bitmap, from: Int, to: Int): Long {
+                    val y = origin[1] + 30
+                    return (origin[0]+from until origin[0]+to).sumOf { x ->
+                        kotlin.math.abs(Color.red(bitmap.getPixel(x,y))-Color.red(bitmap.getPixel(x+1,y))).toLong()
+                    }
+                }
+                assertTrue("Circle blurs its own background", section(after,516,544) < section(before,516,544)/2)
+                val gap=section(before,482,498)
+                assertTrue("Gap fixture has contrast",gap>0)
+                assertTrue("No blurred bridge between independent activities",section(after,482,498)>=gap*.95)
+            }
             // A separate blurred strip below the card is a regression even if its interior looks right.
             val below = origin[1] + 292
             if (below < before.height) {
@@ -128,7 +148,7 @@ class BackdropBlurDeviceTest {
             assertTrue("Foreground fixture must contain sharp red text", redBefore > 100)
             assertEquals("Blur must not cover the foreground window", redBefore, redAfter)
         } finally {
-            activity.scenario.onActivity { blur?.close(); foreground?.dismiss() }
+            activity.scenario.onActivity { blur?.close(); bubbleBlur?.close(); foreground?.dismiss() }
         }
     }
 }

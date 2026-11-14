@@ -889,6 +889,7 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                 }
             }
         }
+        if (!extras.briefEnabled) PinnedShortcutRow()
         if (battery.charging) {
             val measurements = listOfNotNull(
                 battery.powerWatts?.let { trf("{0} Вт на батарее", "{0} W at battery", String.format(java.util.Locale.ROOT, "%.1f", it)) },

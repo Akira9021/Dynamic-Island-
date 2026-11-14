@@ -11,13 +11,14 @@ class BackdropBlurPolicyTest {
         assertFalse(backdropTransmits(s.copy(liquidGlass = true, glassOpacity = 100)))
         assertTrue(backdropTransmits(s.copy(islandOpacity = 60)))
         assertTrue(backdropTransmits(s.copy(expandedColorEnabled = true, expandedColor = 0x80000000)))
+        assertFalse(backdropTransmits(s.copy(expandedColorEnabled = true, expandedColor = 0x80000000), card = false))
     }
     @Test fun `blur requires every visibility condition and respects all safety gates`() {
-        assertTrue(backdropAllowed(true, true, true, true, true, false, false, false, true))
-        val normal = booleanArrayOf(true, true, true, true, true, false, false, false, true)
+        assertTrue(backdropAllowed(true, true, true, true, false, false, false, true))
+        val normal = booleanArrayOf(true, true, true, true, false, false, false, true)
         for (index in normal.indices) {
             val f = normal.copyOf(); f[index] = !f[index]
-            assertFalse("Gate $index", backdropAllowed(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]))
+            assertFalse("Gate $index", backdropAllowed(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]))
         }
     }
     @Test fun `old settings keep blur opt in`() {

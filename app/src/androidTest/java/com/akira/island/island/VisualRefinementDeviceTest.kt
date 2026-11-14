@@ -79,7 +79,7 @@ class VisualRefinementDeviceTest {
         assertTrue(outside);assertFalse(chosen)
     }
 
-    @Test fun glassCenterOpensSummaryWithoutLeavingIconsOverItsButtons() {
+    @Test fun pinnedRowIsInsideTheSummaryWithoutAnExtraPopup() {
         val settings=com.akira.island.data.SettingsRepo.current
         val extras=com.akira.island.data.ExtrasRepo.state.value
         val expanded=IslandBus.expanded.value
@@ -99,25 +99,14 @@ class VisualRefinementDeviceTest {
                     IslandOverlay(onBodyBounds={bounds.set(it)})
                 } }
             }
-            compose.onNodeWithTag("shortcut-orbit").assertIsDisplayed()
-            compose.waitUntil(10_000) { bounds.get().height>0 }
-            val height=bounds.get().height
-            fun shot(name:String) {
-                clearEmulatorSystemAnr()
-                // Semantics can precede the first Surface draw, especially for a new Popup.
-                val roots=compose.onAllNodes(isRoot())
-                repeat(roots.fetchSemanticsNodes().size) { roots[it].captureToImage() }
-                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                android.os.SystemClock.sleep(250)
-                val image=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-                File(compose.activity.getExternalFilesDir(null),name).outputStream().use { image.compress(Bitmap.CompressFormat.PNG,100,it) }
-            }
-            shot("pinned-cloud.png")
-            compose.onNodeWithContentDescription("Open summary").performClick()
-            compose.waitUntil(20_000) { bounds.get().height>height+40*compose.activity.resources.displayMetrics.density }
-            compose.onNodeWithTag("shortcut-orbit").assertDoesNotExist()
+            compose.onNodeWithTag("shortcut-row").assertIsDisplayed()
+            compose.onNodeWithTag("app:com.akira.island").assertIsDisplayed()
+            compose.onNodeWithTag("contact:content://com.android.contacts/contacts/991").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Open summary").assertDoesNotExist()
+            compose.onRoot().captureToImage()
+            val row=compose.onNodeWithTag("shortcut-row").fetchSemanticsNode().boundsInRoot
+            assertTrue(row.height <= 60*compose.activity.resources.displayMetrics.density)
             assertTrue(IslandBus.expanded.value)
-            shot("summary-from-center.png")
         } finally { compose.runOnUiThread {
             com.akira.island.data.SettingsRepo.update{settings};com.akira.island.data.ExtrasRepo.update{extras}
             IslandBus.expanded.value=expanded;IslandBus.locked.value=locked;IslandBus.notice.value=notice

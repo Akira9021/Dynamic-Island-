@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -12,6 +14,9 @@ import androidx.compose.ui.test.captureToImage
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.akira.island.core.BatteryInfo
+import com.akira.island.core.Notice
+import com.akira.island.core.NoticeStyle
+import com.akira.island.core.Tints
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
 import com.akira.island.ui.MainActivity
@@ -29,13 +34,16 @@ class BackdropGeometryDeviceTest {
     @Test fun geometryUsesTheActualCornerAndStopsReportingWhenDisabled() {
         val saved = SettingsRepo.current
         val s = mutableStateOf(IslandSettings(liquidGlass = true, backdropBlur = false, expandedCornerRadius = 28, reduceEffects = true))
+        val expanded = mutableStateOf(true)
+        val activity = mutableStateOf<Act>(Act.Idle)
+        var card = false
         var radius = 0f; var eligible = false
         val reports = AtomicInteger()
         try {
             compose.runOnUiThread { compose.activity.setContent {
                 IslandTheme { Box(Modifier.width(300.dp)) {
-                    IslandBody(Act.Idle, true, s.value, null, BatteryInfo(62), false, {},
-                        onBackdropShape = { r, ok -> radius = r; eligible = ok; reports.incrementAndGet() })
+                    IslandBody(activity.value, expanded.value, s.value, null, BatteryInfo(62), false, {},
+                        onBackdropShape = { r, ok, large -> card = large; radius = r; eligible = ok; reports.incrementAndGet() })
                 } }
             } }
             compose.waitForIdle()
@@ -50,7 +58,15 @@ class BackdropGeometryDeviceTest {
             compose.runOnIdle { s.value = s.value.copy(notch = true) }
             compose.waitForIdle()
             compose.onRoot().captureToImage()
-            compose.waitUntil(10000) { !eligible }
+            compose.runOnIdle { assertTrue("Notch remains eligible", eligible) }
+            compose.runOnIdle { expanded.value = false; s.value = s.value.copy(cornerRadius = 14) }
+            compose.waitForIdle(); compose.onRoot().captureToImage()
+            compose.runOnIdle { assertTrue(eligible); assertFalse(card); assertEquals(14*density, radius, 0.1f) }
+            for (style in listOf(NoticeStyle.WIDE, NoticeStyle.MESSAGE, NoticeStyle.PILL, NoticeStyle.ALARM)) {
+                compose.runOnIdle { activity.value = Act.NoticeA(Notice("Example", icon=Icons.Rounded.Alarm, tint=Tints.Orange, style=style)) }
+                compose.waitForIdle(); compose.onRoot().captureToImage()
+                compose.runOnIdle { assertTrue("Notification/event $style", eligible) }
+            }
             compose.runOnIdle { s.value = s.value.copy(liquidGlass = false) }
             compose.waitForIdle()
             val count = reports.get()
