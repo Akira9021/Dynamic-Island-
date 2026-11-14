@@ -14,7 +14,7 @@ internal object LyricTiming {
         lrc.lineSequence().forEach { raw ->
             val tags = timeTag.findAll(raw).toList()
             if (tags.isEmpty()) return@forEach
-            val text = raw.substring(tags.last().range.last + 1).trim()
+            val text = enhancedLrcText(raw.substring(tags.last().range.last + 1)).trim()
             tags.forEach tag@ { m ->
                 val minutes = m.groupValues[1].toLongOrNull() ?: return@tag
                 val seconds = m.groupValues[2].replace(':', '.').toDoubleOrNull() ?: return@tag
@@ -26,7 +26,7 @@ internal object LyricTiming {
         return out.distinct().sortedBy { it.timeMs }
     }
 
-    fun plain(text: String): List<LyricLine> = text.lineSequence().map(String::trim)
+    fun plain(text: String): List<LyricLine> = text.lineSequence().map(::enhancedLrcText).map(String::trim)
         .filter(String::isNotEmpty).map { LyricLine(0, it) }.toList()
 
     fun identity(title: String, artist: String, album: String?, durationMs: Long): String =

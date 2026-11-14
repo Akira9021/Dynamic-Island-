@@ -130,6 +130,16 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
                 val w = checkNotNull(it.window)
                 w.setType(WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA)
                 w.setBackgroundDrawable(background)
+                // Configure invariant window policy once, before its first visible frame.
+                w.setDecorFitsSystemWindows(false)
+                w.decorView.setPadding(0, 0, 0, 0)
+                w.attributes = w.attributes.apply {
+                    gravity = Gravity.TOP or Gravity.LEFT
+                    format = PixelFormat.TRANSLUCENT
+                    title = "DynamicIslandBackdrop"
+                    setFitInsetsTypes(0)
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                }
                 w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                 w.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -143,26 +153,23 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             val w = checkNotNull(d.window)
             // Public Android blur accepts only a round-rect outline. The larger corner
             // inscribes its blur in a notch's silhouette instead of spilling outside it.
-            background.cornerRadius = maxOf(topCorner, corner)
+            val radius = maxOf(topCorner, corner)
+            if (background.cornerRadius != radius) background.cornerRadius = radius
             corrections = 0
-            w.attributes = w.attributes.apply {
-                token = parent.windowToken
-                gravity = Gravity.TOP or Gravity.LEFT
-                width = bounds.width(); height = bounds.height(); x = bounds.left - positionBiasX; y = bounds.top - positionBiasY
-                format = PixelFormat.TRANSLUCENT
-                title = "DynamicIslandBackdrop"
-            }
-            // Attached windows must not apply a second status/navigation-bar inset to parent-local bounds.
-            w.setDecorFitsSystemWindows(false)
-            w.decorView.setPadding(0, 0, 0, 0)
-            w.attributes = w.attributes.apply {
-                setFitInsetsTypes(0)
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            val attributes = w.attributes
+            val targetX = bounds.left - positionBiasX
+            val targetY = bounds.top - positionBiasY
+            if (attributes.token != parent.windowToken || attributes.width != bounds.width() ||
+                attributes.height != bounds.height() || attributes.x != targetX || attributes.y != targetY) {
+                w.attributes = attributes.apply {
+                    token = parent.windowToken
+                    width = bounds.width(); height = bounds.height(); x = targetX; y = targetY
+                }
             }
             // Blur is the initial material, not a second effect enabled after the glass appears.
             // The pre-draw alignment guard still suppresses it if the platform places a frame wrong.
             setBlurRadius(w, requestedBlurRadius())
-            d.show()
+            if (!showing) d.show()
         }.onFailure {
             failed = true
             rejection.value = true

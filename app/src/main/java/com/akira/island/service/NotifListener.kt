@@ -144,7 +144,9 @@ object NotificationParser {
         if (sbn.packageName == context.packageName) return
         val n = sbn.notification ?: return
         val ex = n.extras ?: return
-        val isMedia = n.category == Notification.CATEGORY_TRANSPORT || ex.containsKey(Notification.EXTRA_MEDIA_SESSION)
+        val isMedia = mediaNotificationEvidence(n.category,
+            ex.containsKey(Notification.EXTRA_MEDIA_SESSION),
+            runCatching { ex.getString(Notification.EXTRA_TEMPLATE) }.getOrNull())
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             ?: appLabel(context, sbn.packageName)
 
