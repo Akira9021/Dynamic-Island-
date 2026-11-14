@@ -19,8 +19,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
@@ -286,12 +286,7 @@ class NavScreenReader(private val service: AccessibilityService, private val sco
         clearJob?.cancel()
         current = pkg
         job = scope.launch {
-            while (isActive) {
-                // Экран погашен — читать нечего, ждём, пока его включат
-                if (!IslandBus.screenOn.value) IslandBus.screenOn.first { it }
-                if (SettingsRepo.current.cardLive) runCatching { read(pkg) }
-                delay(1500)
-            }
+            visiblePolling(IslandBus.screenOn, SettingsRepo.state.map { it.cardLive }.distinctUntilChanged(), 1500, { read(pkg) })
         }
     }
 

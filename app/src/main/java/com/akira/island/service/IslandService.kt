@@ -310,7 +310,7 @@ class IslandService : AccessibilityService() {
                 s.liquidGlass && s.enabled && !s.reduceEffects && on
             }
                 .distinctUntilChanged()
-                .collect { setTiltEnabled(it) }
+                .collect { refreshTilt() }
         }
 
         scope.launch {
@@ -518,6 +518,7 @@ class IslandService : AccessibilityService() {
         // С погашенным экраном так не делаем: включили экран — остров сразу показывает то, что есть сейчас,
         // а украшения и без того ждут экрана
         owner.setActive(visible)
+        refreshTilt()
         if (!visible) Controls.collapse()
         if (placeDisplayWindow(s, turn)) display?.let { v -> runCatching { wm?.updateViewLayout(v, displayParams) } }
         updateTouchWindow()
@@ -624,6 +625,11 @@ class IslandService : AccessibilityService() {
         touchParams.height = h
         touchParams.flags = flags
         runCatching { wm?.updateViewLayout(view, touchParams) }
+    }
+
+    private fun refreshTilt() {
+        val s = SettingsRepo.current.forPowerSave(IslandBus.powerSave.value)
+        setTiltEnabled(visible && s.liquidGlass && s.enabled && !s.reduceEffects && IslandBus.screenOn.value)
     }
 
     private fun setTiltEnabled(on: Boolean) {

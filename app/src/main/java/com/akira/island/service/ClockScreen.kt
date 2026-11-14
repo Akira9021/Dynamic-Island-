@@ -16,8 +16,8 @@ import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import kotlin.math.abs
@@ -191,12 +191,7 @@ class ClockScreenReader(private val service: AccessibilityService, private val s
         current = pkg
         openedAt = SystemClock.elapsedRealtime()
         loop = scope.launch {
-            while (isActive) {
-                // Экран погашен — читать нечего, спим, пока его не включат
-                if (!IslandBus.screenOn.value) IslandBus.screenOn.first { it }
-                if (SettingsRepo.current.cardTimer) runCatching { tick() }
-                delay(250)
-            }
+            visiblePolling(IslandBus.screenOn, SettingsRepo.state.map { it.cardTimer }.distinctUntilChanged(), 250, { tick() })
         }
     }
 
