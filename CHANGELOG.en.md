@@ -6,6 +6,11 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 > Since 1.6.1 the app and the island speak English (Features → General → Language). Earlier versions were in Russian only, so older entries give the Russian label in brackets.
 
+## [1.7.2] — 2026-11-15
+
+### 🛠 Fixes
+- In-app updates download the APK again: after the repository was renamed, GitHub returns file links with the new owner name, and the address check rejected them. The version and its notes appeared, but the download never started.
+
 ## [1.7.1] — 2026-11-15
 
 ### 🛠 Fixes

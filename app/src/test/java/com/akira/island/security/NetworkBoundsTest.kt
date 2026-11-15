@@ -30,8 +30,18 @@ class NetworkBoundsTest {
     @Test fun updaterOnlyAcceptsAssetsFromTheActualRepository() {
         val path = "https://github.com/Akira9021/Dynamic-Island-/releases/download/v1.7.0/DynamicIsland.apk"
         assertTrue(UpdateDownloadPolicy.isReleaseAssetUrl(path))
+        // GitHub отдаёт ссылки уже с новым именем владельца — раньше из-за этого не скачивалось обновление
+        assertTrue(UpdateDownloadPolicy.isReleaseAssetUrl(path.replace("Akira9021", "Arusaky")))
         assertTrue(UpdateDownloadPolicy.isDownloadHop("https://release-assets.githubusercontent.com/a.apk?signature=test"))
-        for (url in listOf(path.replace("https", "http"), path.replace("Akira9021", "SomeoneElse"), path.replace("github.com", "github.com.evil.test"), path+"?redirect=elsewhere", path.replace("v1.7.0", "%2e%2e")))
+        for (url in listOf(
+            path.replace("https", "http"),
+            path.replace("Akira9021", "SomeoneElse"),
+            path.replace("github.com", "github.com.evil.test"),
+            path + "?redirect=elsewhere",
+            path.replace("v1.7.0", "%2e%2e"),
+            path.replace("Dynamic-Island-", "Other-App"),
+            path.replace("/releases/download/", "/releases/tag/"),
+        ))
             assertFalse(url, UpdateDownloadPolicy.isReleaseAssetUrl(url))
         assertFalse(UpdateDownloadPolicy.isDownloadHop("https://evil.test/a.apk"))
     }

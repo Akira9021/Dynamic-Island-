@@ -68,7 +68,7 @@ sealed interface DownloadState {
  * поэтому APK ставится поверх.
  */
 object UpdateChecker {
-    const val REPO = "Akira9021/Dynamic-Island-"
+    const val REPO = "Arusaky/Dynamic-Island-"
     private const val CHECK_EVERY_MS = 3 * 60 * 60 * 1000L
 
     val state = MutableStateFlow<UpdateState>(UpdateState.Idle)

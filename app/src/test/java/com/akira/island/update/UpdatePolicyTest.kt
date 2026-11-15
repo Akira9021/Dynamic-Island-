@@ -15,6 +15,16 @@ class UpdatePolicyTest {
         assertTrue(result.apkUrl!!.endsWith("/v1.8.0/DynamicIsland.apk"))
         assertEquals(100L, result.sizeBytes)
     }
+    @Test fun releaseKeepsTheRealApkUnderTheCurrentRepositoryName() {
+        // Так выглядит настоящий ответ releases/latest после переименования репозитория
+        val result = UpdateChecker.parseRelease("""{"tag_name":"v1.7.1","assets":[
+            {"name":"DynamicIsland.apk","browser_download_url":"https://github.com/Arusaky/Dynamic-Island-/releases/download/v1.7.1/DynamicIsland.apk","size":2822408}
+        ]}""")!!
+        assertEquals("1.7.1", result.version)
+        assertEquals("https://github.com/Arusaky/Dynamic-Island-/releases/download/v1.7.1/DynamicIsland.apk", result.apkUrl)
+        assertEquals(2822408L, result.sizeBytes)
+    }
+
     @Test fun oversizedReleaseCanBeShownButItsApkCannotBeDownloaded() {
         val result = UpdateChecker.parseRelease("""{"tag_name":"v1.8.0","assets":[
             {"name":"app.apk","browser_download_url":"https://github.com/Akira9021/Dynamic-Island-/releases/download/v1.8.0/app.apk","size":999999999999}
