@@ -233,6 +233,8 @@ fun AppInfoScreen(open: (Screen) -> Unit) {
             tr("Скрыть только после проверки входа через плитку", "Hide only after testing access through the tile"),
             onClick = { open(Screen.LAUNCHER) }, color = Tile.Purple) { Arrow() }
 
+        SupportAuthorItem { open(Screen.SUPPORT) }
+
         SectionHeader(tr("Проект", "Project"))
         Group {
             GroupItem(Pos.First, ImageVector.vectorResource(R.drawable.ic_github), tr("Страница GitHub", "GitHub page"),
