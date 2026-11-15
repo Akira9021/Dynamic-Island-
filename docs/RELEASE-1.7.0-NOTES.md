@@ -1,6 +1,6 @@
 # Dynamic Island 1.7.0 — подготовленное описание / prepared release notes
 
-Публикация ожидает решения по ограничениям обновления. / Publication awaits a decision on upgrade limitations.
+Выпуск разрешён владельцем с указанными ограничениями обновления. / Publication authorized by the owner with the upgrade limitations below.
 
 ## 🇬🇧 English
 
