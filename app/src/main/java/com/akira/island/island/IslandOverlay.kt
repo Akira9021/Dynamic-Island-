@@ -745,9 +745,16 @@ internal fun IslandBody(
                                 Controls.collapse()
                             }
                             // Смахнуть уведомление вверх, как баннер на iPhone. Порог полный, чтобы палец,
-                            // чуть съехавший при нажатии «Ответить», не убирал плашку
+                            // чуть съехавший при нажатии «Ответить», не убирал плашку.
+                            // Сообщение приложения при этом отменяется и в самой шторке уведомлений.
                             !isExpanded && vertical && dy < -threshold && act is Act.NoticeA -> {
-                                IslandBus.notice.value = null
+                                val key = act.n.message?.key
+                                if (key != null && com.akira.island.service.NotifListener.canDismiss(key)) {
+                                    haptic()
+                                    com.akira.island.service.NotifListener.dismiss(key)
+                                } else {
+                                    IslandBus.notice.value = null
+                                }
                             }
                             // Подсказку оплаты тоже можно смахнуть
                             !isExpanded && vertical && dy < -threshold && act is Act.PayA -> PayMonitor.clearReady()

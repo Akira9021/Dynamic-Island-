@@ -123,6 +123,17 @@ import com.akira.island.core.tr
 import com.akira.island.core.trf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.ScrollState
+import com.akira.island.service.NotifListener
 
 /** Цифры одной ширины, чтобы время не «прыгало». Шрифт и толщина — из «Оформления → Шрифт» */
 val Digits: TextStyle
@@ -512,6 +523,56 @@ private fun PillNotice(n: Notice, s: IslandSettings) {
 }
 
 /**
+ * Смахнуть уведомление вниз — как лист iOS: тянем карточку вниз, и она уходит. Работает поверх прокрутки —
+ * перехватывает движение только от самого верха списка, чтобы чтение длинного сообщения не путалось
+ * с удалением. На отпускании за порогом вызывается [onDismiss], иначе карточка возвращается на место.
+ */
+@Composable
+private fun Modifier.swipeDownToDismiss(
+    scroll: ScrollState?,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+): Modifier {
+    if (!enabled) return this
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val maxPull = with(density) { 180.dp.toPx() }
+    val threshold = with(density) { 96.dp.toPx() }
+    return this
+        .graphicsLayer { translationY = offset.value }
+        .nestedScroll(remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y >= 0f || (scroll != null && scroll.value > 0)) return Offset.Zero
+                    scope.launch { offset.snapTo((offset.value - available.y).coerceAtMost(maxPull)) }
+                    return Offset(0f, available.y)
+                }
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y >= 0f || (scroll != null && scroll.value > 0)) return Offset.Zero
+                    scope.launch { offset.snapTo((offset.value - available.y).coerceAtMost(maxPull)) }
+                    return Offset(0f, available.y)
+                }
+            }
+        })
+        .pointerInput(enabled) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                var down = true
+                while (down) {
+                    val event = awaitPointerEvent(PointerEventPass.Final)
+                    down = event.changes.any { it.pressed }
+                }
+                if (offset.value >= threshold) {
+                    onDismiss()
+                } else if (offset.value > 0f) {
+                    scope.launch { offset.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 500f)) }
+                }
+            }
+        }
+}
+
+/**
  * Уведомление приложения — как развёрнутый остров iPhone, но по меркам всплывающего уведомления Android:
  * та же ширина (по 16 dp от краёв), аватар 40 dp, имя 15 sp, текст 14 sp, кнопки 14 sp. Сверху, по бокам
  * от камеры, — значок и название приложения и «сейчас»; само уведомление начинается под строкой
@@ -535,6 +596,8 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
     val accent = rememberAccent(s, m.accent)
     var open by remember(n.id) { mutableStateOf(false) }
     val dim = Color.White.copy(alpha = 0.55f)
+    val scrollState = rememberScrollState()
+    val dismissible = !locked && NotifListener.canDismiss(m.key)
 
     // Пока отвечают или листают переписку, плашка не уходит по таймеру
     DisposableEffect(open, replyAction != null, detail) {
@@ -548,10 +611,18 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
 
     Column(
         Modifier
+            .swipeDownToDismiss(
+                scroll = if (detail) scrollState else null,
+                enabled = detail && dismissible,
+                onDismiss = {
+                    haptic()
+                    NotifListener.dismiss(m.key)
+                },
+            )
             .animateContentSize(islandSpec(s))
             .width(messageWidth(s))
             .heightIn(max = s.expandedMaxHeight.dp)
-            .then(if (detail) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+            .then(if (detail) Modifier.verticalScroll(scrollState) else Modifier)
             .padding(bottom = 12.dp),
     ) {
         // Шапка на уровне камеры: слева приложение, справа время — как боковые части острова iPhone
@@ -571,6 +642,13 @@ internal fun MessageCard(n: Notice, m: AppMessage, s: IslandSettings, @Suppress(
                 Text(tr("сейчас", "now"), color = dim, fontSize = 12.sp, maxLines = 1, softWrap = false)
                 Spacer(Modifier.width(4.dp))
                 if (s.messageIconMode != MessageIconMode.NONE) Icon(Ios.bell, null, tint = dim, modifier = Modifier.size(12.dp))
+                // Кнопка смахнуть/закрыть уведомление — сразу в шапке, чтобы длинное сообщение не заслоняло экран
+                if (detail && dismissible) {
+                    Spacer(Modifier.width(8.dp))
+                    RoundButton(Ios.close, size = 20.dp, iconScale = 0.5f, bg = Color.White.copy(alpha = 0.12f)) {
+                        NotifListener.dismiss(m.key)
+                    }
+                }
             }
         }
         Spacer(Modifier.height((messageTop(s) - s.height.dp).coerceAtLeast(4.dp)))

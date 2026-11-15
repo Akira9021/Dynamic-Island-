@@ -428,11 +428,14 @@ class IslandService : AccessibilityService() {
      */
     private fun onOutsideTouch() {
         val replyOpen = IslandBus.reply.value != null
-        when (com.akira.island.core.outsideTouchDecision(IslandBus.expanded.value, replyOpen,
-            replyOpen && keyboardShown(), SettingsRepo.current.keepExpandedOnOutsideTouch)) {
+        when (com.akira.island.core.outsideTouchDecision(IslandBus.expanded.value, IslandBus.messageDetail.value,
+            replyOpen, replyOpen && keyboardShown(), SettingsRepo.current.keepExpandedOnOutsideTouch)) {
             com.akira.island.core.OutsideTouchDecision.KEEP -> Unit
             com.akira.island.core.OutsideTouchDecision.CLOSE_REPLY -> IslandBus.reply.value = null
-            com.akira.island.core.OutsideTouchDecision.COLLAPSE -> Controls.collapse()
+            com.akira.island.core.OutsideTouchDecision.COLLAPSE -> {
+                IslandBus.messageDetail.value = false
+                Controls.collapse()
+            }
         }
     }
 
