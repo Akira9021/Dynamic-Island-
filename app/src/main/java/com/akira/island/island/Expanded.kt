@@ -151,7 +151,7 @@ private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, ba
     }
     // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал.
     // Само содержимое — крупнее или мельче по «Размеру содержимого»
-    Box(Modifier.width(width).heightIn(max = s.expandedMaxHeight.dp).verticalScroll(rememberScrollState())
+    Box(Modifier.width(width).heightIn(max = s.expandedMaxHeight.dp)
         .padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
         Scaled(s.contentScale) {
             when (act) {
