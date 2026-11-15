@@ -6,65 +6,42 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 > Since 1.6.1 the app and the island speak English (Features → General → Language). Earlier versions were in Russian only, so older entries give the Russian label in brackets.
 
-## [1.7.0] — 2026-10-28
+## [1.7.0] — release candidate, 2026-11-15
 
-### Screenshot follow-up fixes — test branch, 2026-11-06
-- Weather retries promptly after errors, offers manual refresh and shows loading/error states. Standalone and Brief weather paths are checked separately.
-- Brief pages wrap their content without a fixed height or stretched empty space.
-- Google Recorder is no longer hidden by its media session or disabled clock timers. Real pause/resume actions, duplicate-player filtering and distinct Russian Pause/Stop commands.
-- Appearance → Color and border → Text color: palette and custom HEX, applied immediately in the existing live preview. Semantic status and button colors remain.
-- Validation and limitations: [follow-up report](docs/followup-1.7.0/README.md). No public release is published.
+### ✨ New features
+- 🫧 **Liquid Glass**: refined highlights and transparency, glass density and system blur strength controls. Available for the island, expanded cards and secondary activity on supported devices.
+- 📌 **Pinned apps and contacts**: a compact shortcut row below the date.
+- 🕒 **Brief**: separate compact clock, steps and weather pages, clock styles and extra controls.
+- 🌤 **Weather**: city selection, a standalone card or Brief page, manual refresh and retries after errors.
+- 🎵 **Lyrics**: a continuous soft highlighting wave and smooth line transitions; unsynced lyrics remain scrollable.
+- 🎨 **Custom colors and fonts**: text color, HEX/HSV picker, system or custom fonts, weight and element sizing.
+- 📶 **Hotspot**: persistent state, a settings shortcut and client counts when reliable system information is available.
+- ⬇️ **Transfer speed in expanded download cards**: app-provided details or optional approximate total network rates ↓/↑, preserving actual download percentages.
+- 🔓 **Face ID · face only**: optional verified face-unlock animation using separately configured Shizuku. PIN and fingerprint unlock are not presented as Face ID.
+- ⏰ **Create alarms**, auto-hide the idle island, scroll to top in supported apps and keep cards open on outside touch.
+- 🔋 **Battery**: an icon filled according to the current charge and optional approximate charging-time estimates.
+- 🔔 **Notifications**: history, display styles, duration, silent messages, per-app rules and missing-notification diagnostics.
+- 🌍 **Languages**: Indonesian, Portuguese, Kazakh, French and Spanish; improved language switching.
+- 💜 **Support the developer**: Telegram and Boosty in About, with English and Russian text.
 
-### Recording, settings and security review — test branch, 2026-11-06
-- Liquid expansion defaults to on; an explicitly saved off preference is preserved.
-- Voice, screen and camera video recording have distinct presentation. Fixed foreground recording detection, pause/resume and elapsed time; Stop requires a real action supplied by the recording app.
-- Optional idle timeout with tap-to-restore, independent notch top offset, centered notification icons and compact notification count.
-- Extra controls now offer a default-off Brief panel with three clock styles, steps and weather. A scroll-to-top gesture works with apps that expose suitable accessibility actions.
-- Hide the launcher icon after testing settings access through the tile; removing the tile restores the icon. Settings explain launcher limitations.
-- Completed Portuguese and Kazakh and translated new labels into all supported languages. Live previews and the overall app style remain intact.
-- Reused media controllers and hardware artwork, avoided unrelated step/weather restarts, and removed confirmed unused code.
-- Hardened update signatures and URLs, bounded network reads and partial-download cleanup. Private data is excluded from backup; installing an update over the app retains local data.
-- Validation and remaining limitations: [test build maintenance](docs/maintenance-1.7.0/README.md), [local security review](docs/security-1.7.0/README.md). No public release is published.
+### 🛠 Fixes and optimization
+- Distinct voice, screen and camera recording states; improved Google Recorder detection, pause/resume and real source controls.
+- Improved lyrics search, cache, Enhanced LRC handling, track changes and media sessions. MediaStyle alone no longer classifies music as a download.
+- Improved consecutive messages, replies, mark-as-read actions and action wrapping.
+- Pending alarms use the secondary activity; improved false-alarm filtering and timer layout on narrow cards.
+- Preserved detected payment amounts and improved recognition of brief success screens; individual bank apps still require device testing.
+- Refined animations, notch-mode blur geometry, shortcut placement and landscape color-picker accessibility.
+- Reduced polling, redundant subscriptions and hidden-effect work; removed confirmed unused code.
+- Hardened download URLs, response limits, APK/certificate checks and partial-download cleanup.
+- **296 unit tests passed** on functional commit `1863d0b`; this does not replace testing every phone.
 
-### Test build improvements — 2026-11-05
-- Restored concise notifications without Open, Dismiss and Collapse buttons. Reply and Mark as read remain, long actions wrap, and dismissal is available as a configurable gesture.
-- Single-line player timestamps and a timer picker that fits narrow cards. An expanded paused player stays available until closed.
-- Screen recording takes precedence over navigation, retains its start time and uses an explicit stop intent. Added an option to hide the island while screen recording.
-- Refined choice groups for the new settings and added settings search, keeping the live previews.
-- Completed missing Indonesian strings, honored Android's app language and included minimized channels when silent notifications are enabled.
-- Removed screen-off polling, isolated player progress updates, cached and cleared blur effects, and released wake-locks on cancellation.
-- Tested scenarios, all 30 open Issues and remaining limitations: [feedback audit](docs/feedback-1.7.0/README.md). This update does not publish a public release.
+### Compatibility
+System blur depends on Android and firmware. Face ID requires Shizuku and reliable face events. Hotspot, recording and Bluetooth data depend on the source. TrafficStats reports approximate total network speed, not an exact per-file rate.
 
-### Test branch additions
-- Expand messages inside the island, dismiss actual system notifications, and use icon-only banners.
-- Optional idle clock/battery, music priority, activity swipes and a stable summary of concurrent downloads.
-- Shape, per-edge outlines, button/card colors, vinyl artwork and opaque glass.
-- French and Spanish; optional app/contact shortcuts, volume, brightness, analog clock, steps and city-based weather.
-- Fixes for repeated messages, LRC introductions/offsets, media session recovery, payment identity and stale battery readings.
-- AOD/shade behavior and supported system events, bounded notification-listener recovery, regression tests.
-- See [1.7.0 test coverage and limitations](docs/TESTING-1.7.0.md).
+### Updating
+The package remains `com.akira.island`. APKs for 1.6.1, 1.6.2, 1.6.5 and the verified test 1.7.0 use compatible signing certificates; versionCode is now 14. Android's standard installer asks for confirmation. Previous upgrade tests preserved data, but Android 15 restricted Accessibility again: you may need to manually allow restricted settings and re-enable the service. The complete final-APK upgrade flow on a physical device has not yet been verified.
 
-
-### 🎛️ More settings — as you asked
-- 🔔 **Notifications**: a Card or Pill style; how long to show them — up to 30 seconds or "Until you swipe it away"; **Notification history** — unread ones wait in the island as app icons and as a list when expanded; **Skip repeats**; **Silent notifications** (Snapchat, Instagram and many others) and **rules for each app** — always or never; **Why it didn't show** — what the island decided about recent notifications.
-- 🎨 **Appearance**: island **opacity**; the **width** of the expanded island and notifications and **text and icon size**; the **font** — Inter, the system font or your own .ttf/.otf file — and its **weight**; a **delay before showing** and events shown for up to 10 seconds; capsule width up to 400 dp, height up to 90 dp, width with activity up to +200 dp.
-- 📱 **Behavior**: in landscape — hide, **At the camera** (like on iPhone: the island turns with the phone and doesn't move) or top center; **on the lock screen** — show or hide until unlocked; the second-activity circle **on the left or right**.
-- 🔘 **Expanded island buttons**: **Sound mode** (ring → vibrate → silent) and **Do Not Disturb**.
-- ⚡ **Charging**: "Only when plugged in" — a banner for a couple of seconds without the percentage capsule; the expanded island while charging has the clock and buttons.
-
-### 🌍 Languages
-- **Indonesian, Portuguese (Brazil) and Kazakh.** "System default" picks your phone's language by itself.
-
-### 🧩 Compatibility
-- 🎙️ Voice recorders and screen recording (Xiaomi, Samsung, Oppo, Huawei and others) — red recording with the time and Stop.
-- ⏱️ Clock timers and stopwatches that only have the time in the notification text (some Xiaomi, vivo and others).
-- 🎧 **Discord**, Zoom, Teams and other calls — incoming with buttons and an ongoing call with the time.
-
-### 🐞 Fixes
-- ✨ The island no longer flickers when expanding and collapsing (ColorOS and other skins): the island window doesn't change size while it works, and the touch window moves once, when the island has settled.
-- 💬 Consecutive messages in one conversation (WhatsApp and others) all show, not only the first one.
-- 💳 Payment: a "Transfer …" right after the tap-to-pay screen counts as the payment; "Payment successful" on screen without an amount shows as "Paid"; Belarusian banks; "Payment diagnostics" also records the screen after paying.
-- 🔒 The lock on the lock screen shows even with "Hide the empty capsule", and when the lock kicks in later than the screen turns on.
+Full list in Russian: [CHANGELOG-1.7.0-FULL.md](docs/CHANGELOG-1.7.0-FULL.md).
 
 ## [1.6.5] — 2026-10-28
 

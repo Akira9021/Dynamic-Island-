@@ -10,7 +10,7 @@
 
 Notifications with reply · navigation · payments · music with lyrics · calls · timers · downloads · charging · flashlight · system events
 
-[![Version 1.6.5](https://img.shields.io/badge/version-1.6.5-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
+[![Version 1.7.0](https://img.shields.io/badge/version-1.7.0-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Akira9021/Dynamic-Island-/total?style=for-the-badge&label=downloads&color=34C759&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/Akira9021/Dynamic-Island-/android.yml?style=for-the-badge&label=build&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/actions)
 <br>
@@ -23,7 +23,7 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 
 ### [⬇️ Download the latest version](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
 
-[What's new](#-whats-new-in-162) · [Features](#-features) · [Installation](#-installation) · [Gestures](#-gestures) · [Settings](#-settings) · [How it works](#-how-it-works)
+[What's new](#-whats-new-in-170) · [Features](#-features) · [Installation](#-installation) · [Gestures](#-gestures) · [Settings](#-settings) · [How it works](#-how-it-works)
 
 </div>
 
@@ -32,23 +32,35 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 
 ---
 
-## ✨ What's new in 1.6.5
+## ✨ What's new in 1.7.0
 
-- 🎬 **Liquid expansion**: content grows with the island — Appearance → Animations
-- 🎛️ **Your own buttons** in the expanded island, or just the clock — Features → Behavior
-- 📸 **Screenshot without the island** — with a button or a gesture
-- 🏦 **Bank app won't open?** The Island tile in quick settings turns the island off for a while
-- 📞 **Calls** in any phone language; swipe an incoming call up to hide it
-- 🫧 **A smoother collapsed island**: the bubble splits off like a drop, a 60 fps equalizer
-- 📌 **Keep the island loaded** and **On a schedule**
-- 🐞 Fixed: the previous track's artwork, "alarms" from calendars and a stuck "00:00"
+- 🫧 **Liquid Glass**: refined highlights and transparency, glass density and system blur strength controls. Available for the island, expanded cards and secondary activity on supported devices.
+- 📌 **Pinned apps and contacts**: a compact shortcut row below the date.
+- 🕒 **Brief**: separate compact clock, steps and weather pages, clock styles and extra controls.
+- 🌤 **Weather**: city selection, a standalone card or Brief page, manual refresh and retries after errors.
+- 🎵 **Lyrics**: a continuous soft highlighting wave and smooth line transitions; unsynced lyrics remain scrollable.
+- 🎨 **Custom colors and fonts**: text color, HEX/HSV picker, system or custom fonts, weight and element sizing.
+- 📶 **Hotspot**: persistent state, a settings shortcut and client counts when reliable system information is available.
+- ⬇️ **Transfer speed in expanded download cards**: app-provided details or optional approximate total network rates ↓/↑, preserving actual download percentages.
+- 🔓 **Face ID · face only**: optional verified face-unlock animation using separately configured Shizuku. PIN and fingerprint unlock are not presented as Face ID.
+- ⏰ **Create alarms**, auto-hide the idle island, scroll to top in supported apps and keep cards open on outside touch.
+- 🔋 **Battery**: an icon filled according to the current charge and optional approximate charging-time estimates.
+- 🔔 **Notifications**: history, display styles, duration, silent messages, per-app rules and missing-notification diagnostics.
+- 🌍 **Languages**: Indonesian, Portuguese, Kazakh, French and Spanish; improved language switching.
+- 💜 **Support the developer**: Telegram and Boosty in About, with English and Russian text.
 
 <div align="center">
 <img src="docs/app.en.png" width="820" alt="The app: Home with Keep the island running, Appearance with Elasticity, Position and size with width, height and Like a notch, Keep running and Try it">
 </div>
 
 > [!IMPORTANT]
-> Coming from 1.6.0 or older, uninstall the old version once: since 1.6.1 the app has a new signing key.
+> Updates from 1.6.1–1.6.5 use a compatible signing certificate and do not require uninstalling. Android may require you to allow restricted settings and re-enable Accessibility. The final upgrade flow on a physical device still needs verification.
+
+### Brief preview
+
+Actual UI captures; readings are examples.
+
+<p align="center"><img src="docs/followup-1.7.0/previews/compact-clock.png" width="210" alt="Clock preview"> <img src="docs/followup-1.7.0/previews/compact-steps.png" width="210" alt="Steps preview"> <img src="docs/followup-1.7.0/previews/weather-brief.png" width="210" alt="Weather preview"></p>
 
 All changes — in [CHANGELOG.en.md](CHANGELOG.en.md).
 
