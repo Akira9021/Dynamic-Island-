@@ -6,7 +6,7 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 > Since 1.6.1 the app and the island speak English (Features → General → Language). Earlier versions were in Russian only, so older entries give the Russian label in brackets.
 
-## [1.7.0] — release candidate, 2026-11-15
+## [1.7.0] — 2026-11-15
 
 ### ✨ New features
 - 🫧 **Liquid Glass**: refined highlights and transparency, glass density and system blur strength controls. Available for the island, expanded cards and secondary activity on supported devices.
@@ -23,6 +23,8 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 - 🔔 **Notifications**: history, display styles, duration, silent messages, per-app rules and missing-notification diagnostics.
 - 🌍 **Languages**: Indonesian, Portuguese, Kazakh, French and Spanish; improved language switching.
 - 💜 **Support the developer**: Telegram and Boosty in About, with English and Russian text.
+
+- 🙏 Thanks to **@uswer1106** for helping improve the app.
 
 ### 🛠 Fixes and optimization
 - Distinct voice, screen and camera recording states; improved Google Recorder detection, pause/resume and real source controls.

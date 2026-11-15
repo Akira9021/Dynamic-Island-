@@ -28,6 +28,10 @@ fun SupportAuthorItem(onClick: () -> Unit) {
         tr("Telegram и Boosty", "Telegram and Boosty"),
         color = Tile.Purple, onClick = onClick,
     ) { Arrow() }
+    InfoText(tr(
+        "Спасибо @uswer1106 за помощь в развитии Dynamic Island!",
+        "Thank you @uswer1106 for helping improve Dynamic Island!",
+    ))
 }
 
 @Composable
