@@ -171,6 +171,7 @@ Kotlin, Jetpack Compose, Material 3. Нужны JDK 17 и Android SDK 35.
 
 Ключ подписи в репозитории не хранится: Gradle собирает APK без подписи, а подписывает его CI ключом из секретов GitHub (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`) и сверяет отпечаток сертификата. Локальная отладочная сборка подписывается обычным отладочным ключом.
 
+test user commit
 </details>
 
 ## 💜 Благодарности
