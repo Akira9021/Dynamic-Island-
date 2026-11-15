@@ -1,0 +1,40 @@
+name: 📚 Documentation
+description: Report a mistake in the docs or suggest an improvement
+title: "[Docs] "
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the documentation. Thanks!
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: What is this about?
+      options:
+        - Missing information
+        - Outdated information
+        - Mistake or typo
+        - Unclear explanation
+        - Translation issue
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Where is it?
+      description: Which file or page (e.g. README, CHANGELOG)?
+      placeholder: e.g. README.md → Installation
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What is wrong and how should it be fixed?
+      placeholder: Describe the issue or the improvement
+    validations:
+      required: true
