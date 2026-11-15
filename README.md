@@ -19,7 +19,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
 ![Без рекламы](https://img.shields.io/badge/%D1%80%D0%B5%D0%BA%D0%BB%D0%B0%D0%BC%D1%8B-0-black?style=flat-square)
 
-<img src="docs/preview.png" width="820" alt="Свёрнутые и раскрытые виды острова: покой, музыка, зарядка, таймер, звонок, плеер с текстом песни, входящий вызов, наушники">
+<img src="docs/preview-1.7.0.png" width="820" alt="Dynamic Island 1.7.0: иллюстрации быстрого доступа, часов, погоды и цвета текста">
 
 ### [⬇️ Скачать последнюю версию](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
 
@@ -46,18 +46,10 @@
 - 🌍 **Языки**: индонезийский, португальский, казахский, французский и испанский; улучшено переключение языка.
 - 💜 **Поддержка автора**: Telegram и Boosty в разделе «О приложении», с русскими и английскими подписями.
 
-<div align="center">
-<img src="docs/app.png" width="820" alt="Приложение: «Главная» с пунктом «Чтобы остров не закрывался», «Оформление» с «Упругостью», «Положение и размер» с шириной, высотой и «Как вырез», «Работа в фоне» и «Проверка»">
-</div>
-
 > [!IMPORTANT]
 > При обновлении с 1.6.1–1.6.5 удалять приложение не требуется: подпись совместима. Android может запросить повторное разрешение ограниченных настроек и включение специальных возможностей. Финальный сценарий на физическом устройстве ещё требует проверки.
 
-### Предпросмотр сводки
-
-Настоящие кадры интерфейса; значения приведены для примера.
-
-<p align="center"><img src="docs/followup-1.7.0/previews/compact-clock.png" width="210" alt="Clock preview"> <img src="docs/followup-1.7.0/previews/compact-steps.png" width="210" alt="Steps preview"> <img src="docs/followup-1.7.0/previews/weather-brief.png" width="210" alt="Weather preview"></p>
+На промоиллюстрации показаны примерные значения. Источник погоды: [Open-Meteo](https://open-meteo.com/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
 
 Все изменения — в [CHANGELOG.md](CHANGELOG.md).
 

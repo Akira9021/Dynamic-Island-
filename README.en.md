@@ -19,7 +19,7 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
 ![No ads](https://img.shields.io/badge/ads-0-black?style=flat-square)
 
-<img src="docs/preview.en.png" width="820" alt="Collapsed and expanded island views: idle, music, charging, timer, call, the player with lyrics, incoming call, headphones">
+<img src="docs/preview-1.7.0.png" width="820" alt="Dynamic Island 1.7.0: illustrated shortcuts, clock, weather and custom text color previews">
 
 ### [⬇️ Download the latest version](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
 
@@ -49,18 +49,10 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 - 🌍 **Languages**: Indonesian, Portuguese, Kazakh, French and Spanish; improved language switching.
 - 💜 **Support the developer**: Telegram and Boosty in About, with English and Russian text.
 
-<div align="center">
-<img src="docs/app.en.png" width="820" alt="The app: Home with Keep the island running, Appearance with Elasticity, Position and size with width, height and Like a notch, Keep running and Try it">
-</div>
-
 > [!IMPORTANT]
 > Updates from 1.6.1–1.6.5 use a compatible signing certificate and do not require uninstalling. Android may require you to allow restricted settings and re-enable Accessibility. The final upgrade flow on a physical device still needs verification.
 
-### Brief preview
-
-Actual UI captures; readings are examples.
-
-<p align="center"><img src="docs/followup-1.7.0/previews/compact-clock.png" width="210" alt="Clock preview"> <img src="docs/followup-1.7.0/previews/compact-steps.png" width="210" alt="Steps preview"> <img src="docs/followup-1.7.0/previews/weather-brief.png" width="210" alt="Weather preview"></p>
+The promotional illustration uses example readings. Weather source: [Open-Meteo](https://open-meteo.com/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
 
 All changes — in [CHANGELOG.en.md](CHANGELOG.en.md).
 
