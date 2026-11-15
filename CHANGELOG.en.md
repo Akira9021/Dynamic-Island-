@@ -6,6 +6,12 @@ Versioning: the second number (1.5, 1.6…) means new and changed features, the 
 
 > Since 1.6.1 the app and the island speak English (Features → General → Language). Earlier versions were in Russian only, so older entries give the Russian label in brackets.
 
+## [1.7.1] — 2026-11-15
+
+### 🛠 Fixes
+- Dismiss app notifications right from the island: swiping up on the banner also clears it from the shade, the expanded card can be swiped down or closed with the ✕ button, and tapping outside collapses it.
+- The expanded island (music player and other cards) collapses on swipe up again.
+
 ## [1.7.0] — 2026-11-15
 
 ### ✨ New features
